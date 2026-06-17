@@ -1,0 +1,1949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ministering Assignment Tool</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f7fa;color:#333;min-height:100vh}
+header{background:#1a3a5c;color:white;padding:1rem 2rem}
+header h1{font-size:1.4rem;font-weight:600}
+header p{font-size:0.8rem;opacity:0.7;margin-top:0.2rem}
+nav{background:white;border-bottom:2px solid #e0e6ed;display:flex;padding:0 2rem;overflow-x:auto}
+nav button{padding:0.9rem 1.2rem;border:none;background:none;cursor:pointer;font-size:0.9rem;color:#666;border-bottom:3px solid transparent;margin-bottom:-2px;font-weight:500;white-space:nowrap}
+nav button:hover{color:#1a3a5c}
+nav button.active{color:#1a3a5c;border-bottom-color:#1a3a5c}
+.container{padding:1.5rem;max-width:1200px;margin:0 auto}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.card{background:white;border-radius:8px;padding:1.5rem;margin-bottom:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+.card h2{font-size:1rem;color:#1a3a5c;margin-bottom:1rem;padding-bottom:0.5rem;border-bottom:1px solid #e0e6ed;font-weight:600}
+.drop-zone{border:2px dashed #c0c8d4;border-radius:8px;padding:1.5rem;text-align:center;cursor:pointer;color:#888;transition:all 0.2s}
+.drop-zone:hover,.drop-zone.dragover{border-color:#1a3a5c;background:#f0f4f8;color:#1a3a5c}
+.drop-zone input[type=file]{display:none}
+.drop-zone .icon{font-size:1.8rem;margin-bottom:0.4rem}
+table{width:100%;border-collapse:collapse;font-size:0.88rem}
+th{text-align:left;padding:0.65rem 0.75rem;background:#f5f7fa;font-weight:600;color:#555;border-bottom:2px solid #e0e6ed}
+td{padding:0.65rem 0.75rem;border-bottom:1px solid #f0f0f0;vertical-align:top}
+tr:hover td{background:#fafbfc}
+.badge{display:inline-block;padding:0.2rem 0.55rem;border-radius:12px;font-size:0.75rem;font-weight:500}
+.badge-green{background:#d4edda;color:#155724}
+.badge-red{background:#f8d7da;color:#721c24}
+.badge-blue{background:#d1ecf1;color:#0c5460}
+.badge-yellow{background:#fff3cd;color:#856404}
+.btn{display:inline-block;padding:0.45rem 0.9rem;border-radius:6px;border:none;cursor:pointer;font-size:0.88rem;font-weight:500;transition:all 0.15s}
+.btn-primary{background:#1a3a5c;color:white}
+.btn-primary:hover{background:#142e4a}
+.btn-secondary{background:#e9ecef;color:#333}
+.btn-secondary:hover{background:#dee2e6}
+.btn-danger{background:#dc3545;color:white}
+.btn-danger:hover{background:#c82333}
+.btn-sm{padding:0.3rem 0.65rem;font-size:0.8rem}
+.filter-bar{display:flex;gap:0.75rem;margin-bottom:1rem;align-items:center;flex-wrap:wrap}
+.filter-bar input,.filter-bar select{padding:0.4rem 0.75rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1rem;margin-bottom:1.5rem}
+.stat-card{background:white;border-radius:8px;padding:1rem;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+.stat-card .number{font-size:1.8rem;font-weight:700;color:#1a3a5c}
+.stat-card .label{font-size:0.75rem;color:#777;margin-top:0.2rem}
+.mapping-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;align-items:center}
+.mapping-grid label{font-size:0.88rem;color:#555;font-weight:500}
+.mapping-grid select{padding:0.35rem 0.6rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;width:100%}
+.companionship-card{border:1px solid #e0e6ed;border-radius:8px;padding:1rem;margin-bottom:0.75rem;cursor:pointer;transition:border-color 0.15s}
+.companionship-card:hover{border-color:#1a3a5c}
+.companionship-card .ministers{font-weight:600;color:#1a3a5c;margin-bottom:0.4rem}
+.household-tag{display:inline-block;background:#e8f0fe;color:#1a3a5c;padding:0.15rem 0.5rem;border-radius:10px;font-size:0.78rem;margin:0.15rem}
+.hh-picker{max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:6px;padding:0.2rem 0}
+.hh-picker label{display:flex;align-items:baseline;gap:0.5rem;padding:0.28rem 0.65rem;font-size:0.84rem;cursor:pointer;line-height:1.3}
+.hh-picker label:hover{background:#f5f7fa}
+.hh-picker label.nearby{background:#d4edda}
+.hh-picker label.nearby:hover{background:#c3e6cb}
+.hh-picker input[type=checkbox]{flex-shrink:0;margin-top:0.15rem}
+.modal.wide{max-width:600px}
+.empty-state{text-align:center;padding:2.5rem;color:#aaa}
+.empty-state .icon{font-size:2.5rem;margin-bottom:0.75rem}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:white;border-radius:12px;padding:1.75rem;width:90%;max-width:480px;max-height:85vh;overflow-y:auto}
+.modal h3{margin-bottom:1rem;color:#1a3a5c;font-size:1.1rem}
+.form-group{margin-bottom:0.9rem}
+.form-group label{display:block;font-weight:500;margin-bottom:0.3rem;font-size:0.88rem}
+.form-group select,.form-group input{width:100%;padding:0.45rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem}
+.modal-footer{display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1.25rem}
+.alert{padding:0.7rem 1rem;border-radius:6px;margin-bottom:1rem;font-size:0.88rem}
+.alert-info{background:#d1ecf1;color:#0c5460;border:1px solid #bee5eb}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
+.three-col{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;align-items:start}
+.flex-between{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem}
+.link-bar{font-size:0.82rem;padding:0.4rem 0.7rem;border-radius:6px;margin-top:0.6rem}
+.link-bar.linked{background:#d4edda;color:#155724}
+.link-bar.partial{background:#fff3cd;color:#856404}
+.link-bar.none{background:#f8d7da;color:#721c24}
+@media(max-width:900px){.three-col{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.three-col,.two-col{grid-template-columns:1fr}nav button{padding:0.75rem 0.75rem;font-size:0.82rem}.container{padding:1rem}}
+@media print{nav,header p,button{display:none}.container{padding:0}.card{box-shadow:none;border:1px solid #ddd}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Ministering Assignment Tool</h1>
+  <p>Ward Ministry Planner — data stays local in your browser</p>
+</header>
+
+<nav>
+  <button class="active" onclick="showTab('import')">Import</button>
+  <button onclick="showTab('members')">Members <span id="members-count"></span></button>
+  <button onclick="showTab('households')">Households <span id="households-count"></span></button>
+  <button onclick="showTab('brothers')">Brothers <span id="brothers-count"></span></button>
+  <button onclick="showTab('current')">Current Assignments</button>
+  <button onclick="showTab('propose')">Proposed Assignments</button>
+</nav>
+
+<div class="container">
+
+<!-- IMPORT TAB -->
+<div id="tab-import" class="tab-content active">
+  <div class="alert alert-info">
+    Export your ward data from <strong>lcr.churchofjesuschrist.org</strong> as separate CSV files and upload them here.
+    Nothing leaves your browser — all data is stored locally.
+  </div>
+
+  <div class="three-col">
+
+    <!-- Members -->
+    <div class="card">
+      <h2>1. Members CSV</h2>
+      <div class="drop-zone" id="member-drop" onclick="document.getElementById('member-file').click()">
+        <input type="file" id="member-file" accept=".csv" onchange="handleMemberFile(this.files[0])">
+        <div class="icon">👤</div>
+        <strong>Click or drag to upload</strong>
+        <div style="font-size:0.82rem;margin-top:0.3rem">Individual member list from LCR</div>
+      </div>
+      <div id="member-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+
+      <div id="member-mapping" style="display:none;margin-top:1rem">
+        <div style="font-size:0.88rem;font-weight:600;color:#333;margin-bottom:0.6rem">Map Columns</div>
+        <div class="mapping-grid">
+          <label>Full Name *</label><select id="map-name"></select>
+          <label>Gender</label><select id="map-gender"></select>
+          <label>Age</label><select id="map-age"></select>
+          <label>Phone</label><select id="map-phone"></select>
+        </div>
+        <label style="font-size:0.82rem;color:#666;display:flex;align-items:center;gap:0.4rem;margin-top:0.75rem">
+          <input type="checkbox" id="male-only" checked>
+          Only include males as "Brothers"
+        </label>
+        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importMembers()">Import Members</button>
+      </div>
+      <div id="member-link-status" class="link-bar" style="display:none"></div>
+    </div>
+
+    <!-- Households -->
+    <div class="card">
+      <h2>2. Households CSV</h2>
+      <div class="drop-zone" id="hh-drop" onclick="document.getElementById('hh-file').click()">
+        <input type="file" id="hh-file" accept=".csv" onchange="handleHouseholdsFile(this.files[0])">
+        <div class="icon">🏠</div>
+        <strong>Click or drag to upload</strong>
+        <div style="font-size:0.82rem;margin-top:0.3rem">Household directory from LCR</div>
+      </div>
+      <div id="hh-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+
+      <div id="hh-mapping" style="display:none;margin-top:1rem">
+        <div style="font-size:0.88rem;font-weight:600;color:#333;margin-bottom:0.6rem">Map Columns</div>
+        <div class="mapping-grid">
+          <label>Household Name *</label><select id="map-hh-name"></select>
+          <label>Members</label><select id="map-hh-members"></select>
+          <label>Head of Household</label><select id="map-hh-head"></select>
+          <label>Address</label><select id="map-hh-addr"></select>
+          <label>Phone</label><select id="map-hh-phone"></select>
+          <label>Email</label><select id="map-hh-email"></select>
+        </div>
+        <div style="font-size:0.78rem;color:#888;margin-top:0.5rem">
+          The Members column may contain multiple names separated by line breaks — the app handles this automatically.
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importHouseholds()">Import Households</button>
+      </div>
+      <div id="hh-link-status" class="link-bar" style="display:none"></div>
+    </div>
+
+    <!-- Current Assignments -->
+    <div class="card">
+      <h2>3. Assignments CSV <span style="font-size:0.78rem;color:#888;font-weight:400">(optional)</span></h2>
+      <div class="drop-zone" id="assign-drop" onclick="document.getElementById('assign-file').click()">
+        <input type="file" id="assign-file" accept=".csv" onchange="handleAssignFile(this.files[0])">
+        <div class="icon">🤝</div>
+        <strong>Click or drag to upload</strong>
+        <div style="font-size:0.82rem;margin-top:0.3rem">Current ministering assignments from LCR</div>
+      </div>
+      <div id="assign-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+
+      <div id="assign-mapping" style="display:none;margin-top:1rem">
+        <div style="font-size:0.88rem;font-weight:600;color:#333;margin-bottom:0.6rem">Map Columns</div>
+        <div class="mapping-grid">
+          <label>Minister 1 *</label><select id="map-m1"></select>
+          <label>Minister 2</label><select id="map-m2"></select>
+          <label>Assigned Household *</label><select id="map-hh"></select>
+          <label>District / Zone</label><select id="map-district"></select>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importAssignments()">Import Assignments</button>
+      </div>
+    </div>
+
+  </div><!-- /three-col -->
+
+  <div id="csv-preview" style="display:none">
+    <div class="card">
+      <h2>CSV Preview (first 5 rows)</h2>
+      <div id="preview-body" style="overflow-x:auto"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Data Management</h2>
+    <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="clearData('members')">Clear Members</button>
+      <button class="btn btn-secondary btn-sm" onclick="clearData('households')">Clear Households</button>
+      <button class="btn btn-secondary btn-sm" onclick="clearData('assignments')">Clear Assignments</button>
+      <button class="btn btn-danger btn-sm" onclick="clearData('all')">Clear All Data</button>
+    </div>
+    <div style="margin-top:0.6rem;font-size:0.82rem;color:#888">Data persists across sessions in this browser.</div>
+  </div>
+</div>
+
+<!-- MEMBERS TAB -->
+<div id="tab-members" class="tab-content">
+  <div id="members-stats" class="stats-row"></div>
+  <div class="card">
+    <div class="filter-bar">
+      <input type="text" id="member-search" placeholder="Search name or household..." oninput="renderMembers()" style="flex:1;min-width:180px">
+      <select id="member-link-filter" onchange="renderMembers()">
+        <option value="">All Members</option>
+        <option value="linked">Household Linked</option>
+        <option value="unlinked">Not Linked</option>
+      </select>
+    </div>
+    <div id="members-table"></div>
+  </div>
+</div>
+
+<!-- HOUSEHOLDS TAB -->
+<div id="tab-households" class="tab-content">
+  <div id="households-stats" class="stats-row"></div>
+  <div class="card">
+    <div class="filter-bar">
+      <input type="text" id="hh-search" placeholder="Search household name or address..." oninput="renderHouseholds()" style="flex:1;min-width:200px">
+      <select id="hh-addr-filter" onchange="renderHouseholds()">
+        <option value="">All Households</option>
+        <option value="in-pool">In Pool</option>
+        <option value="maybe">Maybe</option>
+        <option value="out-pool">Out of Pool</option>
+        <option value="has-addr">Has Address</option>
+        <option value="no-addr">No Address</option>
+        <option value="geocoded">Geocoded</option>
+      </select>
+    </div>
+    <div id="households-table"></div>
+  </div>
+</div>
+
+<!-- BROTHERS TAB -->
+<div id="tab-brothers" class="tab-content">
+  <div id="brothers-stats" class="stats-row"></div>
+  <div class="card">
+    <div class="filter-bar">
+      <input type="text" id="brother-search" placeholder="Search name..." oninput="renderBrothers()" style="flex:1;min-width:160px">
+      <select id="brother-filter" onchange="renderBrothers()">
+        <option value="">All Brothers</option>
+        <option value="in-pool">In Pool</option>
+        <option value="maybe">Maybe</option>
+        <option value="out-pool">Out of Pool</option>
+        <option value="assigned">Currently Assigned</option>
+        <option value="unassigned">Not Assigned</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" onclick="exportBrothersCSV()">Export CSV</button>
+    </div>
+    <div id="brothers-table"></div>
+  </div>
+</div>
+
+<!-- CURRENT ASSIGNMENTS TAB -->
+<div id="tab-current" class="tab-content">
+  <div id="current-stats" class="stats-row"></div>
+  <div class="card">
+    <div class="flex-between">
+      <h2 style="margin:0;border:none;padding:0">Companionships</h2>
+      <button class="btn btn-secondary btn-sm" onclick="copyCurrentToProposed()">Copy to Proposed &rarr;</button>
+    </div>
+    <div id="current-list"></div>
+  </div>
+</div>
+
+<!-- PROPOSE ASSIGNMENTS TAB -->
+<div id="tab-propose" class="tab-content">
+  <div id="propose-stats" class="stats-row"></div>
+
+  <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="calculateDistances()">Calculate Distances</button>
+      <div id="geo-status" style="font-size:0.85rem;color:#666"></div>
+      <button class="btn btn-secondary btn-sm" onclick="saveGeoFile()">Save Coords</button>
+      <label class="btn btn-secondary btn-sm" style="cursor:pointer">Load Coords<input type="file" accept=".json" style="display:none" onchange="loadGeoFile(this.files[0])"></label>
+      <button class="btn btn-secondary btn-sm" onclick="clearGeoCache()" style="margin-left:auto">Clear Cache</button>
+    </div>
+    <div id="geo-progress" style="display:none;margin-top:0.6rem">
+      <div style="background:#e0e6ed;border-radius:4px;height:5px">
+        <div id="geo-bar" style="background:#1a3a5c;height:5px;border-radius:4px;width:0%;transition:width 0.4s"></div>
+      </div>
+    </div>
+    <div id="geo-failures" style="display:none;margin-top:0.5rem;font-size:0.8rem;color:#856404;background:#fff3cd;padding:0.4rem 0.7rem;border-radius:6px"></div>
+    <div style="font-size:0.78rem;color:#aaa;margin-top:0.4rem">
+      Uses Nominatim (OpenStreetMap) — requires internet. Runs at ~1 address/sec; results cached locally. For failures, edit the address in the Households tab and retry.
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="flex-between">
+          <h2 style="margin:0;border:none;padding:0">Proposed Companionships</h2>
+          <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Add</button>
+        </div>
+        <div id="proposed-list"></div>
+      </div>
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="exportProposed()">Export CSV</button>
+        <button class="btn btn-secondary" onclick="window.print()">Print</button>
+        <button class="btn btn-danger btn-sm" onclick="clearProposed()">Clear All</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      <div class="card">
+        <h2>Unassigned Brothers</h2>
+        <div id="unassigned-list"></div>
+      </div>
+      <div class="card">
+        <h2>Maybe Brothers</h2>
+        <div id="maybe-brothers-list"></div>
+      </div>
+      <div class="card">
+        <h2>Unassigned Households</h2>
+        <div id="unassigned-hh-list"></div>
+      </div>
+      <div class="card">
+        <h2>Maybe Households</h2>
+        <div id="maybe-hh-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<!-- Add Modal -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal wide">
+    <h3>New Companionship</h3>
+    <div class="form-group">
+      <label>Minister 1 *</label>
+      <select id="add-m1" onchange="refreshAddM2()"><option value="">Select...</option></select>
+    </div>
+    <div class="form-group">
+      <label>Minister 2 (Companion)</label>
+      <select id="add-m2" onchange="updateProximityInfo('add')"><option value="">None (solo)</option></select>
+    </div>
+    <div id="add-proximity"></div>
+    <div class="form-group">
+      <label>Households to Minister To</label>
+      <input type="text" id="add-hh-search" placeholder="Search households…" style="margin-bottom:0.35rem;font-size:0.84rem;padding:0.35rem 0.6rem;border:1px solid #ddd;border-radius:6px;width:100%" oninput="filterHHList('add')">
+      <div id="add-hh-list" class="hh-picker"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('add-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewCompanionship()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal wide">
+    <h3>Edit Companionship</h3>
+    <div class="form-group">
+      <label>Minister 1 *</label>
+      <select id="edit-m1" onchange="refreshEditM2()"><option value="">Select...</option></select>
+    </div>
+    <div class="form-group">
+      <label>Minister 2 (Companion)</label>
+      <select id="edit-m2" onchange="updateProximityInfo('edit')"><option value="">None (solo)</option></select>
+    </div>
+    <div id="edit-proximity"></div>
+    <div class="form-group">
+      <label>Households to Minister To</label>
+      <input type="text" id="edit-hh-search" placeholder="Search households…" style="margin-bottom:0.35rem;font-size:0.84rem;padding:0.35rem 0.6rem;border:1px solid #ddd;border-radius:6px;width:100%" oninput="filterHHList('edit')">
+      <div id="edit-hh-list" class="hh-picker"></div>
+    </div>
+    <input type="hidden" id="edit-id">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('edit-modal')">Cancel</button>
+      <button class="btn btn-danger" onclick="deleteCompanionship()">Delete</button>
+      <button class="btn btn-primary" onclick="saveEditCompanionship()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────
+const S = {
+  members: [],      // individual people (brothers + others)
+  households: [],   // household units (imported separately)
+  current: [],      // current companionship assignments
+  proposed: [],     // user-drafted proposals
+  rawMembers: null,
+  rawHouseholds: null,
+  rawAssign: null,
+};
+
+// ── Init ─────────────────────────────────────────────────────
+(function init() {
+  try {
+    const m = localStorage.getItem('mat_m'); if (m) S.members    = JSON.parse(m);
+    const h = localStorage.getItem('mat_h'); if (h) {
+      S.households = JSON.parse(h);
+      // Normalize addresses from older imports that may have embedded newlines or ZIP+4
+      S.households.forEach(hh => { if (hh.address) hh.address = normalizeAddress(hh.address); });
+    }
+    const c = localStorage.getItem('mat_c'); if (c) S.current    = JSON.parse(c);
+    const p = localStorage.getItem('mat_p'); if (p) S.proposed   = JSON.parse(p);
+  } catch(e) {}
+
+  setupDrop('member-drop', 'member-file', handleMemberFile);
+  setupDrop('hh-drop',     'hh-file',     handleHouseholdsFile);
+  setupDrop('assign-drop', 'assign-file', handleAssignFile);
+
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
+  );
+
+  refreshBadge();
+  if (S.members.length && S.households.length) showLinkStatus();
+})();
+
+function save() {
+  localStorage.setItem('mat_m', JSON.stringify(S.members));
+  localStorage.setItem('mat_h', JSON.stringify(S.households));
+  localStorage.setItem('mat_c', JSON.stringify(S.current));
+  localStorage.setItem('mat_p', JSON.stringify(S.proposed));
+}
+
+function uid()  { return Math.random().toString(36).slice(2,10); }
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function norm(s){ return (s||'').toLowerCase().trim(); }
+
+// ── Tabs ─────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  const tabs = ['import','members','households','brothers','current','propose'];
+  document.querySelectorAll('nav button')[tabs.indexOf(name)].classList.add('active');
+  if (name === 'members')    renderMembers();
+  if (name === 'households') renderHouseholds();
+  if (name === 'brothers')   renderBrothers();
+  if (name === 'current')    renderCurrent();
+  if (name === 'propose')    renderProposed();
+}
+
+// ── CSV Parsing ───────────────────────────────────────────────
+// Character-level parser — handles quoted fields containing embedded newlines
+// (LCR household exports put multiple member names in one cell separated by \n)
+function parseCSV(text) {
+  // Strip UTF-8 BOM if present
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+  let pos = 0;
+  const len = text.length;
+
+  function parseField() {
+    if (pos < len && text[pos] === '"') {
+      pos++; // skip opening quote
+      let val = '';
+      while (pos < len) {
+        if (text[pos] === '"') {
+          if (pos + 1 < len && text[pos + 1] === '"') { val += '"'; pos += 2; } // escaped ""
+          else { pos++; break; } // closing quote
+        } else {
+          val += text[pos++];
+        }
+      }
+      return val; // preserve internal newlines — don't trim
+    }
+    let val = '';
+    while (pos < len && text[pos] !== ',' && text[pos] !== '\r' && text[pos] !== '\n') {
+      val += text[pos++];
+    }
+    return val.trim();
+  }
+
+  function parseRow() {
+    const cells = [];
+    while (pos < len) {
+      cells.push(parseField());
+      if (pos >= len) break;
+      if (text[pos] === ',') { pos++; }
+      else if (text[pos] === '\r') { pos++; if (pos < len && text[pos] === '\n') pos++; break; }
+      else if (text[pos] === '\n') { pos++; break; }
+      else break;
+    }
+    return cells;
+  }
+
+  const headers = parseRow().map(h => h.trim());
+  const rows = [];
+  while (pos < len) {
+    const cells = parseRow();
+    if (!cells.length || (cells.length === 1 && !cells[0].trim())) continue;
+    const row = {};
+    headers.forEach((h, i) => row[h] = cells[i] !== undefined ? cells[i] : '');
+    rows.push(row);
+  }
+  return { headers, rows };
+}
+
+// ── Drag/Drop ─────────────────────────────────────────────────
+function setupDrop(zoneId, inputId, handler) {
+  const zone = document.getElementById(zoneId);
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0]; if (f) handler(f);
+  });
+}
+
+function readFile(file, cb) {
+  const r = new FileReader();
+  r.onload = e => cb(e.target.result);
+  r.readAsText(file);
+}
+
+// ── Member Import ─────────────────────────────────────────────
+function handleMemberFile(file) {
+  readFile(file, text => {
+    const parsed = parseCSV(text);
+    S.rawMembers = parsed;
+    document.getElementById('member-status').textContent =
+      `Loaded: ${file.name} (${parsed.rows.length} rows, ${parsed.headers.length} cols)`;
+    fillDropdowns(['map-name','map-gender','map-age','map-phone'], parsed.headers, autoMemberCols(parsed.headers));
+    document.getElementById('member-mapping').style.display = 'block';
+    showPreview(parsed.rows.slice(0,5), parsed.headers);
+  });
+}
+
+function autoMemberCols(headers) {
+  const h = headers.map(x => x.toLowerCase());
+  const find = (...kws) => headers[h.findIndex(x => kws.some(k => x.includes(k)))] || '';
+  return {
+    'map-name':   find('preferred name','full name','name'),
+    'map-gender': find('gender','sex'),
+    'map-age':    find('age','birth'),
+    'map-phone':  find('phone','mobile','cell'),
+  };
+}
+
+function importMembers() {
+  if (!S.rawMembers) return;
+  const nameCol = document.getElementById('map-name').value;
+  if (!nameCol) { alert('Map the Name column first.'); return; }
+  const gCol = document.getElementById('map-gender').value;
+  const aCol = document.getElementById('map-age').value;
+  const pCol = document.getElementById('map-phone').value;
+  const maleOnly = document.getElementById('male-only').checked;
+
+  S.members = S.rawMembers.rows
+    .filter(r => (r[nameCol]||'').trim())
+    .map(r => ({
+      id:        uid(),
+      name:      r[nameCol].trim(),
+      gender:    gCol ? (r[gCol]||'').trim() : '',
+      age:       aCol ? (parseInt(r[aCol])||0) : 0,
+      phone:     pCol ? (r[pCol]||'').trim() : '',
+      isBrother: maleOnly ? isMale(r[gCol]||'') : true,
+      householdId: null, // filled by linkMembersToHouseholds()
+    }));
+
+  linkMembersToHouseholds();
+  save(); refreshBadge();
+  const bc = brothers().length;
+  document.getElementById('member-status').innerHTML =
+    `<span style="color:#155724">✓ Imported ${S.members.length} members (${bc} brothers)</span>`;
+}
+
+function isMale(g) {
+  const v = norm(g);
+  if (!v) return true;
+  return v === 'm' || v === 'male' || v === 'brother' || v === 'elder' || v === 'high priest';
+}
+
+// ── Households Import ─────────────────────────────────────────
+function handleHouseholdsFile(file) {
+  readFile(file, text => {
+    const parsed = parseCSV(text);
+    S.rawHouseholds = parsed;
+    document.getElementById('hh-status').textContent =
+      `Loaded: ${file.name} (${parsed.rows.length} rows, ${parsed.headers.length} cols)`;
+    fillDropdowns(
+      ['map-hh-name','map-hh-members','map-hh-head','map-hh-addr','map-hh-phone','map-hh-email'],
+      parsed.headers, autoHouseholdCols(parsed.headers)
+    );
+    document.getElementById('hh-mapping').style.display = 'block';
+    showPreview(parsed.rows.slice(0,5), parsed.headers);
+  });
+}
+
+function autoHouseholdCols(headers) {
+  const h = headers.map(x => x.toLowerCase());
+  const find = (...kws) => headers[h.findIndex(x => kws.some(k => x.includes(k)))] || '';
+  return {
+    'map-hh-name':    find('household name','household','family name','name'),
+    'map-hh-members': find('members','household members','family members','individuals'),
+    'map-hh-head':    find('head','principal','primary'),
+    'map-hh-addr':    find('address','street','addr'),
+    'map-hh-phone':   find('phone','mobile','cell'),
+    'map-hh-email':   find('email','e-mail'),
+  };
+}
+
+function importHouseholds() {
+  if (!S.rawHouseholds) return;
+  const nameCol    = document.getElementById('map-hh-name').value;
+  if (!nameCol) { alert('Map the Household Name column first.'); return; }
+  const membersCol = document.getElementById('map-hh-members').value;
+  const headCol    = document.getElementById('map-hh-head').value;
+  const addrCol    = document.getElementById('map-hh-addr').value;
+  const phoneCol   = document.getElementById('map-hh-phone').value;
+  const emailCol   = document.getElementById('map-hh-email').value;
+
+  // Preserve any geocoded coords from the previous import so re-importing CSVs
+  // doesn't wipe out hours of geocoding work. Keyed by normalized address string.
+  const geoCache = {};
+  S.households.forEach(hh => {
+    if (hh.lat && hh.address) geoCache[hh.address] = { lat: hh.lat, lng: hh.lng };
+  });
+
+  const seen = new Set();
+  S.households = [];
+  S.rawHouseholds.rows.forEach(r => {
+    const name = (r[nameCol]||'').trim(); if (!name) return;
+    if (seen.has(norm(name))) return;
+    seen.add(norm(name));
+
+    // Members cell contains multiple names separated by \n or \r\n (embedded in quoted CSV field)
+    const rawMembers = membersCol ? (r[membersCol]||'') : '';
+    const members = rawMembers
+      .split(/[\r\n]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const address = addrCol ? normalizeAddress((r[addrCol]||'').trim()) : '';
+    const cached  = geoCache[address] || {};
+    S.households.push({
+      id:      uid(),
+      name,
+      members,
+      head:    headCol  ? (r[headCol]||'').trim()  : '',
+      address,
+      phone:   phoneCol ? (r[phoneCol]||'').trim() : '',
+      email:   emailCol ? (r[emailCol]||'').trim() : '',
+      ...cached,  // restore lat/lng if this address was previously geocoded
+    });
+  });
+
+  linkMembersToHouseholds();
+  save(); refreshBadge();
+  document.getElementById('hh-status').innerHTML =
+    `<span style="color:#155724">✓ Imported ${S.households.length} households</span>`;
+}
+
+// ── Auto-Link Members ↔ Households ───────────────────────────
+// Normalize a name to a sorted set of parts so "Smith, John" == "John Smith"
+function normNameKey(n) {
+  return norm(n).replace(/,/g,' ').split(/\s+/).filter(Boolean).sort().join(' ');
+}
+
+function getLastName(name) {
+  const n = norm(name);
+  if (n.includes(',')) return n.split(',')[0].trim(); // "Last, First" format
+  const parts = n.split(/\s+/).filter(Boolean);
+  return parts[parts.length - 1] || '';
+}
+
+// Strategies (in order):
+//   1. Member's name exactly matches a name in household.members list
+//   2. Member's name matches household head
+//   3. Member's name matches household name field directly
+//   4. Member's last name appears anywhere in the household name string
+//   5. Partial: share ≥2 significant parts with a household member name
+function linkMembersToHouseholds() {
+  if (!S.members.length || !S.households.length) { showLinkStatus(); return; }
+
+  const byMemberName = new Map(); // normNameKey(memberName) → hhId
+  const byHead       = new Map(); // normNameKey(head)       → hhId
+  const byHHName     = new Map(); // normNameKey(hhName)     → hhId
+
+  S.households.forEach(hh => {
+    hh.members.forEach(n => {
+      const k = normNameKey(n);
+      if (k && !byMemberName.has(k)) byMemberName.set(k, hh.id);
+    });
+    if (hh.head) {
+      const k = normNameKey(hh.head);
+      if (k && !byHead.has(k)) byHead.set(k, hh.id);
+    }
+    const k = normNameKey(hh.name);
+    if (k && !byHHName.has(k)) byHHName.set(k, hh.id);
+  });
+
+  // Also keep raw normalized household names for substring search
+  const hhNameList = S.households.map(hh => ({ normName: norm(hh.name), id: hh.id }));
+
+  let linked = 0;
+  S.members.forEach(m => {
+    const key = normNameKey(m.name);
+
+    // 1. Exact match against any household member name (from the members cell)
+    if (byMemberName.has(key)) { m.householdId = byMemberName.get(key); linked++; return; }
+
+    // 2. Exact match against household head
+    if (byHead.has(key)) { m.householdId = byHead.get(key); linked++; return; }
+
+    // 3. Exact match against household name field
+    if (byHHName.has(key)) { m.householdId = byHHName.get(key); linked++; return; }
+
+    // 4. Member's last name appears as a word in the household name
+    const lastName = getLastName(m.name);
+    if (lastName.length > 2) {
+      const re = new RegExp(`\\b${lastName}\\b`);
+      for (const { normName, id } of hhNameList) {
+        if (re.test(normName)) { m.householdId = id; linked++; return; }
+      }
+    }
+
+    // 5. Share at least 2 significant name parts with a household member name
+    const parts = key.split(' ').filter(p => p.length > 2);
+    for (const [memberKey, hhId] of byMemberName) {
+      const mParts = memberKey.split(' ');
+      if (parts.filter(p => mParts.includes(p)).length >= 2) {
+        m.householdId = hhId; linked++; return;
+      }
+    }
+
+    m.householdId = null;
+  });
+
+  showLinkStatus(linked);
+}
+
+function showLinkStatus(linked) {
+  const total = S.members.length;
+  if (!total || !S.households.length) return;
+  linked = (linked !== undefined) ? linked : S.members.filter(m => m.householdId).length;
+  const pct = Math.round(100 * linked / total);
+  const cls = pct >= 80 ? 'linked' : pct >= 40 ? 'partial' : 'none';
+  const msg = `${linked}/${total} members linked to a household (${pct}%)`;
+
+  ['member-link-status','hh-link-status'].forEach(id => {
+    const el = document.getElementById(id);
+    el.className = `link-bar ${cls}`;
+    el.style.display = 'block';
+    el.textContent = msg;
+  });
+}
+
+// ── Assignment Import ─────────────────────────────────────────
+function handleAssignFile(file) {
+  readFile(file, text => {
+    const parsed = parseCSV(text);
+    S.rawAssign = parsed;
+    document.getElementById('assign-status').textContent =
+      `Loaded: ${file.name} (${parsed.rows.length} rows, ${parsed.headers.length} cols)`;
+    fillDropdowns(['map-m1','map-m2','map-hh','map-district'], parsed.headers, autoAssignCols(parsed.headers));
+    document.getElementById('assign-mapping').style.display = 'block';
+  });
+}
+
+function autoAssignCols(headers) {
+  const h = headers.map(x => x.toLowerCase());
+  const find = (...kws) => headers[h.findIndex(x => kws.some(k => x.includes(k)))] || '';
+  return {
+    'map-m1':       find('minister 1','minister1','elder 1','companion 1','minister'),
+    'map-m2':       find('minister 2','minister2','companion 2','companion'),
+    'map-hh':       find('household','assigned','family','assignment'),
+    'map-district': find('district','zone','group'),
+  };
+}
+
+function importAssignments() {
+  if (!S.rawAssign) return;
+  const m1Col = document.getElementById('map-m1').value;
+  if (!m1Col) { alert('Map the Minister 1 column first.'); return; }
+  const m2Col = document.getElementById('map-m2').value;
+  const hhCol = document.getElementById('map-hh').value;
+  const dCol  = document.getElementById('map-district').value;
+
+  const map = {};
+  S.rawAssign.rows.forEach(r => {
+    const m1 = (r[m1Col]||'').trim(); if (!m1) return;
+    const m2 = m2Col ? (r[m2Col]||'').trim() : '';
+    const hh = hhCol ? (r[hhCol]||'').trim() : '';
+    const d  = dCol  ? (r[dCol]||'').trim()  : '';
+    const key = [m1,m2].sort().join('|||');
+    if (!map[key]) map[key] = { id:uid(), m1Name:m1, m2Name:m2, households:[], district:d };
+    if (hh && !map[key].households.includes(hh)) map[key].households.push(hh);
+  });
+
+  S.current = Object.values(map);
+  save();
+  document.getElementById('assign-status').innerHTML =
+    `<span style="color:#155724">✓ Imported ${S.current.length} companionships</span>`;
+}
+
+// ── Core Helpers ──────────────────────────────────────────────
+function brothers() { return S.members.filter(m => m.isBrother !== false); }
+function poolBrothers() { return brothers().filter(b => b.inPool === true); }
+function maybeBrothers() { return brothers().filter(b => b.inPool === 'maybe'); }
+function poolHouseholds() { return householdList().filter(hh => hh.inPool === true); }
+function maybeHouseholds() { return householdList().filter(hh => hh.inPool === 'maybe'); }
+
+function cyclePool(cur) {
+  if (cur !== true && cur !== 'maybe') return true;   // Out → In Pool
+  if (cur === true) return 'maybe';                    // In Pool → Maybe
+  return false;                                        // Maybe → Out
+}
+function toggleBrotherPool(id) {
+  const b = S.members.find(x => x.id === id); if (!b) return;
+  b.inPool = cyclePool(b.inPool);
+  save(); renderBrothers();
+}
+
+function toggleHHPool(id) {
+  const hh = S.households.find(x => x.id === id); if (!hh) return;
+  hh.inPool = cyclePool(hh.inPool);
+  save(); renderHouseholds();
+}
+
+// Returns the list of households to use in pickers.
+// Prefers the imported households list; falls back to deriving from current/proposed assignment strings.
+function householdList() {
+  if (S.households.length) return S.households;
+  // fallback: unique names from assignment data
+  const seen = new Set();
+  const out = [];
+  [...S.current, ...S.proposed].forEach(c => {
+    (c.households||[]).forEach(n => {
+      if (!seen.has(n)) { seen.add(n); out.push({ id:n, name:n, head:'', address:'', phone:'' }); }
+    });
+  });
+  return out.sort((a,b) => a.name.localeCompare(b.name));
+}
+
+function hhById(id) { return S.households.find(h => h.id === id) || null; }
+
+function resolveMinisterHH(member) {
+  if (!member) return null;
+  if (member.householdId) {
+    const hh = hhById(member.householdId);
+    if (hh?.lat) return hh;
+  }
+  // Fallback: search geocoded households for this member's name.
+  // Use normNameKey (sort-based) so "Sean Rose" matches "Rose, Sean".
+  // Also do ≥2-significant-part fuzzy matching so "Kevin Terry" matches
+  // "Kevin Allen Terry" (middle name in household CSV but not member CSV).
+  const key   = normNameKey(member.name);
+  const parts = key.split(' ').filter(p => p.length > 2);
+
+  return S.households.find(hh => {
+    if (!hh.lat) return false;
+    if (normNameKey(hh.head||'') === key) return true;
+    if (normNameKey(hh.name||'') === key) return true;
+    return (hh.members||[]).some(n => {
+      const mk = normNameKey(n);
+      if (mk === key) return true;
+      if (parts.length >= 2) {
+        const mp = mk.split(' ');
+        return parts.filter(p => mp.includes(p)).length >= 2;
+      }
+      return false;
+    });
+  }) || null;
+}
+
+function memberHousehold(member) {
+  if (member.householdId) return hhById(member.householdId);
+  return null;
+}
+
+function currentMinisterNames() {
+  const s = new Set();
+  S.current.forEach(c => { s.add(norm(c.m1Name)); if(c.m2Name) s.add(norm(c.m2Name)); });
+  return s;
+}
+function proposedMinisters() {
+  const s = new Set();
+  S.proposed.forEach(c => { if(c.m1Id) s.add(c.m1Id); if(c.m2Id) s.add(c.m2Id); });
+  return s;
+}
+function refreshBadge() {
+  setBadge('brothers-count',   brothers().length);
+  setBadge('members-count',    S.members.length);
+  setBadge('households-count', S.households.length);
+}
+function setBadge(id, n) {
+  const el = document.getElementById(id);
+  el.textContent = n ? n : '';
+  el.style.cssText = n ? 'background:#e8f0fe;color:#1a3a5c;border-radius:10px;padding:0.15rem 0.5rem;font-size:0.75rem;margin-left:4px' : '';
+}
+
+// ── Column Dropdown Helper ────────────────────────────────────
+function fillDropdowns(ids, headers, detected) {
+  ids.forEach(id => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '<option value="">(none)</option>';
+    headers.forEach(h => {
+      const o = document.createElement('option');
+      o.value = h; o.textContent = h;
+      if (detected[id] === h) o.selected = true;
+      sel.appendChild(o);
+    });
+  });
+}
+
+// ── Preview ───────────────────────────────────────────────────
+function showPreview(rows, headers) {
+  if (!rows.length) return;
+  const cols = headers.slice(0,8);
+  let t = '<table><thead><tr>' + cols.map(h=>`<th>${esc(h)}</th>`).join('') + '</tr></thead><tbody>';
+  rows.forEach(r => { t += '<tr>' + cols.map(h=>`<td>${esc(r[h]||'')}</td>`).join('') + '</tr>'; });
+  document.getElementById('preview-body').innerHTML = t + '</tbody></table>';
+  document.getElementById('csv-preview').style.display = 'block';
+}
+
+// ── Members Tab ───────────────────────────────────────────────
+function renderMembers() {
+  const list = S.members;
+  const q  = norm(document.getElementById('member-search').value);
+  const lf = document.getElementById('member-link-filter').value;
+
+  const filtered = list.filter(m => {
+    if (q) {
+      const hh = memberHousehold(m);
+      if (!norm(m.name).includes(q) && !norm(hh?.name||'').includes(q)) return false;
+    }
+    if (lf === 'linked'   && !m.householdId) return false;
+    if (lf === 'unlinked' &&  m.householdId) return false;
+    return true;
+  });
+
+  const linkedCount = list.filter(m => m.householdId).length;
+  document.getElementById('members-stats').innerHTML = `
+    <div class="stat-card"><div class="number">${list.length}</div><div class="label">Total Members</div></div>
+    <div class="stat-card"><div class="number">${linkedCount}</div><div class="label">Household Linked</div></div>
+    <div class="stat-card"><div class="number">${list.length - linkedCount}</div><div class="label">Not Linked</div></div>
+    <div class="stat-card"><div class="number">${brothers().length}</div><div class="label">Brothers</div></div>
+  `;
+
+  if (!filtered.length) {
+    document.getElementById('members-table').innerHTML = list.length === 0
+      ? '<div class="empty-state"><div class="icon">📋</div><p>No member data imported yet.</p></div>'
+      : '<div class="empty-state"><div class="icon">🔍</div><p>No results.</p></div>';
+    return;
+  }
+
+  let t = `<div style="overflow-x:auto"><table><thead><tr>
+    <th>Name</th><th>Gender</th><th>Age</th><th>Phone</th>
+    <th>Linked Household</th><th>Address on File</th><th>Link</th>
+  </tr></thead><tbody>`;
+
+  filtered.forEach(m => {
+    const hh = memberHousehold(m);
+    t += `<tr>
+      <td><strong>${esc(m.name)}</strong></td>
+      <td>${esc(m.gender)}</td>
+      <td>${m.age || ''}</td>
+      <td>${esc(m.phone)}</td>
+      <td>${hh ? esc(hh.name) : '<span style="color:#aaa">—</span>'}</td>
+      <td style="font-size:0.82rem;color:#555">${hh?.address ? esc(hh.address) : '<span style="color:#aaa">—</span>'}</td>
+      <td><span class="badge ${m.householdId ? 'badge-green' : 'badge-red'}">${m.householdId ? 'Linked' : 'None'}</span></td>
+    </tr>`;
+  });
+
+  document.getElementById('members-table').innerHTML = t + '</tbody></table></div>';
+}
+
+// ── Households Tab ─────────────────────────────────────────────
+function renderHouseholds() {
+  const list = S.households;
+  const q  = norm(document.getElementById('hh-search').value);
+  const af = document.getElementById('hh-addr-filter').value;
+
+  const filtered = list.filter(hh => {
+    if (q && !norm(hh.name).includes(q) && !norm(hh.address||'').includes(q)) return false;
+    if (af === 'in-pool'   && hh.inPool !== true)      return false;
+    if (af === 'maybe'     && hh.inPool !== 'maybe')   return false;
+    if (af === 'out-pool'  && (hh.inPool === true || hh.inPool === 'maybe')) return false;
+    if (af === 'has-addr'  && !hh.address)              return false;
+    if (af === 'no-addr'   &&  hh.address)           return false;
+    if (af === 'geocoded'  && !hh.lat)               return false;
+    return true;
+  });
+
+  const withAddr    = list.filter(hh => hh.address).length;
+  const geocoded    = list.filter(hh => hh.lat).length;
+  const inPoolCount = list.filter(hh => hh.inPool === true).length;
+  const maybeCount  = list.filter(hh => hh.inPool === 'maybe').length;
+  document.getElementById('households-stats').innerHTML = `
+    <div class="stat-card"><div class="number">${list.length}</div><div class="label">Total Households</div></div>
+    <div class="stat-card"><div class="number">${inPoolCount}</div><div class="label">In Pool</div></div>
+    <div class="stat-card"><div class="number">${maybeCount}</div><div class="label">Maybe</div></div>
+    <div class="stat-card"><div class="number">${withAddr}</div><div class="label">Have Address</div></div>
+    <div class="stat-card"><div class="number">${geocoded}</div><div class="label">Geocoded</div></div>
+  `;
+
+  if (!filtered.length) {
+    document.getElementById('households-table').innerHTML = list.length === 0
+      ? '<div class="empty-state"><div class="icon">🏠</div><p>No household data imported yet.</p></div>'
+      : '<div class="empty-state"><div class="icon">🔍</div><p>No results.</p></div>';
+    return;
+  }
+
+  let t = `<div style="overflow-x:auto"><table><thead><tr>
+    <th>Household Name</th><th>Members</th><th>Head</th><th>Address</th><th>Phone</th><th>Email</th><th>Pool</th><th>Status</th>
+  </tr></thead><tbody>`;
+
+  filtered.forEach(hh => {
+    const memberList = (hh.members||[]).join(', ');
+    const addrBadge = hh.address
+      ? (hh.lat ? '<span class="badge badge-green">✓ Geocoded</span>' : '<span class="badge badge-yellow">Not geocoded</span>')
+      : '<span class="badge badge-red">No address</span>';
+    const addrCell = hh.address
+      ? `${esc(hh.address)}`
+      : `<span style="color:#aaa">—</span>`;
+    const poolState = hh.inPool === true ? 'in' : hh.inPool === 'maybe' ? 'maybe' : 'out';
+    const poolBadge = poolState === 'in'    ? `<span class="badge badge-green"  style="cursor:pointer" title="In Pool — click to set Maybe"    onclick="toggleHHPool('${hh.id}')">In Pool</span>`
+                    : poolState === 'maybe' ? `<span class="badge badge-yellow" style="cursor:pointer" title="Maybe — click to remove from pool" onclick="toggleHHPool('${hh.id}')">Maybe</span>`
+                    :                         `<span class="badge badge-red"    style="cursor:pointer" title="Out — click to add to pool"        onclick="toggleHHPool('${hh.id}')">Out</span>`;
+    t += `<tr>
+      <td><strong>${esc(hh.name)}</strong></td>
+      <td style="font-size:0.82rem;max-width:180px;white-space:normal">${esc(memberList) || '<span style="color:#aaa">—</span>'}</td>
+      <td style="font-size:0.82rem">${esc(hh.head||'')}</td>
+      <td style="font-size:0.82rem">
+        <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">
+          <span>${addrCell}</span>
+          <button class="btn btn-secondary btn-sm" style="flex-shrink:0" onclick="openHHEditModal('${hh.id}')">Edit</button>
+        </div>
+      </td>
+      <td style="font-size:0.82rem">${esc(hh.phone||'')}</td>
+      <td style="font-size:0.82rem">${esc(hh.email||'')}</td>
+      <td>${poolBadge}</td>
+      <td>${addrBadge}</td>
+    </tr>`;
+  });
+
+  document.getElementById('households-table').innerHTML = t + '</tbody></table></div>';
+}
+
+// ── Brothers Tab ──────────────────────────────────────────────
+function renderBrothers() {
+  const list = brothers();
+  const assigned = currentMinisterNames();
+  const q = norm(document.getElementById('brother-search').value);
+  const f = document.getElementById('brother-filter').value;
+
+  const filtered = list.filter(b => {
+    if (q && !norm(b.name).includes(q)) return false;
+    if (f === 'in-pool'    && b.inPool !== true)                               return false;
+    if (f === 'maybe'      && b.inPool !== 'maybe')                            return false;
+    if (f === 'out-pool'   && (b.inPool === true || b.inPool === 'maybe'))     return false;
+    if (f === 'assigned'   && !assigned.has(norm(b.name)))                     return false;
+    if (f === 'unassigned' && assigned.has(norm(b.name)))                      return false;
+    return true;
+  });
+
+  const aCount      = list.filter(b => assigned.has(norm(b.name))).length;
+  const inPoolCount = list.filter(b => b.inPool === true).length;
+  const maybeCount  = list.filter(b => b.inPool === 'maybe').length;
+  document.getElementById('brothers-stats').innerHTML = `
+    <div class="stat-card"><div class="number">${list.length}</div><div class="label">Total Brothers</div></div>
+    <div class="stat-card"><div class="number">${inPoolCount}</div><div class="label">In Pool</div></div>
+    <div class="stat-card"><div class="number">${maybeCount}</div><div class="label">Maybe</div></div>
+    <div class="stat-card"><div class="number">${aCount}</div><div class="label">Currently Ministering</div></div>
+    <div class="stat-card"><div class="number">${list.length - aCount}</div><div class="label">Not Assigned</div></div>
+  `;
+
+  if (!filtered.length) {
+    document.getElementById('brothers-table').innerHTML = list.length === 0
+      ? '<div class="empty-state"><div class="icon">📋</div><p>No member data imported yet.</p></div>'
+      : '<div class="empty-state"><div class="icon">🔍</div><p>No results.</p></div>';
+    return;
+  }
+
+  const showHH = S.households.length > 0;
+  let t = `<div style="overflow-x:auto"><table><thead><tr>
+    <th>Name</th>${showHH?'<th>Own Household</th>':''}
+    <th>Phone</th><th>Pool</th><th>Status</th>
+  </tr></thead><tbody>`;
+
+  filtered.forEach(b => {
+    const a = assigned.has(norm(b.name));
+    const hh = memberHousehold(b);
+    const bPoolState = b.inPool === true ? 'in' : b.inPool === 'maybe' ? 'maybe' : 'out';
+    const bPoolBadge = bPoolState === 'in'    ? `<span class="badge badge-green"  style="cursor:pointer" title="In Pool — click to set Maybe"    onclick="toggleBrotherPool('${b.id}')">In Pool</span>`
+                     : bPoolState === 'maybe' ? `<span class="badge badge-yellow" style="cursor:pointer" title="Maybe — click to remove from pool" onclick="toggleBrotherPool('${b.id}')">Maybe</span>`
+                     :                          `<span class="badge badge-red"    style="cursor:pointer" title="Out — click to add to pool"        onclick="toggleBrotherPool('${b.id}')">Out</span>`;
+    t += `<tr>
+      <td><strong>${esc(b.name)}</strong></td>
+      ${showHH ? `<td>${hh ? esc(hh.name) : '<span style="color:#aaa">—</span>'}</td>` : ''}
+      <td>${esc(b.phone)}</td>
+      <td>${bPoolBadge}</td>
+      <td><span class="badge ${a?'badge-green':'badge-red'}">${a?'Assigned':'Unassigned'}</span></td>
+    </tr>`;
+  });
+  document.getElementById('brothers-table').innerHTML = t + '</tbody></table></div>';
+}
+
+function exportBrothersCSV() {
+  const list = brothers(); if (!list.length) { alert('No data.'); return; }
+  const assigned = currentMinisterNames();
+  let csv = 'Name,OwnHousehold,Phone,CurrentlyAssigned\n';
+  list.forEach(b => {
+    const hh = memberHousehold(b);
+    csv += [b.name, hh?hh.name:'', b.phone, assigned.has(norm(b.name))?'Yes':'No']
+      .map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(',') + '\n';
+  });
+  dlCSV(csv,'brothers.csv');
+}
+
+// ── Current Assignments Tab ───────────────────────────────────
+function renderCurrent() {
+  const list = S.current;
+  const hhSet = new Set(list.flatMap(c => c.households));
+  document.getElementById('current-stats').innerHTML = `
+    <div class="stat-card"><div class="number">${list.length}</div><div class="label">Companionships</div></div>
+    <div class="stat-card"><div class="number">${list.filter(c=>c.m2Name).length}</div><div class="label">Paired</div></div>
+    <div class="stat-card"><div class="number">${list.filter(c=>!c.m2Name).length}</div><div class="label">Solo</div></div>
+    <div class="stat-card"><div class="number">${hhSet.size}</div><div class="label">Households</div></div>
+  `;
+
+  document.getElementById('current-list').innerHTML = !list.length
+    ? '<div class="empty-state"><div class="icon">🤝</div><p>No assignments imported yet.</p></div>'
+    : list.map(c => companionshipHTML(c.m1Name, c.m2Name, c.households, c.district, null)).join('');
+}
+
+function companionshipHTML(m1, m2, hhList, district, id) {
+  const ministers = m2
+    ? `${esc(m1)} <span style="color:#aaa">+</span> ${esc(m2)}`
+    : `${esc(m1)} <span class="badge badge-blue">Solo</span>`;
+
+  // Resolve household display names
+  const resolveHH = ref => S.households.find(x => x.id === ref || norm(x.name) === norm(ref));
+  const tags = hhList.map(h => {
+    const obj = resolveHH(h);
+    const label = obj ? obj.name : h;
+    return `<span class="household-tag">${esc(label)}</span>`;
+  }).join('') || '<span style="color:#aaa;font-size:0.82rem">No households</span>';
+
+  const editBtn = id
+    ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditModal('${id}')">Edit</button>`
+    : '';
+
+  // Distance block — only for proposed assignments (id present) with geocoded data
+  let distBlock = '';
+  if (id) {
+    const p = S.proposed.find(x => x.id === id);
+    if (p) {
+      const d = getDistances(p);
+      if (d) {
+        const distColor = d => d < 2 ? '#16a34a' : d < 4 ? '#d97706' : '#dc2626';
+        const parts = [];
+        if (d.ministerDist !== null) {
+          const c = distColor(d.ministerDist);
+          parts.push(`Ministers: <strong style="color:${c}">${d.ministerDist.toFixed(1)} mi apart</strong>`);
+        }
+        const hhLines = d.hhDistances.map(x => {
+          const c = distColor(x.dist);
+          return `${esc(x.name)}: <strong style="color:${c}">${x.dist.toFixed(1)} mi</strong> from ${esc(d.anchorLabel)}`;
+        });
+        distBlock = `<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #f0f0f0;font-size:0.8rem;color:#555;line-height:1.7">
+          ${[...parts, ...hhLines].join(' &nbsp;·&nbsp; ')}
+        </div>`;
+      }
+    }
+  }
+
+  return `<div class="companionship-card" ${id?`onclick="openEditModal('${id}')"`:''}}>
+    <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:0.35rem">
+      <div class="ministers">${ministers}</div>${editBtn}
+    </div>
+    ${district?`<div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem">District: ${esc(district)}</div>`:''}
+    <div>${tags}</div>
+    ${distBlock}
+  </div>`;
+}
+
+function copyCurrentToProposed() {
+  if (!S.current.length) { alert('No current assignments to copy.'); return; }
+  const bList = brothers();
+  const hhLookup = new Map(S.households.map(h => [norm(h.name), h.id]));
+
+  S.proposed = S.current.map(c => {
+    const m1 = bList.find(b => norm(b.name)===norm(c.m1Name));
+    const m2 = c.m2Name ? bList.find(b => norm(b.name)===norm(c.m2Name)) : null;
+    // Resolve household names to IDs if possible
+    const hhs = c.households.map(n => hhLookup.get(norm(n)) || n);
+    return { id:uid(), m1Id:m1?.id||null, m1Name:c.m1Name, m2Id:m2?.id||null, m2Name:c.m2Name||'', households:hhs };
+  });
+  save(); showTab('propose');
+}
+
+// ── Proposed Tab ──────────────────────────────────────────────
+function renderProposed() {
+  const list = S.proposed;
+  const bList = poolBrothers();
+  const pm = proposedMinisters();
+  const hhSet = new Set(list.flatMap(p => p.households));
+  const unassigned = bList.filter(b => !pm.has(b.id));
+  const poolHH = poolHouseholds();
+  const unassignedHH = poolHH.filter(hh => !hhSet.has(hh.id) && !hhSet.has(hh.name));
+
+  document.getElementById('propose-stats').innerHTML = `
+    <div class="stat-card"><div class="number">${list.length}</div><div class="label">Companionships</div></div>
+    <div class="stat-card"><div class="number">${bList.length-unassigned.length}</div><div class="label">Assigned</div></div>
+    <div class="stat-card"><div class="number">${unassigned.length}</div><div class="label">Unassigned</div></div>
+    <div class="stat-card"><div class="number">${poolHH.length-unassignedHH.length}/${poolHH.length}</div><div class="label">HH Assigned</div></div>
+  `;
+
+  document.getElementById('proposed-list').innerHTML = !list.length
+    ? '<div class="empty-state"><div class="icon">✏️</div><p>No proposals yet. Click "+ Add" to start.</p></div>'
+    : list.map(p => companionshipHTML(p.m1Name, p.m2Name, p.households, '', p.id)).join('');
+
+  if (!unassigned.length) {
+    document.getElementById('unassigned-list').innerHTML = bList.length === 0
+      ? '<p style="color:#888;font-size:0.88rem">Import member data first.</p>'
+      : '<p style="color:#155724;font-size:0.88rem">✓ All brothers assigned!</p>';
+  } else {
+    document.getElementById('unassigned-list').innerHTML =
+      `<p style="font-size:0.82rem;color:#888;margin-bottom:0.5rem">${unassigned.length} not yet assigned:</p>` +
+      '<ul style="list-style:none;padding:0">' +
+      unassigned.map(b => {
+        const hh = memberHousehold(b);
+        return `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
+          ${esc(b.name)}${hh?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.name)})</span>`:''}
+        </li>`;
+      }).join('') + '</ul>';
+  }
+
+  const hhDiv = document.getElementById('unassigned-hh-list');
+  if (hhDiv) {
+    if (!unassignedHH.length) {
+      hhDiv.innerHTML = poolHH.length === 0
+        ? '<p style="color:#888;font-size:0.88rem">No households in pool yet.</p>'
+        : '<p style="color:#155724;font-size:0.88rem">✓ All pool households assigned!</p>';
+    } else {
+      hhDiv.innerHTML =
+        `<p style="font-size:0.82rem;color:#888;margin-bottom:0.5rem">${unassignedHH.length} not yet assigned:</p>` +
+        '<ul style="list-style:none;padding:0">' +
+        unassignedHH.map(hh =>
+          `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
+            ${esc(hh.name)}${hh.address?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.address)})</span>`:''}
+          </li>`
+        ).join('') + '</ul>';
+    }
+  }
+
+  // Maybe Brothers
+  const mbList = maybeBrothers();
+  const mbDiv  = document.getElementById('maybe-brothers-list');
+  if (mbDiv) {
+    if (!mbList.length) {
+      mbDiv.innerHTML = '<p style="color:#888;font-size:0.88rem">No brothers marked Maybe.</p>';
+    } else {
+      mbDiv.innerHTML =
+        `<p style="font-size:0.82rem;color:#888;margin-bottom:0.5rem">${mbList.length} marked Maybe:</p>` +
+        '<ul style="list-style:none;padding:0">' +
+        mbList.map(b => {
+          const hh = memberHousehold(b);
+          return `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
+            ${esc(b.name)}${hh?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.name)})</span>`:''}
+          </li>`;
+        }).join('') + '</ul>';
+    }
+  }
+
+  // Maybe Households
+  const mhList = maybeHouseholds();
+  const mhDiv  = document.getElementById('maybe-hh-list');
+  if (mhDiv) {
+    if (!mhList.length) {
+      mhDiv.innerHTML = '<p style="color:#888;font-size:0.88rem">No households marked Maybe.</p>';
+    } else {
+      mhDiv.innerHTML =
+        `<p style="font-size:0.82rem;color:#888;margin-bottom:0.5rem">${mhList.length} marked Maybe:</p>` +
+        '<ul style="list-style:none;padding:0">' +
+        mhList.map(hh =>
+          `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
+            ${esc(hh.name)}${hh.address?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.address)})</span>`:''}
+          </li>`
+        ).join('') + '</ul>';
+    }
+  }
+}
+
+// ── Modals ────────────────────────────────────────────────────
+function openAddModal() {
+  if (!S.members.length) { alert('Import member data first.'); return; }
+  populateBrotherSelects('add-m1','add-m2', null, null);
+  document.getElementById('add-hh-search').value = '';
+  updateProximityInfo('add', []);
+  document.getElementById('add-modal').classList.add('open');
+}
+
+function openEditModal(id) {
+  const p = S.proposed.find(x => x.id === id); if (!p) return;
+  populateBrotherSelects('edit-m1','edit-m2', p.m1Id, p.m2Id, p.m2Name||'');
+  document.getElementById('edit-id').value = id;
+  document.getElementById('edit-hh-search').value = '';
+  updateProximityInfo('edit', p.households);
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function refreshAddM2() {
+  const m1 = document.getElementById('add-m1').value;
+  populateBrotherSelects('add-m1','add-m2', m1, null);
+  document.getElementById('add-m1').value = m1;
+  updateProximityInfo('add');
+}
+
+function refreshEditM2() {
+  const m1 = document.getElementById('edit-m1').value;
+  const id = document.getElementById('edit-id').value;
+  const p = S.proposed.find(x => x.id === id);
+  populateBrotherSelects('edit-m1','edit-m2', m1, p?.m2Id||null);
+  document.getElementById('edit-m1').value = m1;
+  updateProximityInfo('edit');
+}
+
+// selM2Name is used when reopening an edit modal that has a name-only (spouse) companion saved
+function populateBrotherSelects(m1SelId, m2SelId, selM1, selM2, selM2Name) {
+  const bList = poolBrothers();
+  const pm = proposedMinisters();
+  const curM1 = selM1 || document.getElementById(m1SelId).value;
+
+  [m1SelId, m2SelId].forEach((sid, i) => {
+    const sel = document.getElementById(sid);
+    sel.innerHTML = i===0 ? '<option value="">Select...</option>' : '<option value="">None (solo)</option>';
+
+    if (i === 1) {
+      const spouseSelected = selM2 === '__spouse__' || (!selM2 && selM2Name === 'Spouse');
+      const o = document.createElement('option');
+      o.value = '__spouse__';
+      o.textContent = 'With Spouse';
+      if (spouseSelected) o.selected = true;
+      sel.appendChild(o);
+      const sep = document.createElement('option');
+      sep.disabled = true;
+      sep.textContent = '──────────';
+      sel.appendChild(sep);
+    }
+
+    bList.forEach(b => {
+      if (i===1 && b.id===curM1) return;
+      const inUse = pm.has(b.id) && b.id!==selM1 && b.id!==selM2;
+      const hh = memberHousehold(b);
+      const o = document.createElement('option');
+      o.value = b.id;
+      o.textContent = b.name + (hh?` (${hh.name})`:'') + (inUse?' — in use':'');
+      if ((i===0 && b.id===selM1)||(i===1 && b.id===selM2)) o.selected=true;
+      sel.appendChild(o);
+    });
+  });
+}
+
+function populateHHSelect(selId, selected) {
+  const sel = document.getElementById(selId);
+  sel.innerHTML = '';
+  householdList().forEach(hh => {
+    const o = document.createElement('option');
+    o.value = hh.id;
+    o.textContent = hh.name + (hh.address ? ` — ${hh.address}` : '');
+    if (selected.includes(hh.id) || selected.includes(hh.name)) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+// _hhListData stores the computed household list (with distances) for the current modal
+// so filterHHList can re-render without recomputing distances.
+let _hhListData = { prefix: null, items: [] };
+
+function populateHHList(prefix, selected, midLat, midLng) {
+  const query = (document.getElementById(prefix + '-hh-search')?.value || '').toLowerCase();
+  const items = poolHouseholds().map(hh => {
+    const dist = (midLat != null && hh.lat != null)
+      ? haversine(midLat, midLng, hh.lat, hh.lng)
+      : null;
+    const isSelected = selected.includes(hh.id) || selected.includes(hh.name);
+    return { hh, dist, isSelected };
+  });
+  // Sort: checked first, then by distance (asc), then alphabetically
+  items.sort((a, b) => {
+    if (a.isSelected !== b.isSelected) return a.isSelected ? -1 : 1;
+    if (a.dist != null && b.dist != null) return a.dist - b.dist;
+    if (a.dist != null) return -1;
+    if (b.dist != null) return 1;
+    return a.hh.name.localeCompare(b.hh.name);
+  });
+  _hhListData = { prefix, items };
+  renderHHList(prefix, query);
+}
+
+function renderHHList(prefix, query) {
+  const container = document.getElementById(prefix + '-hh-list');
+  if (!container) return;
+  container.innerHTML = '';
+  _hhListData.items.forEach(({ hh, dist, isSelected }) => {
+    if (query && !hh.name.toLowerCase().includes(query) && !(hh.address||'').toLowerCase().includes(query)) return;
+    const nearby = dist != null && dist < 2;
+    const lbl = document.createElement('label');
+    if (nearby) lbl.classList.add('nearby');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = hh.id;
+    cb.checked = isSelected;
+    cb.addEventListener('change', () => {
+      const entry = _hhListData.items.find(x => x.hh.id === hh.id);
+      if (entry) entry.isSelected = cb.checked;
+    });
+    lbl.appendChild(cb);
+    let text = hh.name;
+    if (hh.address) text += ` — ${hh.address}`;
+    if (dist != null) text += `  (${dist.toFixed(1)} mi)`;
+    lbl.appendChild(document.createTextNode(text));
+    container.appendChild(lbl);
+  });
+}
+
+function filterHHList(prefix) {
+  const query = (document.getElementById(prefix + '-hh-search')?.value || '').toLowerCase();
+  renderHHList(prefix, query);
+}
+
+function getSelectedHHIds(prefix) {
+  if (_hhListData.prefix === prefix) {
+    return _hhListData.items.filter(x => x.isSelected).map(x => x.hh.id);
+  }
+  return Array.from(document.querySelectorAll(`#${prefix}-hh-list input:checked`)).map(cb => cb.value);
+}
+
+function updateProximityInfo(prefix, initialSelected) {
+  const m1Id = document.getElementById(prefix + '-m1').value;
+  const m2Id = document.getElementById(prefix + '-m2')?.value || '';
+  const infoDiv = document.getElementById(prefix + '-proximity');
+
+  const m1 = m1Id ? S.members.find(x => x.id === m1Id) : null;
+  const m2 = m2Id ? S.members.find(x => x.id === m2Id) : null;
+  const m1hh = resolveMinisterHH(m1);
+  const m2hh = resolveMinisterHH(m2);
+
+  let midLat = null, midLng = null;
+  let html = '';
+
+  if (m1hh?.lat && m2hh?.lat) {
+    const dist = haversine(m1hh.lat, m1hh.lng, m2hh.lat, m2hh.lng);
+    midLat = (m1hh.lat + m2hh.lat) / 2;
+    midLng = (m1hh.lng + m2hh.lng) / 2;
+    const col = dist < 2 ? '#16a34a' : dist < 4 ? '#d97706' : '#dc2626';
+    const bg  = dist < 2 ? '#d4edda' : dist < 4 ? '#fff3cd' : '#f8d7da';
+    html = `<div style="padding:0.4rem 0.75rem;border-radius:6px;background:${bg};color:${col};font-size:0.82rem;margin-bottom:0.6rem">
+      Ministers are <strong>${dist.toFixed(1)} mi</strong> apart
+      ${dist < 2 ? '— good match' : dist < 4 ? '— manageable distance' : '— far apart'}
+    </div>`;
+  } else if (m1hh?.lat) {
+    midLat = m1hh.lat; midLng = m1hh.lng;
+    if (m2Id) html = `<div style="padding:0.4rem 0.75rem;border-radius:6px;background:#f5f7fa;color:#888;font-size:0.82rem;margin-bottom:0.6rem">Minister 2 not geocoded — distance unavailable</div>`;
+  } else if (m2hh?.lat) {
+    midLat = m2hh.lat; midLng = m2hh.lng;
+    if (m1Id) html = `<div style="padding:0.4rem 0.75rem;border-radius:6px;background:#f5f7fa;color:#888;font-size:0.82rem;margin-bottom:0.6rem">Minister 1 not geocoded — distance unavailable</div>`;
+  }
+
+  if (infoDiv) infoDiv.innerHTML = html;
+
+  const selected = initialSelected !== undefined
+    ? initialSelected
+    : getSelectedHHIds(prefix);
+
+  populateHHList(prefix, selected, midLat, midLng);
+}
+
+function resolveM2(rawVal) {
+  if (!rawVal) return { id: null, name: '' };
+  if (rawVal === '__spouse__') return { id: null, name: 'Spouse' };
+  const m = S.members.find(b => b.id === rawVal);
+  return { id: rawVal, name: m?.name || '' };
+}
+
+function saveNewCompanionship() {
+  const m1Id = document.getElementById('add-m1').value;
+  if (!m1Id) { alert('Select Minister 1.'); return; }
+  const m2 = resolveM2(document.getElementById('add-m2').value);
+  const hhs = getSelectedHHIds('add');
+  const m1  = S.members.find(b => b.id === m1Id);
+  S.proposed.push({ id:uid(), m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs });
+  save(); closeModal('add-modal'); renderProposed();
+}
+
+function saveEditCompanionship() {
+  const id   = document.getElementById('edit-id').value;
+  const m1Id = document.getElementById('edit-m1').value;
+  if (!m1Id) { alert('Select Minister 1.'); return; }
+  const m2  = resolveM2(document.getElementById('edit-m2').value);
+  const hhs = getSelectedHHIds('edit');
+  const m1  = S.members.find(b => b.id === m1Id);
+  const idx = S.proposed.findIndex(x => x.id === id); if (idx < 0) return;
+  S.proposed[idx] = { id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs };
+  save(); closeModal('edit-modal'); renderProposed();
+}
+
+function deleteCompanionship() {
+  if (!confirm('Delete this companionship?')) return;
+  const id = document.getElementById('edit-id').value;
+  S.proposed = S.proposed.filter(x=>x.id!==id);
+  save(); closeModal('edit-modal'); renderProposed();
+}
+
+// ── Distance & Geocoding ──────────────────────────────────────
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 3958.8; // miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2
+    + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+function getDistances(p) {
+  const m1     = p.m1Id ? S.members.find(x => x.id === p.m1Id) : null;
+  const m2     = p.m2Id ? S.members.find(x => x.id === p.m2Id) : null;
+  const m1hh   = resolveMinisterHH(m1);
+  const m2hh   = resolveMinisterHH(m2);
+
+  const anchor = m1hh?.lat ? m1hh : m2hh?.lat ? m2hh : null;
+  if (!anchor) return null;
+
+  let midLat = anchor.lat, midLng = anchor.lng;
+  let ministerDist = null;
+  let anchorLabel = 'midpoint';
+
+  if (m1hh?.lat && m2hh?.lat) {
+    ministerDist = haversine(m1hh.lat, m1hh.lng, m2hh.lat, m2hh.lng);
+    midLat = (m1hh.lat + m2hh.lat) / 2;
+    midLng = (m1hh.lng + m2hh.lng) / 2;
+  } else {
+    anchorLabel = m1hh?.lat ? (m1?.name || 'Minister 1') : (m2?.name || 'Minister 2');
+  }
+
+  const hhDistances = [];
+  p.households.forEach(ref => {
+    const hh = S.households.find(x => x.id === ref || norm(x.name) === norm(ref));
+    if (hh?.lat) {
+      hhDistances.push({ name: hh.name, dist: haversine(midLat, midLng, hh.lat, hh.lng) });
+    }
+  });
+
+  return { ministerDist, hhDistances, anchorLabel };
+}
+
+// Normalize LCR address format before geocoding:
+// - LCR exports addresses with an embedded newline between street and city/state/zip
+// - ZIP+4 extensions (32904-6744) can confuse geocoders
+// - "W Melbourne" is an abbreviation for "West Melbourne" used inconsistently in LCR
+// - Trailing periods on street names (e.g. "327 ash street.") confuse structured queries
+function normalizeAddress(address) {
+  return address
+    .replace(/[\r\n]+/g, ', ')                         // embedded newlines → ", "
+    .replace(/,\s*,/g, ',')                            // collapse double commas
+    .replace(/(\d{5})-\d{4}/g, '$1')                  // ZIP+4 → ZIP5
+    .replace(/\bW\.?\s+(Melbourne)\b/gi, 'West $1')   // "W Melbourne" → "West Melbourne"
+    .replace(/\.(\s*,|\s+[A-Z]{2}\b|\s*$)/g, '$1')   // strip trailing periods before comma, state abbr, or end
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+// Strip apartment / unit designations that confuse geocoders.
+// Handles: Apt 5, Apt # P204, Unit 300, Ste B, Lt 19 (lot), Bldg 7, # 102, etc.
+function stripUnit(address) {
+  return address
+    .replace(/,?\s+(apt|apartment|unit|ste|suite|fl|floor|rm|room|bldg|building|lt|lot)\.?\s*#?\s*[\w-]*/gi, '')
+    .replace(/,?\s*#\s*[\w-]+/g, '')   // standalone # designations (with or without leading comma)
+    .trim();
+}
+
+// Addresses that can never be geocoded to a specific location
+function isUngeocodeable(address) {
+  return /^\s*(P\.?O\.?\s*Box|PO\s*Box|Moved\s*-)/i.test(address)
+      || !/^\d/.test(address.trim()); // no leading house number
+}
+
+// Parse "123 Main St [, unit], City ST 12345" into structured components for Nominatim.
+// Uses greedy match for street so multi-comma addresses like "street, unit, city ST zip"
+// correctly capture only the last city segment — not "unit, city" — as the city field.
+function parseUSAddress(address) {
+  const withZip = address.match(/^(.*),\s*([^,]+?)\s+([A-Z]{2})\s+(\d{5})\s*$/i);
+  if (withZip) return { street: withZip[1].trim(), city: withZip[2].trim(), state: withZip[3].toUpperCase(), zip: withZip[4] };
+  const noZip = address.match(/^(.*),\s*([^,]+?)\s+([A-Z]{2})\s*$/i);
+  if (noZip) return { street: noZip[1].trim(), city: noZip[2].trim(), state: noZip[3].toUpperCase() };
+  return null;
+}
+
+// Rate limiter: one request per GEO_RATE_MS across all workers.
+// Atomically reserves the next slot before awaiting — race-condition-safe in JS's
+// single-threaded event loop because the read-modify-write is synchronous.
+let _nextGeoSlot = 0;
+const GEO_RATE_MS = 1100; // ~1 req/sec (Nominatim usage policy)
+
+async function acquireGeoSlot() {
+  const now = Date.now();
+  const slot = Math.max(now, _nextGeoSlot);
+  _nextGeoSlot = slot + GEO_RATE_MS;
+  const waitMs = slot - now;
+  if (waitMs > 0) await delay(waitMs);
+}
+
+// Nominatim geocoder (nominatim.openstreetmap.org)
+// CORS-enabled, no API key required, 1 req/sec limit (OSM usage policy)
+// Uses structured parameters (street/city/state/zip) for better accuracy than
+// a single free-text query — avoids city/state confusion on multi-word city names.
+async function geocodeNominatim(address) {
+  await acquireGeoSlot();
+  const parsed = parseUSAddress(address);
+  let url;
+  if (parsed) {
+    const p = new URLSearchParams({ format: 'json', limit: '1', countrycodes: 'us',
+      street: parsed.street, city: parsed.city, state: parsed.state });
+    if (parsed.zip) p.set('postalcode', parsed.zip);
+    url = 'https://nominatim.openstreetmap.org/search?' + p;
+  } else {
+    url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q='
+      + encodeURIComponent(address);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch(e) { clearTimeout(timer); }
+  return null;
+}
+
+async function geocodeAddress(rawAddress) {
+  const address = normalizeAddress(rawAddress);
+  const stripped = stripUnit(address);
+  const noZip = stripped.replace(/,?\s*\d{5}\s*$/, '').trim();
+
+  // Attempt 1: full structured query (includes unit in street field)
+  let coords = await geocodeNominatim(address);
+  if (coords) return coords;
+
+  // Attempt 2: unit stripped, zip dropped — cleanest form for Nominatim
+  if (noZip !== address) {
+    coords = await geocodeNominatim(noZip);
+    if (coords) return coords;
+  }
+
+  // Attempt 3: West Melbourne → Melbourne swap — OSM sometimes maps these streets
+  // under the adjacent city; try both before giving up
+  if (/\bWest Melbourne\b/i.test(address)) {
+    const swapped = noZip.replace(/\bWest Melbourne\b/gi, 'Melbourne');
+    coords = await geocodeNominatim(swapped);
+    if (coords) return coords;
+  }
+
+  // Attempt 4: free-text fallback (stripped with zip, avoids structured parser issues)
+  if (stripped !== address && stripped !== noZip) {
+    coords = await geocodeNominatim(stripped);
+  }
+  return coords || null;
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function calculateDistances() {
+  const allPending = S.households.filter(hh => hh.address && !hh.lat);
+  // Split into actually-geocodeable vs. permanently-ungeocodeable (PO Boxes, bare city names, etc.)
+  const skipped   = allPending.filter(hh => isUngeocodeable(hh.address));
+  const toGeocode = allPending.filter(hh => !isUngeocodeable(hh.address));
+
+  if (!toGeocode.length) {
+    const cached = S.households.filter(hh => hh.lat).length;
+    const msg = cached ? `✓ All geocodeable addresses done (${cached} geocoded).`
+                       : 'No geocodeable addresses found. Import households with addresses first.';
+    document.getElementById('geo-status').textContent = msg;
+    return;
+  }
+
+  const bar    = document.getElementById('geo-bar');
+  const prog   = document.getElementById('geo-progress');
+  const stat   = document.getElementById('geo-status');
+  const failEl = document.getElementById('geo-failures');
+  prog.style.display = 'block';
+  failEl.style.display = 'none';
+
+  // Estimate: ~1.1s per address + up to 2 extra attempts for failures (~20%)
+  const estSec = Math.round(toGeocode.length * 1.3);
+  const estMin = Math.floor(estSec / 60), estRemSec = estSec % 60;
+  stat.textContent = `Starting geocoding for ${toGeocode.length} addresses (~${estMin}m ${estRemSec}s estimated)…`;
+
+  const failures = [];
+
+  // ── Concurrency pool ─────────────────────────────────────────
+  // Rate limiter enforces ~1 req/sec (Nominatim policy). 2 workers allows
+  // slight pipelining so the next request starts while the previous response
+  // is being parsed, without ever exceeding the rate limit.
+  const CONCURRENCY = 2;
+  let qIdx = 0, done = 0;
+
+  async function worker() {
+    while (qIdx < toGeocode.length) {
+      const hh = toGeocode[qIdx++];
+      const coords = await geocodeAddress(hh.address);
+      if (coords) { hh.lat = coords.lat; hh.lng = coords.lng; }
+      else failures.push(hh);
+      done++;
+      const pct = Math.round(100 * done / toGeocode.length);
+      const remaining = Math.round((toGeocode.length - done) * 1.1);
+      bar.style.width = `${pct}%`;
+      stat.textContent = `Geocoding ${done} / ${toGeocode.length} — ~${remaining}s remaining`;
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, toGeocode.length) }, worker)
+  );
+
+  bar.style.width = '100%';
+  const total = S.households.filter(hh => hh.lat).length;
+  stat.textContent = `✓ Done — ${total} / ${S.households.length} geocoded`
+    + (failures.length  ? `, ${failures.length} not found` : '')
+    + (skipped.length   ? `, ${skipped.length} skipped (PO Box / no street)` : '') + '.';
+
+  const allBad = [...failures, ...skipped];
+  if (allBad.length) {
+    failEl.style.display = 'block';
+    const skipNote = skipped.length ? `<br><em>${skipped.length} entries skipped — no street address (PO Box, etc.):</em><br>`
+      + skipped.map(hh => `${esc(hh.name)}: <em>${esc(hh.address)}</em>`).join('<br>') : '';
+    const failNote = failures.length ? `<strong>Could not geocode ${failures.length} address${failures.length > 1 ? 'es' : ''} — use Edit to correct them:</strong><br>`
+      + failures.map(hh => `${esc(hh.name)}: <em>${esc(hh.address)}</em>`).join('<br>') : '';
+    failEl.innerHTML = failNote + skipNote;
+  }
+
+  setTimeout(() => { prog.style.display = 'none'; }, 2000);
+  save();
+  renderProposed();
+  renderHouseholds();
+}
+
+function clearGeoCache() {
+  S.households.forEach(hh => { delete hh.lat; delete hh.lng; });
+  save();
+  document.getElementById('geo-status').textContent = 'Geocoding cache cleared.';
+  renderProposed();
+}
+
+function saveGeoFile() {
+  const coords = {};
+  S.households.forEach(hh => { if (hh.lat && hh.address) coords[hh.address] = { lat: hh.lat, lng: hh.lng }; });
+  const count = Object.keys(coords).length;
+  if (!count) { document.getElementById('geo-status').textContent = 'No geocoded addresses to save.'; return; }
+  const blob = new Blob([JSON.stringify(coords, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'geocoords.json';
+  a.click();
+  document.getElementById('geo-status').textContent = `Saved ${count} coordinates to geocoords.json.`;
+}
+
+function loadGeoFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const coords = JSON.parse(e.target.result);
+      let applied = 0;
+      S.households.forEach(hh => {
+        const c = coords[hh.address];
+        if (c?.lat && c?.lng) { hh.lat = c.lat; hh.lng = c.lng; applied++; }
+      });
+      save();
+      renderHouseholds();
+      renderProposed();
+      document.getElementById('geo-status').textContent = `Loaded coords file — applied to ${applied} addresses.`;
+    } catch(err) {
+      document.getElementById('geo-status').textContent = 'Error reading coords file.';
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ── Export ────────────────────────────────────────────────────
+function exportProposed() {
+  if (!S.proposed.length) { alert('No proposals to export.'); return; }
+  let csv = 'Minister1,Minister2,AssignedHousehold,HouseholdAddress\n';
+  S.proposed.forEach(p => {
+    const rows = p.households.length ? p.households : [''];
+    rows.forEach(hhRef => {
+      const obj = S.households.find(h => h.id===hhRef || norm(h.name)===norm(hhRef));
+      const hhName = obj ? obj.name : hhRef;
+      const addr   = obj ? obj.address : '';
+      csv += [p.m1Name, p.m2Name||'', hhName, addr]
+        .map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(',') + '\n';
+    });
+  });
+  dlCSV(csv,'proposed-assignments.csv');
+}
+
+function clearProposed() {
+  if (!confirm('Clear all proposed assignments?')) return;
+  S.proposed = []; save(); renderProposed();
+}
+
+function clearData(type) {
+  const labels = { all:'ALL data', members:'member data', households:'household data', assignments:'assignment data' };
+  if (!confirm(`Clear ${labels[type]}?`)) return;
+  if (type==='all'||type==='members') {
+    S.members=[];
+    document.getElementById('member-status').textContent='';
+    document.getElementById('member-mapping').style.display='none';
+    document.getElementById('member-link-status').style.display='none';
+  }
+  if (type==='all'||type==='households') {
+    S.households=[];
+    document.getElementById('hh-status').textContent='';
+    document.getElementById('hh-mapping').style.display='none';
+    document.getElementById('hh-link-status').style.display='none';
+    // clear householdIds from members
+    S.members.forEach(m => m.householdId = null);
+  }
+  if (type==='all'||type==='assignments') {
+    S.current=[];
+    document.getElementById('assign-status').textContent='';
+    document.getElementById('assign-mapping').style.display='none';
+  }
+  if (type==='all') S.proposed=[];
+  save(); refreshBadge();
+  document.getElementById('csv-preview').style.display='none';
+}
+
+function dlCSV(csv, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download = name; a.click();
+}
+
+// ── Household Address Edit ────────────────────────────────────
+let _hhEditId = null;
+
+function openHHEditModal(id) {
+  const hh = S.households.find(x => x.id === id);
+  if (!hh) return;
+  _hhEditId = id;
+  document.getElementById('hh-edit-title').textContent = hh.name;
+  document.getElementById('hh-edit-addr').value = hh.address || '';
+  document.getElementById('hh-edit-phone').value = hh.phone || '';
+  document.getElementById('hh-edit-email').value = hh.email || '';
+  document.getElementById('hh-edit-status').textContent = '';
+  const coordInfo = hh.lat
+    ? `Currently geocoded (${hh.lat.toFixed(4)}, ${hh.lng.toFixed(4)})`
+    : hh.address ? 'Address not yet geocoded' : 'No address on file';
+  document.getElementById('hh-edit-coords').textContent = coordInfo;
+  document.getElementById('hh-edit-modal').classList.add('open');
+  document.getElementById('hh-edit-addr').focus();
+}
+
+async function saveHHAddress(andGeocode) {
+  const hh = S.households.find(x => x.id === _hhEditId);
+  if (!hh) return;
+
+  const newAddr  = document.getElementById('hh-edit-addr').value.trim();
+  const newPhone = document.getElementById('hh-edit-phone').value.trim();
+  const newEmail = document.getElementById('hh-edit-email').value.trim();
+
+  const addrChanged = newAddr !== (hh.address || '');
+  hh.address = newAddr;
+  hh.phone   = newPhone;
+  hh.email   = newEmail;
+  if (addrChanged) { delete hh.lat; delete hh.lng; } // clear stale coords
+
+  if (andGeocode && newAddr) {
+    const stat = document.getElementById('hh-edit-status');
+    const btn  = document.getElementById('hh-edit-geocode-btn');
+    stat.style.color = '#555';
+    stat.textContent = 'Geocoding…';
+    btn.disabled = true;
+
+    const coords = await geocodeAddress(newAddr);
+    if (coords) {
+      hh.lat = coords.lat; hh.lng = coords.lng;
+      stat.style.color = '#155724';
+      stat.textContent = `✓ Geocoded (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
+      document.getElementById('hh-edit-coords').textContent =
+        `Currently geocoded (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
+    } else {
+      stat.style.color = '#721c24';
+      stat.textContent = 'Could not geocode. Try: "123 Main St, City, ST 12345"';
+    }
+    btn.disabled = false;
+  }
+
+  save();
+  renderHouseholds();
+  if (!andGeocode) closeModal('hh-edit-modal');
+}
+</script>
+
+<!-- Edit Household Modal -->
+<div class="modal-overlay" id="hh-edit-modal">
+  <div class="modal" style="max-width:520px">
+    <h3 id="hh-edit-title"></h3>
+    <div id="hh-edit-coords" style="font-size:0.8rem;color:#888;margin-bottom:1rem"></div>
+    <div class="form-group">
+      <label>Address</label>
+      <input type="text" id="hh-edit-addr" placeholder="123 Main St, City, ST 12345"
+             onkeydown="if(event.key==='Enter') saveHHAddress(true)">
+      <div style="font-size:0.77rem;color:#888;margin-top:0.25rem">
+        For best results: full street address with city, state, and zip
+      </div>
+    </div>
+    <div class="two-col" style="gap:0.75rem">
+      <div class="form-group" style="margin:0">
+        <label>Phone</label>
+        <input type="text" id="hh-edit-phone" placeholder="555-555-5555">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Email</label>
+        <input type="text" id="hh-edit-email" placeholder="email@example.com">
+      </div>
+    </div>
+    <div id="hh-edit-status" style="font-size:0.85rem;min-height:1.2em;margin-top:0.5rem"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('hh-edit-modal')">Cancel</button>
+      <button class="btn btn-secondary" onclick="saveHHAddress(false)">Save</button>
+      <button class="btn btn-primary" id="hh-edit-geocode-btn" onclick="saveHHAddress(true)">Save &amp; Geocode</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
