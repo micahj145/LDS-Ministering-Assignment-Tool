@@ -992,7 +992,7 @@ function renderMembers() {
 
   let t = `<div style="overflow-x:auto"><table><thead><tr>
     <th>Name</th><th>Gender</th><th>Age</th><th>Phone</th>
-    <th>Linked Household</th><th>Address on File</th><th>Link</th>
+    <th>Linked Household</th><th>Address on File</th><th>Link</th><th>Notes</th>
   </tr></thead><tbody>`;
 
   filtered.forEach(m => {
@@ -1007,6 +1007,9 @@ function renderMembers() {
       <td style="white-space:nowrap">
         <span class="badge ${m.householdId ? 'badge-green' : 'badge-red'}" style="margin-right:0.4rem">${m.householdId ? 'Linked' : 'None'}</span>
         <button class="btn btn-secondary btn-sm" onclick="openLinkModal('${m.id}')">Edit</button>
+      </td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-secondary btn-sm" onclick="openNotesModal('member','${m.id}')">${(m.notes?.length||0) ? `Notes (${m.notes.length})` : 'Notes'}</button>
       </td>
     </tr>`;
   });
@@ -1093,7 +1096,7 @@ function renderHouseholds() {
   }
 
   let t = `<div style="overflow-x:auto"><table><thead><tr>
-    <th>Household Name</th><th>Members</th><th>Head</th><th>Address</th><th>Phone</th><th>Email</th><th>Pool</th><th>Status</th>
+    <th>Household Name</th><th>Members</th><th>Head</th><th>Address</th><th>Phone</th><th>Email</th><th>Pool</th><th>Status</th><th>Notes</th>
   </tr></thead><tbody>`;
 
   filtered.forEach(hh => {
@@ -1122,6 +1125,9 @@ function renderHouseholds() {
       <td style="font-size:0.82rem">${esc(hh.email||'')}</td>
       <td>${poolBadge}</td>
       <td>${addrBadge}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-secondary btn-sm" onclick="openNotesModal('household','${hh.id}')">${(hh.notes?.length||0) ? `Notes (${hh.notes.length})` : 'Notes'}</button>
+      </td>
     </tr>`;
   });
 
@@ -1166,7 +1172,7 @@ function renderBrothers() {
   const showHH = S.households.length > 0;
   let t = `<div style="overflow-x:auto"><table><thead><tr>
     <th>Name</th>${showHH?'<th>Own Household</th>':''}
-    <th>Phone</th><th>Pool</th><th>Status</th>
+    <th>Phone</th><th>Pool</th><th>Status</th><th>Notes</th>
   </tr></thead><tbody>`;
 
   filtered.forEach(b => {
@@ -1182,6 +1188,9 @@ function renderBrothers() {
       <td>${esc(b.phone)}</td>
       <td>${bPoolBadge}</td>
       <td><span class="badge ${a?'badge-green':'badge-red'}">${a?'Assigned':'Unassigned'}</span></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-secondary btn-sm" onclick="openNotesModal('brother','${b.id}')">${(b.notes?.length||0) ? `Notes (${b.notes.length})` : 'Notes'}</button>
+      </td>
     </tr>`;
   });
   document.getElementById('brothers-table').innerHTML = t + '</tbody></table></div>';
@@ -1993,6 +2002,87 @@ function dlCSV(csv, name) {
   a.download = name; a.click();
 }
 
+// ── Entity Notes ──────────────────────────────────────────────
+let _notesCtx = null;
+
+function getNotesTarget(ctx) {
+  if (!ctx) return null;
+  if (ctx.type === 'member' || ctx.type === 'brother') return S.members.find(x => x.id === ctx.id);
+  if (ctx.type === 'household') return S.households.find(x => x.id === ctx.id);
+  return null;
+}
+
+function openNotesModal(type, id) {
+  _notesCtx = { type, id };
+  const target = getNotesTarget(_notesCtx);
+  document.getElementById('notes-modal-title').textContent = `Notes — ${target?.name || ''}`;
+  document.getElementById('note-author').value = localStorage.getItem('mat_note_author') || '';
+  document.getElementById('note-text').value = '';
+  document.getElementById('note-error').textContent = '';
+  renderNotesList();
+  document.getElementById('notes-modal').classList.add('open');
+}
+
+function renderNotesList() {
+  const target = getNotesTarget(_notesCtx);
+  const notes = target?.notes || [];
+  const el = document.getElementById('notes-list');
+  if (!notes.length) {
+    el.innerHTML = '<div style="color:#aaa;font-size:0.85rem;padding:0.4rem 0">No notes yet.</div>';
+    return;
+  }
+  el.innerHTML = notes.map((n, i) => `
+    <div style="border:1px solid #e0e6ed;border-radius:6px;padding:0.6rem 0.75rem;margin-bottom:0.55rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem">
+        <div style="font-size:0.78rem;color:#888">
+          <strong style="color:#1a3a5c">${esc(n.author)}</strong>
+          &nbsp;·&nbsp; ${formatNoteDate(n.date)}
+        </div>
+        <button style="background:none;border:none;color:#bbb;cursor:pointer;font-size:0.85rem;padding:0.1rem 0.35rem;line-height:1"
+                onclick="deleteNote(${i})" title="Delete note">✕</button>
+      </div>
+      <div style="font-size:0.87rem;color:#333;white-space:pre-wrap">${esc(n.text)}</div>
+    </div>
+  `).join('');
+}
+
+function formatNoteDate(iso) {
+  try { return new Date(iso).toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }); }
+  catch { return iso || ''; }
+}
+
+function addNote() {
+  const author = document.getElementById('note-author').value.trim();
+  const text   = document.getElementById('note-text').value.trim();
+  const errEl  = document.getElementById('note-error');
+  if (!author) { errEl.textContent = 'Please enter your name.'; document.getElementById('note-author').focus(); return; }
+  if (!text)   { errEl.textContent = 'Please enter a note.'; document.getElementById('note-text').focus(); return; }
+  errEl.textContent = '';
+  localStorage.setItem('mat_note_author', author);
+  const target = getNotesTarget(_notesCtx);
+  if (!target) return;
+  if (!target.notes) target.notes = [];
+  target.notes.push({ id: uid(), author, text, date: new Date().toISOString() });
+  save();
+  document.getElementById('note-text').value = '';
+  renderNotesList();
+  if (_notesCtx.type === 'member')    renderMembers();
+  if (_notesCtx.type === 'household') renderHouseholds();
+  if (_notesCtx.type === 'brother')   renderBrothers();
+}
+
+function deleteNote(index) {
+  if (!confirm('Delete this note?')) return;
+  const target = getNotesTarget(_notesCtx);
+  if (!target?.notes) return;
+  target.notes.splice(index, 1);
+  save();
+  renderNotesList();
+  if (_notesCtx.type === 'member')    renderMembers();
+  if (_notesCtx.type === 'household') renderHouseholds();
+  if (_notesCtx.type === 'brother')   renderBrothers();
+}
+
 // ── Household Address Edit ────────────────────────────────────
 let _hhEditId = null;
 
@@ -2082,6 +2172,32 @@ async function saveHHAddress(andGeocode) {
       <button class="btn btn-secondary" onclick="closeModal('hh-edit-modal')">Cancel</button>
       <button class="btn btn-secondary" onclick="saveHHAddress(false)">Save</button>
       <button class="btn btn-primary" id="hh-edit-geocode-btn" onclick="saveHHAddress(true)">Save &amp; Geocode</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notes Modal -->
+<div class="modal-overlay" id="notes-modal">
+  <div class="modal" style="max-width:520px">
+    <h3 id="notes-modal-title">Notes</h3>
+    <div id="notes-list" style="max-height:280px;overflow-y:auto"></div>
+    <div style="border-top:1px solid #e0e6ed;margin-top:0.75rem;padding-top:0.85rem">
+      <div style="font-size:0.78rem;font-weight:600;color:#888;margin-bottom:0.65rem;text-transform:uppercase;letter-spacing:0.05em">Add a Note</div>
+      <div class="form-group">
+        <label>Author</label>
+        <input type="text" id="note-author" placeholder="Your name">
+      </div>
+      <div class="form-group">
+        <label>Note</label>
+        <textarea id="note-text" rows="3" placeholder="Write a note or comment…" style="width:100%;padding:0.45rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem;resize:vertical;font-family:inherit"></textarea>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div id="note-error" style="font-size:0.82rem;color:#dc3545"></div>
+        <button class="btn btn-primary btn-sm" onclick="addNote()">Add Note</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('notes-modal')">Close</button>
     </div>
   </div>
 </div>
