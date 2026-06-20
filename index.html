@@ -1004,11 +1004,56 @@ function renderMembers() {
       <td>${esc(m.phone)}</td>
       <td>${hh ? esc(hh.name) : '<span style="color:#aaa">—</span>'}</td>
       <td style="font-size:0.82rem;color:#555">${hh?.address ? esc(hh.address) : '<span style="color:#aaa">—</span>'}</td>
-      <td><span class="badge ${m.householdId ? 'badge-green' : 'badge-red'}">${m.householdId ? 'Linked' : 'None'}</span></td>
+      <td style="white-space:nowrap">
+        <span class="badge ${m.householdId ? 'badge-green' : 'badge-red'}" style="margin-right:0.4rem">${m.householdId ? 'Linked' : 'None'}</span>
+        <button class="btn btn-secondary btn-sm" onclick="openLinkModal('${m.id}')">Edit</button>
+      </td>
     </tr>`;
   });
 
   document.getElementById('members-table').innerHTML = t + '</tbody></table></div>';
+}
+
+function openLinkModal(memberId) {
+  const m = S.members.find(x => x.id === memberId);
+  if (!m) return;
+  document.getElementById('link-member-id').value = memberId;
+  document.getElementById('link-member-name').textContent = m.name;
+  document.getElementById('link-hh-search').value = '';
+  renderLinkHHSelect();
+  document.getElementById('link-modal').classList.add('open');
+}
+
+function renderLinkHHSelect() {
+  const memberId = document.getElementById('link-member-id').value;
+  const m = S.members.find(x => x.id === memberId);
+  const q = norm(document.getElementById('link-hh-search').value);
+  const sel = document.getElementById('link-hh-select');
+  sel.innerHTML = '';
+  [...S.households]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .filter(hh => !q || norm(hh.name).includes(q) || norm(hh.address||'').includes(q))
+    .forEach(hh => {
+      const o = document.createElement('option');
+      o.value = hh.id;
+      o.textContent = hh.name + (hh.address ? ` — ${hh.address}` : '');
+      if (hh.id === m?.householdId) o.selected = true;
+      sel.appendChild(o);
+    });
+}
+
+function saveMemberLink(clear) {
+  const memberId = document.getElementById('link-member-id').value;
+  const m = S.members.find(x => x.id === memberId);
+  if (!m) return;
+  if (clear) {
+    m.householdId = null;
+  } else {
+    const hhId = document.getElementById('link-hh-select').value;
+    if (!hhId) { alert('Select a household first.'); return; }
+    m.householdId = hhId;
+  }
+  save(); showLinkStatus(); closeModal('link-modal'); renderMembers();
 }
 
 // ── Households Tab ─────────────────────────────────────────────
@@ -2037,6 +2082,26 @@ async function saveHHAddress(andGeocode) {
       <button class="btn btn-secondary" onclick="closeModal('hh-edit-modal')">Cancel</button>
       <button class="btn btn-secondary" onclick="saveHHAddress(false)">Save</button>
       <button class="btn btn-primary" id="hh-edit-geocode-btn" onclick="saveHHAddress(true)">Save &amp; Geocode</button>
+    </div>
+  </div>
+</div>
+
+<!-- Link Member to Household Modal -->
+<div class="modal-overlay" id="link-modal">
+  <div class="modal" style="max-width:480px">
+    <h3>Link to Household</h3>
+    <div id="link-member-name" style="font-weight:600;color:#1a3a5c;margin-bottom:0.75rem"></div>
+    <div class="form-group">
+      <label>Search &amp; Select Household</label>
+      <input type="text" id="link-hh-search" placeholder="Search by name or address…"
+             oninput="renderLinkHHSelect()" style="margin-bottom:0.4rem">
+      <select id="link-hh-select" size="8" style="width:100%;border:1px solid #ddd;border-radius:6px;padding:0.3rem;font-size:0.84rem"></select>
+    </div>
+    <input type="hidden" id="link-member-id">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('link-modal')">Cancel</button>
+      <button class="btn btn-danger" onclick="saveMemberLink(true)">Clear Link</button>
+      <button class="btn btn-primary" onclick="saveMemberLink(false)">Save</button>
     </div>
   </div>
 </div>
