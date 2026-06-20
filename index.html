@@ -201,6 +201,17 @@ tr:hover td{background:#fafbfc}
   </div>
 
   <div class="card">
+    <h2>Share / Collaborate</h2>
+    <p style="font-size:0.85rem;color:#666;margin-bottom:0.9rem">Export your entire session — members, households, geocoding, current assignments, and proposed companionships — as a single file to share with collaborators. They can load it on any computer to pick up exactly where you left off.</p>
+    <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary btn-sm" onclick="exportSession()">Export Session File</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('session-import-file').click()">Load Session File</button>
+      <input type="file" id="session-import-file" accept=".json" style="display:none" onchange="importSession(this.files[0])">
+    </div>
+    <div id="session-status" style="margin-top:0.6rem;font-size:0.82rem;color:#555"></div>
+  </div>
+
+  <div class="card">
     <h2>Data Management</h2>
     <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
       <button class="btn btn-secondary btn-sm" onclick="clearData('members')">Clear Members</button>
@@ -1833,6 +1844,57 @@ function exportProposed() {
 function clearProposed() {
   if (!confirm('Clear all proposed assignments?')) return;
   S.proposed = []; save(); renderProposed();
+}
+
+// ── Session Export / Import ───────────────────────────────────
+function exportSession() {
+  const payload = {
+    _version: 1,
+    _exported: new Date().toISOString(),
+    members:    S.members,
+    households: S.households,
+    current:    S.current,
+    proposed:   S.proposed
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `ministering-session-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  document.getElementById('session-status').textContent = 'Session exported successfully.';
+}
+
+function importSession(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.members || !data.households) {
+        document.getElementById('session-status').textContent = 'Invalid session file — missing required data.';
+        return;
+      }
+      const counts = `${data.members.length} members, ${data.households.length} households, ${(data.proposed||[]).length} proposed companionships`;
+      if (!confirm(`Load session file?\n\nThis will replace all current data with:\n  ${counts}\n\nThis cannot be undone.`)) {
+        document.getElementById('session-import-file').value = '';
+        return;
+      }
+      S.members    = data.members    || [];
+      S.households = data.households || [];
+      S.current    = data.current    || [];
+      S.proposed   = data.proposed   || [];
+      save();
+      refreshBadge();
+      if (S.members.length && S.households.length) showLinkStatus();
+      document.getElementById('session-status').textContent = `Session loaded: ${counts}.`;
+      document.getElementById('session-import-file').value = '';
+    } catch(err) {
+      document.getElementById('session-status').textContent = 'Error reading session file — make sure it is a valid session export.';
+    }
+  };
+  reader.readAsText(file);
 }
 
 function clearData(type) {
