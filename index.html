@@ -889,9 +889,20 @@ function currentMinisterNames() {
   S.current.forEach(c => { s.add(norm(c.m1Name)); if(c.m2Name) s.add(norm(c.m2Name)); });
   return s;
 }
-function proposedMinisters() {
+function proposedMinisters(excludeId) {
   const s = new Set();
-  S.proposed.forEach(c => { if(c.m1Id) s.add(c.m1Id); if(c.m2Id) s.add(c.m2Id); });
+  S.proposed.forEach(c => {
+    if (c.id === excludeId) return;
+    if(c.m1Id) s.add(c.m1Id); if(c.m2Id) s.add(c.m2Id);
+  });
+  return s;
+}
+function proposedHouseholds(excludeId) {
+  const s = new Set();
+  S.proposed.forEach(c => {
+    if (c.id === excludeId) return;
+    (c.households || []).forEach(id => s.add(id));
+  });
   return s;
 }
 function refreshBadge() {
@@ -1302,7 +1313,7 @@ function renderProposed() {
 // ── Modals ────────────────────────────────────────────────────
 function openAddModal() {
   if (!S.members.length) { alert('Import member data first.'); return; }
-  populateBrotherSelects('add-m1','add-m2', null, null);
+  populateBrotherSelects('add-m1','add-m2', null, null, undefined, null);
   document.getElementById('add-hh-search').value = '';
   updateProximityInfo('add', []);
   document.getElementById('add-modal').classList.add('open');
@@ -1310,7 +1321,7 @@ function openAddModal() {
 
 function openEditModal(id) {
   const p = S.proposed.find(x => x.id === id); if (!p) return;
-  populateBrotherSelects('edit-m1','edit-m2', p.m1Id, p.m2Id, p.m2Name||'');
+  populateBrotherSelects('edit-m1','edit-m2', p.m1Id, p.m2Id, p.m2Name||'', id);
   document.getElementById('edit-id').value = id;
   document.getElementById('edit-hh-search').value = '';
   updateProximityInfo('edit', p.households);
@@ -1321,7 +1332,7 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 
 function refreshAddM2() {
   const m1 = document.getElementById('add-m1').value;
-  populateBrotherSelects('add-m1','add-m2', m1, null);
+  populateBrotherSelects('add-m1','add-m2', m1, null, undefined, null);
   document.getElementById('add-m1').value = m1;
   updateProximityInfo('add');
 }
@@ -1330,15 +1341,15 @@ function refreshEditM2() {
   const m1 = document.getElementById('edit-m1').value;
   const id = document.getElementById('edit-id').value;
   const p = S.proposed.find(x => x.id === id);
-  populateBrotherSelects('edit-m1','edit-m2', m1, p?.m2Id||null);
+  populateBrotherSelects('edit-m1','edit-m2', m1, p?.m2Id||null, undefined, id);
   document.getElementById('edit-m1').value = m1;
   updateProximityInfo('edit');
 }
 
 // selM2Name is used when reopening an edit modal that has a name-only (spouse) companion saved
-function populateBrotherSelects(m1SelId, m2SelId, selM1, selM2, selM2Name) {
+function populateBrotherSelects(m1SelId, m2SelId, selM1, selM2, selM2Name, excludeId) {
   const bList = poolBrothers();
-  const pm = proposedMinisters();
+  const pm = proposedMinisters(excludeId);
   const curM1 = selM1 || document.getElementById(m1SelId).value;
 
   [m1SelId, m2SelId].forEach((sid, i) => {
@@ -1360,11 +1371,11 @@ function populateBrotherSelects(m1SelId, m2SelId, selM1, selM2, selM2Name) {
 
     bList.forEach(b => {
       if (i===1 && b.id===curM1) return;
-      const inUse = pm.has(b.id) && b.id!==selM1 && b.id!==selM2;
+      if (pm.has(b.id) && b.id!==selM1 && b.id!==selM2) return;
       const hh = memberHousehold(b);
       const o = document.createElement('option');
       o.value = b.id;
-      o.textContent = b.name + (hh?` (${hh.name})`:'') + (inUse?' — in use':'');
+      o.textContent = b.name + (hh?` (${hh.name})`:'');
       if ((i===0 && b.id===selM1)||(i===1 && b.id===selM2)) o.selected=true;
       sel.appendChild(o);
     });
@@ -1387,9 +1398,12 @@ function populateHHSelect(selId, selected) {
 // so filterHHList can re-render without recomputing distances.
 let _hhListData = { prefix: null, items: [] };
 
-function populateHHList(prefix, selected, midLat, midLng) {
+function populateHHList(prefix, selected, midLat, midLng, excludeId) {
   const query = (document.getElementById(prefix + '-hh-search')?.value || '').toLowerCase();
-  const items = poolHouseholds().map(hh => {
+  const phh = proposedHouseholds(excludeId);
+  const items = poolHouseholds().filter(hh =>
+    !phh.has(hh.id) || selected.includes(hh.id) || selected.includes(hh.name)
+  ).map(hh => {
     const dist = (midLat != null && hh.lat != null)
       ? haversine(midLat, midLng, hh.lat, hh.lng)
       : null;
@@ -1483,7 +1497,8 @@ function updateProximityInfo(prefix, initialSelected) {
     ? initialSelected
     : getSelectedHHIds(prefix);
 
-  populateHHList(prefix, selected, midLat, midLng);
+  const excludeId = document.getElementById(prefix + '-id')?.value || null;
+  populateHHList(prefix, selected, midLat, midLng, excludeId);
 }
 
 function resolveM2(rawVal) {
