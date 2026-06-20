@@ -370,10 +370,6 @@ tr:hover td{background:#fafbfc}
       <input type="text" id="add-hh-search" placeholder="Search households…" style="margin-bottom:0.35rem;font-size:0.84rem;padding:0.35rem 0.6rem;border:1px solid #ddd;border-radius:6px;width:100%" oninput="filterHHList('add')">
       <div id="add-hh-list" class="hh-picker"></div>
     </div>
-    <div class="form-group">
-      <label>Notes</label>
-      <textarea id="add-notes" rows="2" placeholder="Add notes or comments…" style="width:100%;padding:0.45rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem;resize:vertical;font-family:inherit"></textarea>
-    </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('add-modal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveNewCompanionship()">Save</button>
@@ -398,10 +394,6 @@ tr:hover td{background:#fafbfc}
       <label>Households to Minister To</label>
       <input type="text" id="edit-hh-search" placeholder="Search households…" style="margin-bottom:0.35rem;font-size:0.84rem;padding:0.35rem 0.6rem;border:1px solid #ddd;border-radius:6px;width:100%" oninput="filterHHList('edit')">
       <div id="edit-hh-list" class="hh-picker"></div>
-    </div>
-    <div class="form-group">
-      <label>Notes</label>
-      <textarea id="edit-notes" rows="2" placeholder="Add notes or comments…" style="width:100%;padding:0.45rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem;resize:vertical;font-family:inherit"></textarea>
     </div>
     <input type="hidden" id="edit-id">
     <div class="modal-footer">
@@ -433,8 +425,17 @@ const S = {
       // Normalize addresses from older imports that may have embedded newlines or ZIP+4
       S.households.forEach(hh => { if (hh.address) hh.address = normalizeAddress(hh.address); });
     }
-    const c = localStorage.getItem('mat_c'); if (c) S.current    = JSON.parse(c);
-    const p = localStorage.getItem('mat_p'); if (p) S.proposed   = JSON.parse(p);
+    const c = localStorage.getItem('mat_c'); if (c) S.current  = JSON.parse(c);
+    const p = localStorage.getItem('mat_p'); if (p) {
+      S.proposed = JSON.parse(p);
+      S.proposed.forEach(cp => {
+        if (typeof cp.notes === 'string' && cp.notes) {
+          cp.notes = [{ id: uid(), author: 'Legacy', text: cp.notes, date: new Date().toISOString() }];
+        } else if (!Array.isArray(cp.notes)) {
+          cp.notes = [];
+        }
+      });
+    }
   } catch(e) {}
 
   setupDrop('member-drop', 'member-file', handleMemberFile);
@@ -1237,8 +1238,12 @@ function companionshipHTML(m1, m2, hhList, district, id) {
     return `<span class="household-tag">${esc(label)}</span>`;
   }).join('') || '<span style="color:#aaa;font-size:0.82rem">No households</span>';
 
+  const notesArr = id ? (S.proposed.find(x => x.id === id)?.notes || []) : [];
   const editBtn = id
-    ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditModal('${id}')">Edit</button>`
+    ? `<div style="display:flex;gap:0.35rem;flex-shrink:0">
+         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditModal('${id}')">Edit</button>
+         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openNotesModal('proposed','${id}')">${notesArr.length ? `Notes (${notesArr.length})` : 'Notes'}</button>
+       </div>`
     : '';
 
   // Distance block — only for proposed assignments (id present) with geocoded data
@@ -1265,9 +1270,11 @@ function companionshipHTML(m1, m2, hhList, district, id) {
     }
   }
 
-  const notes = id ? (S.proposed.find(x => x.id === id)?.notes || '') : '';
-  const notesBlock = notes
-    ? `<div style="margin-top:0.45rem;padding:0.3rem 0.55rem;border-left:3px solid #bee5eb;font-size:0.81rem;color:#555;font-style:italic;white-space:pre-wrap">${esc(notes)}</div>`
+  const notesBlock = notesArr.length
+    ? notesArr.map(n => `<div style="margin-top:0.35rem;padding:0.28rem 0.55rem;border-left:3px solid #bee5eb;font-size:0.8rem;color:#555">
+        <span style="font-weight:600;color:#1a3a5c">${esc(n.author)}</span><span style="color:#aaa;font-size:0.75rem"> · ${formatNoteDate(n.date)}</span>
+        <div style="margin-top:0.1rem;white-space:pre-wrap;font-style:italic">${esc(n.text)}</div>
+      </div>`).join('')
     : '';
 
   return `<div class="companionship-card" ${id?`onclick="openEditModal('${id}')"`:''}}>
@@ -1394,7 +1401,6 @@ function openAddModal() {
   if (!S.members.length) { alert('Import member data first.'); return; }
   populateBrotherSelects('add-m1','add-m2', null, null, undefined, null);
   document.getElementById('add-hh-search').value = '';
-  document.getElementById('add-notes').value = '';
   updateProximityInfo('add', []);
   document.getElementById('add-modal').classList.add('open');
 }
@@ -1404,7 +1410,6 @@ function openEditModal(id) {
   populateBrotherSelects('edit-m1','edit-m2', p.m1Id, p.m2Id, p.m2Name||'', id);
   document.getElementById('edit-id').value = id;
   document.getElementById('edit-hh-search').value = '';
-  document.getElementById('edit-notes').value = p.notes || '';
   updateProximityInfo('edit', p.households);
   document.getElementById('edit-modal').classList.add('open');
 }
@@ -1592,11 +1597,10 @@ function resolveM2(rawVal) {
 function saveNewCompanionship() {
   const m1Id = document.getElementById('add-m1').value;
   if (!m1Id) { alert('Select Minister 1.'); return; }
-  const m2    = resolveM2(document.getElementById('add-m2').value);
-  const hhs   = getSelectedHHIds('add');
-  const notes = document.getElementById('add-notes').value.trim();
-  const m1    = S.members.find(b => b.id === m1Id);
-  S.proposed.push({ id:uid(), m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes });
+  const m2  = resolveM2(document.getElementById('add-m2').value);
+  const hhs = getSelectedHHIds('add');
+  const m1  = S.members.find(b => b.id === m1Id);
+  S.proposed.push({ id:uid(), m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:[] });
   save(); closeModal('add-modal'); renderProposed();
 }
 
@@ -1604,12 +1608,12 @@ function saveEditCompanionship() {
   const id   = document.getElementById('edit-id').value;
   const m1Id = document.getElementById('edit-m1').value;
   if (!m1Id) { alert('Select Minister 1.'); return; }
-  const m2    = resolveM2(document.getElementById('edit-m2').value);
-  const hhs   = getSelectedHHIds('edit');
-  const notes = document.getElementById('edit-notes').value.trim();
-  const m1    = S.members.find(b => b.id === m1Id);
-  const idx   = S.proposed.findIndex(x => x.id === id); if (idx < 0) return;
-  S.proposed[idx] = { id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes };
+  const m2  = resolveM2(document.getElementById('edit-m2').value);
+  const hhs = getSelectedHHIds('edit');
+  const m1  = S.members.find(b => b.id === m1Id);
+  const idx = S.proposed.findIndex(x => x.id === id); if (idx < 0) return;
+  const existingNotes = S.proposed[idx].notes || [];
+  S.proposed[idx] = { id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:existingNotes };
   save(); closeModal('edit-modal'); renderProposed();
 }
 
@@ -2009,13 +2013,18 @@ function getNotesTarget(ctx) {
   if (!ctx) return null;
   if (ctx.type === 'member' || ctx.type === 'brother') return S.members.find(x => x.id === ctx.id);
   if (ctx.type === 'household') return S.households.find(x => x.id === ctx.id);
+  if (ctx.type === 'proposed')  return S.proposed.find(x => x.id === ctx.id);
   return null;
 }
 
 function openNotesModal(type, id) {
   _notesCtx = { type, id };
   const target = getNotesTarget(_notesCtx);
-  document.getElementById('notes-modal-title').textContent = `Notes — ${target?.name || ''}`;
+  let label = target?.name || '';
+  if (type === 'proposed' && target) {
+    label = target.m1Name + (target.m2Name ? ' + ' + target.m2Name : '');
+  }
+  document.getElementById('notes-modal-title').textContent = `Notes — ${label}`;
   document.getElementById('note-author').value = localStorage.getItem('mat_note_author') || '';
   document.getElementById('note-text').value = '';
   document.getElementById('note-error').textContent = '';
@@ -2069,6 +2078,7 @@ function addNote() {
   if (_notesCtx.type === 'member')    renderMembers();
   if (_notesCtx.type === 'household') renderHouseholds();
   if (_notesCtx.type === 'brother')   renderBrothers();
+  if (_notesCtx.type === 'proposed')  renderProposed();
 }
 
 function deleteNote(index) {
@@ -2081,6 +2091,7 @@ function deleteNote(index) {
   if (_notesCtx.type === 'member')    renderMembers();
   if (_notesCtx.type === 'household') renderHouseholds();
   if (_notesCtx.type === 'brother')   renderBrothers();
+  if (_notesCtx.type === 'proposed')  renderProposed();
 }
 
 // ── Household Address Edit ────────────────────────────────────
