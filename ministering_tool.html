@@ -1143,7 +1143,7 @@ function renderMembers() {
     if (lf === 'linked'   && !m.householdId) return false;
     if (lf === 'unlinked' &&  m.householdId) return false;
     return true;
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name));
 
   const linkedCount = list.filter(m => m.householdId).length;
   document.getElementById('members-stats').innerHTML = `
@@ -1244,7 +1244,7 @@ function renderHouseholds() {
     if (af === 'no-addr'   &&  hh.address)           return false;
     if (af === 'geocoded'  && !hh.lat)               return false;
     return true;
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name));
 
   const withAddr    = list.filter(hh => hh.address).length;
   const geocoded    = list.filter(hh => hh.lat).length;
@@ -1319,7 +1319,7 @@ function renderBrothers() {
     if (f === 'assigned'   && !assigned.has(norm(b.name)))                     return false;
     if (f === 'unassigned' && assigned.has(norm(b.name)))                      return false;
     return true;
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name));
 
   const aCount      = list.filter(b => assigned.has(norm(b.name))).length;
   const inPoolCount = list.filter(b => b.inPool === true).length;
