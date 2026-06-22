@@ -134,7 +134,8 @@ tr:hover td{background:#fafbfc}
           <input type="checkbox" id="male-only" checked>
           Only include males as "Brothers"
         </label>
-        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importMembers()">Import Members</button>
+        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importMembers()">Import / Sync Members</button>
+        <div style="font-size:0.76rem;color:#888;margin-top:0.5rem">Merges with your current list: adds new people, refreshes existing ones (notes &amp; links kept), and asks before removing anyone missing from the file.</div>
       </div>
       <div id="member-link-status" class="link-bar" style="display:none"></div>
     </div>
@@ -163,7 +164,8 @@ tr:hover td{background:#fafbfc}
         <div style="font-size:0.78rem;color:#888;margin-top:0.5rem">
           The Members column may contain multiple names separated by line breaks — the app handles this automatically.
         </div>
-        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importHouseholds()">Import Households</button>
+        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importHouseholds()">Import / Sync Households</button>
+        <div style="font-size:0.76rem;color:#888;margin-top:0.5rem">Merges with your current list: adds new households, refreshes existing ones (notes &amp; geocoding kept), warns before a changed address drops coordinates, and asks before removing any missing from the file.</div>
       </div>
       <div id="hh-link-status" class="link-bar" style="display:none"></div>
     </div>
@@ -581,23 +583,67 @@ function importMembers() {
   const pCol = document.getElementById('map-phone').value;
   const maleOnly = document.getElementById('male-only').checked;
 
-  S.members = S.rawMembers.rows
+  // Build the incoming list from the CSV, deduped by name key (keep first).
+  const incomingByKey = new Map();
+  S.rawMembers.rows
     .filter(r => (r[nameCol]||'').trim())
-    .map(r => ({
-      id:        uid(),
-      name:      r[nameCol].trim(),
-      gender:    gCol ? (r[gCol]||'').trim() : '',
-      age:       aCol ? (parseInt(r[aCol])||0) : 0,
-      phone:     pCol ? (r[pCol]||'').trim() : '',
-      isBrother: maleOnly ? isMale(r[gCol]||'') : true,
-      householdId: null, // filled by linkMembersToHouseholds()
-    }));
+    .forEach(r => {
+      const name = r[nameCol].trim();
+      const k = normNameKey(name);
+      if (!k || incomingByKey.has(k)) return;
+      incomingByKey.set(k, {
+        name,
+        gender:    gCol ? (r[gCol]||'').trim() : '',
+        age:       aCol ? (parseInt(r[aCol])||0) : 0,
+        phone:     pCol ? (r[pCol]||'').trim() : '',
+        isBrother: maleOnly ? isMale(r[gCol]||'') : true,
+      });
+    });
 
-  linkMembersToHouseholds();
-  save(); refreshBadge();
-  const bc = brothers().length;
-  document.getElementById('member-status').innerHTML =
-    `<span style="color:#155724">✓ Imported ${S.members.length} members (${bc} brothers)</span>`;
+  // Match against existing members by name key. Existing records keep their
+  // manual data (notes, household link, pool state); only CSV fields refresh.
+  const existingByKey = new Map();
+  S.members.forEach(m => { const k = normNameKey(m.name); if (k) existingByKey.set(k, m); });
+
+  const updates = []; // { target, fields }
+  const adds    = [];
+  incomingByKey.forEach((c, k) => {
+    const ex = existingByKey.get(k);
+    if (ex) {
+      updates.push({ target: ex, fields: { name: c.name, gender: c.gender, age: c.age, phone: c.phone, isBrother: c.isBrother } });
+    } else {
+      adds.push({ id: uid(), name: c.name, gender: c.gender, age: c.age, phone: c.phone, isBrother: c.isBrother, householdId: null, notes: [] });
+    }
+  });
+
+  // Existing members absent from the new file are candidates for removal.
+  const removed = S.members.filter(m => !incomingByKey.has(normNameKey(m.name)));
+  const decisions = removed.map(m => ({
+    kind: 'remove', id: m.id, name: m.name,
+    detail: 'Not found in the imported file. Keep this member or remove them from your list?',
+    options: [
+      { value: 'keep',   label: 'Keep' },
+      { value: 'remove', label: 'Remove' },
+    ],
+    choice: 'keep',
+  }));
+
+  const finish = (decs) => {
+    decs = decs || [];
+    updates.forEach(u => Object.assign(u.target, u.fields));
+    adds.forEach(a => S.members.push(a));
+    const toRemove = new Set(decs.filter(d => d.choice === 'remove').map(d => d.id));
+    if (toRemove.size) S.members = S.members.filter(m => !toRemove.has(m.id));
+    linkMembersToHouseholds(true);
+    save(); refreshBadge(); renderMembers(); renderBrothers();
+    const bc = brothers().length;
+    const parts = [`${adds.length} added`, `${updates.length} updated`];
+    if (toRemove.size) parts.push(`${toRemove.size} removed`);
+    document.getElementById('member-status').innerHTML =
+      `<span style="color:#155724">✓ Sync complete — ${parts.join(', ')} · ${S.members.length} total (${bc} brothers)</span>`;
+  };
+
+  showSyncReview('Members no longer in the imported file', decisions, finish, 'member-status');
 }
 
 function isMale(g) {
@@ -645,19 +691,27 @@ function importHouseholds() {
   const phoneCol   = document.getElementById('map-hh-phone').value;
   const emailCol   = document.getElementById('map-hh-email').value;
 
-  // Preserve any geocoded coords from the previous import so re-importing CSVs
-  // doesn't wipe out hours of geocoding work. Keyed by normalized address string.
+  // Preserve any geocoded coords so re-importing CSVs doesn't wipe out hours of
+  // geocoding work. Keyed by normalized address string.
   const geoCache = {};
   S.households.forEach(hh => {
     if (hh.lat && hh.address) geoCache[hh.address] = { lat: hh.lat, lng: hh.lng };
   });
 
-  const seen = new Set();
-  S.households = [];
+  // Match incoming rows against existing households by normalized name.
+  const existingByKey = new Map();
+  S.households.forEach(hh => existingByKey.set(norm(hh.name), hh));
+
+  const seen     = new Set();
+  const adds     = [];
+  const updates  = []; // { target, fields }
+  const decisions = [];
+
   S.rawHouseholds.rows.forEach(r => {
     const name = (r[nameCol]||'').trim(); if (!name) return;
-    if (seen.has(norm(name))) return;
-    seen.add(norm(name));
+    const key = norm(name);
+    if (seen.has(key)) return;
+    seen.add(key);
 
     // Members cell contains multiple names separated by \n or \r\n (embedded in quoted CSV field)
     const rawMembers = membersCol ? (r[membersCol]||'') : '';
@@ -667,23 +721,80 @@ function importHouseholds() {
       .filter(Boolean);
 
     const address = addrCol ? normalizeAddress((r[addrCol]||'').trim()) : '';
-    const cached  = geoCache[address] || {};
-    S.households.push({
-      id:      uid(),
-      name,
-      members,
-      head:    headCol  ? (r[headCol]||'').trim()  : '',
-      address,
-      phone:   phoneCol ? (r[phoneCol]||'').trim() : '',
-      email:   emailCol ? (r[emailCol]||'').trim() : '',
-      ...cached,  // restore lat/lng if this address was previously geocoded
-    });
+    const head    = headCol  ? (r[headCol]||'').trim()  : '';
+    const phone   = phoneCol ? (r[phoneCol]||'').trim() : '';
+    const email   = emailCol ? (r[emailCol]||'').trim() : '';
+
+    const ex = existingByKey.get(key);
+    if (ex) {
+      // Refresh CSV-sourced fields; keep notes, pool state, and geocoding.
+      const fields = { name, members, head, phone, email };
+      if (address !== ex.address) {
+        if (ex.lat) {
+          // Address changed AND this household is geocoded — let the user decide
+          // rather than silently dropping the coordinates.
+          decisions.push({
+            kind: 'address', id: ex.id, name,
+            detail: `Address changed in the new file.<br>`
+                  + `<span style="color:#666">Current (geocoded):</span> ${esc(ex.address || '—')}<br>`
+                  + `<span style="color:#666">New:</span> ${esc(address || '—')}`,
+            options: [
+              { value: 'keep',    label: 'Keep existing address', desc: 'preserve current geocoding' },
+              { value: 'replace', label: 'Use new address',       desc: 'clears coordinates — re-geocode later' },
+            ],
+            choice: 'keep',
+            _newAddress: address,
+          });
+          // Address itself resolved in finish(); don't change it here.
+        } else {
+          fields.address = address; // no coordinates to lose
+        }
+      }
+      updates.push({ target: ex, fields });
+    } else {
+      const cached = geoCache[address] || {};
+      adds.push({ id: uid(), name, members, head, address, phone, email, notes: [], ...cached });
+    }
   });
 
-  linkMembersToHouseholds();
-  save(); refreshBadge();
-  document.getElementById('hh-status').innerHTML =
-    `<span style="color:#155724">✓ Imported ${S.households.length} households</span>`;
+  // Existing households absent from the new file are candidates for removal.
+  S.households
+    .filter(hh => !seen.has(norm(hh.name)))
+    .forEach(hh => decisions.push({
+      kind: 'remove-hh', id: hh.id, name: hh.name,
+      detail: 'Not found in the imported file. Keep this household or remove it from your list?',
+      options: [
+        { value: 'keep',   label: 'Keep' },
+        { value: 'remove', label: 'Remove' },
+      ],
+      choice: 'keep',
+    }));
+
+  const finish = (decs) => {
+    decs = decs || [];
+    updates.forEach(u => Object.assign(u.target, u.fields));
+    // Apply address-change decisions.
+    decs.filter(d => d.kind === 'address').forEach(d => {
+      if (d.choice !== 'replace') return;
+      const hh = S.households.find(x => x.id === d.id);
+      if (hh) { hh.address = d._newAddress; delete hh.lat; delete hh.lng; }
+    });
+    adds.forEach(a => S.households.push(a));
+    // Apply household removals and unlink any members pointing at them.
+    const toRemove = new Set(decs.filter(d => d.kind === 'remove-hh' && d.choice === 'remove').map(d => d.id));
+    if (toRemove.size) {
+      S.households = S.households.filter(hh => !toRemove.has(hh.id));
+      S.members.forEach(m => { if (m.householdId && toRemove.has(m.householdId)) m.householdId = null; });
+    }
+    linkMembersToHouseholds(true);
+    save(); refreshBadge(); renderHouseholds(); renderMembers();
+    const parts = [`${adds.length} added`, `${updates.length} updated`];
+    if (toRemove.size) parts.push(`${toRemove.size} removed`);
+    document.getElementById('hh-status').innerHTML =
+      `<span style="color:#155724">✓ Sync complete — ${parts.join(', ')} · ${S.households.length} total</span>`;
+  };
+
+  showSyncReview('Review household changes', decisions, finish, 'hh-status');
 }
 
 // ── Auto-Link Members ↔ Households ───────────────────────────
@@ -705,8 +816,12 @@ function getLastName(name) {
 //   3. Member's name matches household name field directly
 //   4. Member's last name appears anywhere in the household name string
 //   5. Partial: share ≥2 significant parts with a household member name
-function linkMembersToHouseholds() {
+// onlyUnlinked=true: leave members that already have a valid manual/previous
+// household link untouched (used by merge imports so manual links survive).
+function linkMembersToHouseholds(onlyUnlinked) {
   if (!S.members.length || !S.households.length) { showLinkStatus(); return; }
+
+  const validHHIds = new Set(S.households.map(h => h.id));
 
   const byMemberName = new Map(); // normNameKey(memberName) → hhId
   const byHead       = new Map(); // normNameKey(head)       → hhId
@@ -730,6 +845,9 @@ function linkMembersToHouseholds() {
 
   let linked = 0;
   S.members.forEach(m => {
+    // Preserve an existing valid link when only filling in unlinked members.
+    if (onlyUnlinked && m.householdId && validHHIds.has(m.householdId)) { linked++; return; }
+
     const key = normNameKey(m.name);
 
     // 1. Exact match against any household member name (from the members cell)
@@ -779,6 +897,57 @@ function showLinkStatus(linked) {
     el.style.display = 'block';
     el.textContent = msg;
   });
+}
+
+// ── Merge / Sync Review ───────────────────────────────────────
+// Shared review modal used by member & household imports. When there are no
+// decisions to make, the merge is applied immediately with no modal.
+let _pendingSync = null;
+
+function showSyncReview(heading, decisions, applyFn, statusId) {
+  if (!decisions || !decisions.length) { applyFn([]); return; }
+  _pendingSync = { decisions, applyFn, statusId };
+  document.getElementById('sync-review-title').textContent = heading;
+  renderSyncReview();
+  document.getElementById('sync-review-modal').classList.add('open');
+}
+
+function renderSyncReview() {
+  const el = document.getElementById('sync-review-body');
+  el.innerHTML = _pendingSync.decisions.map((d, i) => `
+    <div style="border:1px solid #e0e6ed;border-radius:8px;padding:0.7rem 0.85rem;margin-bottom:0.6rem">
+      <div style="font-weight:600;color:#1a3a5c;margin-bottom:0.2rem">${esc(d.name)}</div>
+      <div style="font-size:0.8rem;color:#777;margin-bottom:0.5rem">${d.detail}</div>
+      <div style="display:flex;flex-direction:column;gap:0.3rem">
+        ${d.options.map(o => `
+          <label style="display:flex;align-items:flex-start;gap:0.45rem;font-size:0.85rem;cursor:pointer">
+            <input type="radio" name="sync-${i}" value="${o.value}" ${d.choice === o.value ? 'checked' : ''}
+                   onchange="_pendingSync.decisions[${i}].choice='${o.value}'" style="margin-top:0.2rem">
+            <span><strong>${esc(o.label)}</strong>${o.desc ? ` — <span style="color:#888">${esc(o.desc)}</span>` : ''}</span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function applySyncReview() {
+  if (!_pendingSync) return;
+  const { decisions, applyFn } = _pendingSync;
+  _pendingSync = null;
+  closeModal('sync-review-modal');
+  applyFn(decisions);
+}
+
+function cancelSyncReview() {
+  if (!_pendingSync) { closeModal('sync-review-modal'); return; }
+  const statusId = _pendingSync.statusId;
+  _pendingSync = null;
+  closeModal('sync-review-modal');
+  if (statusId) {
+    document.getElementById(statusId).innerHTML =
+      '<span style="color:#856404">Import cancelled — no changes were made.</span>';
+  }
 }
 
 // ── Assignment Import ─────────────────────────────────────────
@@ -2209,6 +2378,19 @@ async function saveHHAddress(andGeocode) {
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('notes-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sync / Merge Review Modal -->
+<div class="modal-overlay" id="sync-review-modal">
+  <div class="modal" style="max-width:560px">
+    <h3 id="sync-review-title">Review Changes</h3>
+    <p style="font-size:0.83rem;color:#666;margin-bottom:0.9rem">New and updated records are merged automatically. The records below need your decision before the sync is applied.</p>
+    <div id="sync-review-body" style="max-height:50vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="cancelSyncReview()">Cancel Import</button>
+      <button class="btn btn-primary" onclick="applySyncReview()">Apply Changes</button>
     </div>
   </div>
 </div>
