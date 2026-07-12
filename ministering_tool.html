@@ -284,12 +284,39 @@ tr:hover td{background:#fafbfc}
 <!-- CURRENT ASSIGNMENTS TAB -->
 <div id="tab-current" class="tab-content">
   <div id="current-stats" class="stats-row"></div>
-  <div class="card">
-    <div class="flex-between">
-      <h2 style="margin:0;border:none;padding:0">Companionships</h2>
+
+  <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
+    <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="promoteProposedToCurrent()">&larr; Promote All from Proposed</button>
       <button class="btn btn-secondary btn-sm" onclick="copyCurrentToProposed()">Copy to Proposed &rarr;</button>
     </div>
-    <div id="current-list"></div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="flex-between">
+          <h2 style="margin:0;border:none;padding:0">Current Companionships</h2>
+          <button class="btn btn-primary btn-sm" onclick="openAddModal('current')">+ Add</button>
+        </div>
+        <div id="current-list"></div>
+      </div>
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="exportCurrent()">Export CSV</button>
+        <button class="btn btn-secondary" onclick="window.print()">Print</button>
+        <button class="btn btn-danger btn-sm" onclick="clearData('assignments')">Clear All</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      <div class="card">
+        <h2>Unassigned Brothers</h2>
+        <div id="current-unassigned-list"></div>
+      </div>
+      <div class="card">
+        <h2>Unassigned Households</h2>
+        <div id="current-unassigned-hh-list"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1078,17 +1105,17 @@ function currentMinisterNames() {
   S.current.forEach(c => { s.add(norm(c.m1Name)); if(c.m2Name) s.add(norm(c.m2Name)); });
   return s;
 }
-function proposedMinisters(excludeId) {
+function assignedMinisters(listKey = 'proposed', excludeId) {
   const s = new Set();
-  S.proposed.forEach(c => {
+  S[listKey].forEach(c => {
     if (c.id === excludeId) return;
     if(c.m1Id) s.add(c.m1Id); if(c.m2Id) s.add(c.m2Id);
   });
   return s;
 }
-function proposedHouseholds(excludeId) {
+function assignedHouseholds(listKey = 'proposed', excludeId) {
   const s = new Set();
-  S.proposed.forEach(c => {
+  S[listKey].forEach(c => {
     if (c.id === excludeId) return;
     (c.households || []).forEach(id => s.add(id));
   });
@@ -1381,20 +1408,63 @@ function exportBrothersCSV() {
 // ── Current Assignments Tab ───────────────────────────────────
 function renderCurrent() {
   const list = S.current;
+  const bList = poolBrothers();
+  const cm = assignedMinisters('current');
   const hhSet = new Set(list.flatMap(c => c.households));
+  const unassigned = bList.filter(b => !cm.has(b.id));
+  const poolHH = poolHouseholds();
+  const unassignedHH = poolHH.filter(hh => !hhSet.has(hh.id) && !hhSet.has(hh.name));
+
   document.getElementById('current-stats').innerHTML = `
     <div class="stat-card"><div class="number">${list.length}</div><div class="label">Companionships</div></div>
-    <div class="stat-card"><div class="number">${list.filter(c=>c.m2Name).length}</div><div class="label">Paired</div></div>
-    <div class="stat-card"><div class="number">${list.filter(c=>!c.m2Name).length}</div><div class="label">Solo</div></div>
-    <div class="stat-card"><div class="number">${hhSet.size}</div><div class="label">Households</div></div>
+    <div class="stat-card"><div class="number">${bList.length-unassigned.length}</div><div class="label">Assigned</div></div>
+    <div class="stat-card"><div class="number">${unassigned.length}</div><div class="label">Unassigned</div></div>
+    <div class="stat-card"><div class="number">${poolHH.length-unassignedHH.length}/${poolHH.length}</div><div class="label">HH Assigned</div></div>
   `;
 
   document.getElementById('current-list').innerHTML = !list.length
-    ? '<div class="empty-state"><div class="icon">🤝</div><p>No assignments imported yet.</p></div>'
-    : list.map(c => companionshipHTML(c.m1Name, c.m2Name, c.households, c.district, null)).join('');
+    ? '<div class="empty-state"><div class="icon">🤝</div><p>No current assignments yet. Promote from Proposed or click "+ Add".</p></div>'
+    : list.map(c => companionshipHTML(c.m1Name, c.m2Name, c.households, c.district, c.id, 'current')).join('');
+
+  const unDiv = document.getElementById('current-unassigned-list');
+  if (unDiv) {
+    if (!unassigned.length) {
+      unDiv.innerHTML = bList.length === 0
+        ? '<p style="color:#888;font-size:0.88rem">Import member data first.</p>'
+        : '<p style="color:#155724;font-size:0.88rem">✓ All brothers assigned!</p>';
+    } else {
+      unDiv.innerHTML =
+        `<p style="font-size:0.82rem;color:#888;margin-bottom:0.5rem">${unassigned.length} not yet assigned:</p>` +
+        '<ul style="list-style:none;padding:0">' +
+        unassigned.map(b => {
+          const hh = memberHousehold(b);
+          return `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
+            ${esc(b.name)}${hh?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.name)})</span>`:''}
+          </li>`;
+        }).join('') + '</ul>';
+    }
+  }
+
+  const hhDiv = document.getElementById('current-unassigned-hh-list');
+  if (hhDiv) {
+    if (!unassignedHH.length) {
+      hhDiv.innerHTML = poolHH.length === 0
+        ? '<p style="color:#888;font-size:0.88rem">No households in pool yet.</p>'
+        : '<p style="color:#155724;font-size:0.88rem">✓ All pool households assigned!</p>';
+    } else {
+      hhDiv.innerHTML =
+        `<p style="font-size:0.82rem;color:#888;margin-bottom:0.5rem">${unassignedHH.length} not yet assigned:</p>` +
+        '<ul style="list-style:none;padding:0">' +
+        unassignedHH.map(hh =>
+          `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
+            ${esc(hh.name)}${hh.address?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.address)})</span>`:''}
+          </li>`
+        ).join('') + '</ul>';
+    }
+  }
 }
 
-function companionshipHTML(m1, m2, hhList, district, id) {
+function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed') {
   const ministers = m2
     ? `${esc(m1)} <span style="color:#aaa">+</span> ${esc(m2)}`
     : `${esc(m1)} <span class="badge badge-blue">Solo</span>`;
@@ -1407,18 +1477,18 @@ function companionshipHTML(m1, m2, hhList, district, id) {
     return `<span class="household-tag">${esc(label)}</span>`;
   }).join('') || '<span style="color:#aaa;font-size:0.82rem">No households</span>';
 
-  const notesArr = id ? (S.proposed.find(x => x.id === id)?.notes || []) : [];
+  const notesArr = id ? (S[listKey].find(x => x.id === id)?.notes || []) : [];
   const editBtn = id
     ? `<div style="display:flex;gap:0.35rem;flex-shrink:0">
-         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditModal('${id}')">Edit</button>
-         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openNotesModal('proposed','${id}')">${notesArr.length ? `Notes (${notesArr.length})` : 'Notes'}</button>
+         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditModal('${id}','${listKey}')">Edit</button>
+         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openNotesModal('${listKey}','${id}')">${notesArr.length ? `Notes (${notesArr.length})` : 'Notes'}</button>
        </div>`
     : '';
 
-  // Distance block — only for proposed assignments (id present) with geocoded data
+  // Distance block — only when an id is present (proposed/current items) with geocoded data
   let distBlock = '';
   if (id) {
-    const p = S.proposed.find(x => x.id === id);
+    const p = S[listKey].find(x => x.id === id);
     if (p) {
       const d = getDistances(p);
       if (d) {
@@ -1446,7 +1516,7 @@ function companionshipHTML(m1, m2, hhList, district, id) {
       </div>`).join('')
     : '';
 
-  return `<div class="companionship-card" ${id?`onclick="openEditModal('${id}')"`:''}}>
+  return `<div class="companionship-card" ${id?`onclick="openEditModal('${id}','${listKey}')"`:''}>
     <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:0.35rem">
       <div class="ministers">${ministers}</div>${editBtn}
     </div>
@@ -1472,11 +1542,21 @@ function copyCurrentToProposed() {
   save(); showTab('propose');
 }
 
+function promoteProposedToCurrent() {
+  if (!S.proposed.length) { alert('No proposed companionships to promote.'); return; }
+  if (!confirm(`Replace Current Assignments with all ${S.proposed.length} proposed companionship(s)? Proposed will be left unchanged.`)) return;
+  S.current = S.proposed.map(p => ({
+    id: uid(), m1Id: p.m1Id, m1Name: p.m1Name, m2Id: p.m2Id, m2Name: p.m2Name || '',
+    households: [...p.households], notes: []
+  }));
+  save(); showTab('current');
+}
+
 // ── Proposed Tab ──────────────────────────────────────────────
 function renderProposed() {
   const list = S.proposed;
   const bList = poolBrothers();
-  const pm = proposedMinisters();
+  const pm = assignedMinisters('proposed');
   const hhSet = new Set(list.flatMap(p => p.households));
   const unassigned = bList.filter(b => !pm.has(b.id));
   const poolHH = poolHouseholds();
@@ -1566,16 +1646,21 @@ function renderProposed() {
 }
 
 // ── Modals ────────────────────────────────────────────────────
-function openAddModal() {
+// Tracks which list ('proposed' or 'current') the add/edit modal is currently operating on.
+let _modalListKey = 'proposed';
+
+function openAddModal(listKey = 'proposed') {
   if (!S.members.length) { alert('Import member data first.'); return; }
+  _modalListKey = listKey;
   populateBrotherSelects('add-m1','add-m2', null, null, undefined, null);
   document.getElementById('add-hh-search').value = '';
   updateProximityInfo('add', []);
   document.getElementById('add-modal').classList.add('open');
 }
 
-function openEditModal(id) {
-  const p = S.proposed.find(x => x.id === id); if (!p) return;
+function openEditModal(id, listKey = 'proposed') {
+  const p = S[listKey].find(x => x.id === id); if (!p) return;
+  _modalListKey = listKey;
   populateBrotherSelects('edit-m1','edit-m2', p.m1Id, p.m2Id, p.m2Name||'', id);
   document.getElementById('edit-id').value = id;
   document.getElementById('edit-hh-search').value = '';
@@ -1595,7 +1680,7 @@ function refreshAddM2() {
 function refreshEditM2() {
   const m1 = document.getElementById('edit-m1').value;
   const id = document.getElementById('edit-id').value;
-  const p = S.proposed.find(x => x.id === id);
+  const p = S[_modalListKey].find(x => x.id === id);
   populateBrotherSelects('edit-m1','edit-m2', m1, p?.m2Id||null, undefined, id);
   document.getElementById('edit-m1').value = m1;
   updateProximityInfo('edit');
@@ -1604,7 +1689,7 @@ function refreshEditM2() {
 // selM2Name is used when reopening an edit modal that has a name-only (spouse) companion saved
 function populateBrotherSelects(m1SelId, m2SelId, selM1, selM2, selM2Name, excludeId) {
   const bList = poolBrothers();
-  const pm = proposedMinisters(excludeId);
+  const pm = assignedMinisters(_modalListKey, excludeId);
   const curM1 = selM1 || document.getElementById(m1SelId).value;
 
   [m1SelId, m2SelId].forEach((sid, i) => {
@@ -1655,7 +1740,7 @@ let _hhListData = { prefix: null, items: [] };
 
 function populateHHList(prefix, selected, midLat, midLng, excludeId) {
   const query = (document.getElementById(prefix + '-hh-search')?.value || '').toLowerCase();
-  const phh = proposedHouseholds(excludeId);
+  const phh = assignedHouseholds(_modalListKey, excludeId);
   const items = poolHouseholds().filter(hh =>
     !phh.has(hh.id) || selected.includes(hh.id) || selected.includes(hh.name)
   ).map(hh => {
@@ -1763,14 +1848,18 @@ function resolveM2(rawVal) {
   return { id: rawVal, name: m?.name || '' };
 }
 
+function renderModalList() {
+  if (_modalListKey === 'current') renderCurrent(); else renderProposed();
+}
+
 function saveNewCompanionship() {
   const m1Id = document.getElementById('add-m1').value;
   if (!m1Id) { alert('Select Minister 1.'); return; }
   const m2  = resolveM2(document.getElementById('add-m2').value);
   const hhs = getSelectedHHIds('add');
   const m1  = S.members.find(b => b.id === m1Id);
-  S.proposed.push({ id:uid(), m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:[] });
-  save(); closeModal('add-modal'); renderProposed();
+  S[_modalListKey].push({ id:uid(), m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:[] });
+  save(); closeModal('add-modal'); renderModalList();
 }
 
 function saveEditCompanionship() {
@@ -1780,17 +1869,17 @@ function saveEditCompanionship() {
   const m2  = resolveM2(document.getElementById('edit-m2').value);
   const hhs = getSelectedHHIds('edit');
   const m1  = S.members.find(b => b.id === m1Id);
-  const idx = S.proposed.findIndex(x => x.id === id); if (idx < 0) return;
-  const existingNotes = S.proposed[idx].notes || [];
-  S.proposed[idx] = { id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:existingNotes };
-  save(); closeModal('edit-modal'); renderProposed();
+  const idx = S[_modalListKey].findIndex(x => x.id === id); if (idx < 0) return;
+  const existingNotes = S[_modalListKey][idx].notes || [];
+  S[_modalListKey][idx] = { id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:existingNotes };
+  save(); closeModal('edit-modal'); renderModalList();
 }
 
 function deleteCompanionship() {
   if (!confirm('Delete this companionship?')) return;
   const id = document.getElementById('edit-id').value;
-  S.proposed = S.proposed.filter(x=>x.id!==id);
-  save(); closeModal('edit-modal'); renderProposed();
+  S[_modalListKey] = S[_modalListKey].filter(x=>x.id!==id);
+  save(); closeModal('edit-modal'); renderModalList();
 }
 
 // ── Distance & Geocoding ──────────────────────────────────────
@@ -2024,6 +2113,7 @@ async function calculateDistances() {
   setTimeout(() => { prog.style.display = 'none'; }, 2000);
   save();
   renderProposed();
+  renderCurrent();
   renderHouseholds();
 }
 
@@ -2032,6 +2122,7 @@ function clearGeoCache() {
   save();
   document.getElementById('geo-status').textContent = 'Geocoding cache cleared.';
   renderProposed();
+  renderCurrent();
 }
 
 function saveGeoFile() {
@@ -2061,6 +2152,7 @@ function loadGeoFile(file) {
       save();
       renderHouseholds();
       renderProposed();
+      renderCurrent();
       document.getElementById('geo-status').textContent = `Loaded coords file — applied to ${applied} addresses.`;
     } catch(err) {
       document.getElementById('geo-status').textContent = 'Error reading coords file.';
@@ -2089,6 +2181,22 @@ function exportProposed() {
 function clearProposed() {
   if (!confirm('Clear all proposed assignments?')) return;
   S.proposed = []; save(); renderProposed();
+}
+
+function exportCurrent() {
+  if (!S.current.length) { alert('No current assignments to export.'); return; }
+  let csv = 'Minister1,Minister2,AssignedHousehold,HouseholdAddress\n';
+  S.current.forEach(p => {
+    const rows = p.households.length ? p.households : [''];
+    rows.forEach(hhRef => {
+      const obj = S.households.find(h => h.id===hhRef || norm(h.name)===norm(hhRef));
+      const hhName = obj ? obj.name : hhRef;
+      const addr   = obj ? obj.address : '';
+      csv += [p.m1Name, p.m2Name||'', hhName, addr]
+        .map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(',') + '\n';
+    });
+  });
+  dlCSV(csv,'current-assignments.csv');
 }
 
 // ── Session Export / Import ───────────────────────────────────
@@ -2167,6 +2275,8 @@ function clearData(type) {
   if (type==='all') S.proposed=[];
   save(); refreshBadge();
   document.getElementById('csv-preview').style.display='none';
+  if (type==='all'||type==='assignments') renderCurrent();
+  if (type==='all') renderProposed();
 }
 
 function dlCSV(csv, name) {
@@ -2182,7 +2292,7 @@ function getNotesTarget(ctx) {
   if (!ctx) return null;
   if (ctx.type === 'member' || ctx.type === 'brother') return S.members.find(x => x.id === ctx.id);
   if (ctx.type === 'household') return S.households.find(x => x.id === ctx.id);
-  if (ctx.type === 'proposed')  return S.proposed.find(x => x.id === ctx.id);
+  if (ctx.type === 'proposed' || ctx.type === 'current') return S[ctx.type].find(x => x.id === ctx.id);
   return null;
 }
 
@@ -2190,7 +2300,7 @@ function openNotesModal(type, id) {
   _notesCtx = { type, id };
   const target = getNotesTarget(_notesCtx);
   let label = target?.name || '';
-  if (type === 'proposed' && target) {
+  if ((type === 'proposed' || type === 'current') && target) {
     label = target.m1Name + (target.m2Name ? ' + ' + target.m2Name : '');
   }
   document.getElementById('notes-modal-title').textContent = `Notes — ${label}`;
@@ -2248,6 +2358,7 @@ function addNote() {
   if (_notesCtx.type === 'household') renderHouseholds();
   if (_notesCtx.type === 'brother')   renderBrothers();
   if (_notesCtx.type === 'proposed')  renderProposed();
+  if (_notesCtx.type === 'current')   renderCurrent();
 }
 
 function deleteNote(index) {
@@ -2261,6 +2372,7 @@ function deleteNote(index) {
   if (_notesCtx.type === 'household') renderHouseholds();
   if (_notesCtx.type === 'brother')   renderBrothers();
   if (_notesCtx.type === 'proposed')  renderProposed();
+  if (_notesCtx.type === 'current')   renderCurrent();
 }
 
 // ── Household Address Edit ────────────────────────────────────
