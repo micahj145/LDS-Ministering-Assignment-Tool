@@ -133,3 +133,13 @@ create policy "households_all_approved" on public.households
 
 create policy "companionships_all_approved" on public.companionships
   for all using (public.is_approved()) with check (public.is_approved());
+
+-- ── Table-level grants ───────────────────────────────────────────
+-- RLS policies above only take effect once the base GRANT allows access
+-- at all — Postgres checks table-level privileges before row-level
+-- policies. Signed-in requests run as the `authenticated` role (the
+-- anon key's `anon` role is only used pre-login), so that's the role
+-- that needs these grants.
+grant usage on schema public to authenticated;
+grant select, update on public.profiles to authenticated;
+grant select, insert, update, delete on public.members, public.households, public.companionships to authenticated;
