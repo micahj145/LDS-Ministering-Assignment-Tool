@@ -16,6 +16,8 @@ create table public.profiles (
   email      text not null,
   status     text not null default 'pending' check (status in ('pending','approved','denied')),
   is_admin   boolean not null default false,
+  first_name text,
+  last_name  text,
   created_at timestamptz not null default now()
 );
 
@@ -66,14 +68,17 @@ as $$
 declare
   v_status text := case when lower(new.email) = 'micahj145@gmail.com' then 'approved' else 'pending' end;
   v_is_admin boolean := lower(new.email) = 'micahj145@gmail.com';
+  v_first text := nullif(trim(new.raw_user_meta_data->>'first_name'), '');
+  v_last  text := nullif(trim(new.raw_user_meta_data->>'last_name'), '');
 begin
-  insert into public.profiles (id, email, status, is_admin)
-  values (new.id, new.email, v_status, v_is_admin);
+  insert into public.profiles (id, email, status, is_admin, first_name, last_name)
+  values (new.id, new.email, v_status, v_is_admin, v_first, v_last);
 
   if v_status = 'pending' then
     perform public.send_admin_email(
       'New signup request — Ministering Tool',
-      new.email || ' has requested access and is awaiting your approval.'
+      coalesce(nullif(trim(concat_ws(' ', v_first, v_last)), ''), new.email)
+        || ' (' || new.email || ') has requested access and is awaiting your approval.'
     );
   end if;
 
@@ -84,6 +89,29 @@ $$;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- Lets a signed-in user set their own display name — deliberately narrow
+-- (only ever touches first_name/last_name on the caller's own row, never
+-- status or is_admin) so it can't be used for privilege escalation. Mainly
+-- for accounts created before name-collection existed at signup.
+create or replace function public.update_my_name(p_first_name text, p_last_name text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    return;
+  end if;
+  update public.profiles
+  set first_name = nullif(trim(p_first_name), ''), last_name = nullif(trim(p_last_name), '')
+  where id = auth.uid();
+end;
+$$;
+
+revoke all on function public.update_my_name(text, text) from public;
+grant execute on function public.update_my_name(text, text) to authenticated;
 
 -- Security-definer helpers so profiles' own RLS policies don't
 -- self-recursively query profiles under RLS (infinite recursion).

@@ -104,6 +104,10 @@ tr:hover td{background:#fafbfc}
 <div id="auth-screen" class="container" style="display:none;max-width:420px">
   <div class="card">
     <h2 id="auth-title">Sign In</h2>
+    <div id="auth-name-fields" style="display:none">
+      <div class="form-group"><label>First Name</label><input type="text" id="auth-first-name" autocomplete="given-name"></div>
+      <div class="form-group"><label>Last Name</label><input type="text" id="auth-last-name" autocomplete="family-name"></div>
+    </div>
     <div class="form-group"><label>Email</label><input type="email" id="auth-email" autocomplete="username"></div>
     <div class="form-group"><label>Password</label><input type="password" id="auth-password" autocomplete="current-password"></div>
     <div id="auth-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em;margin-bottom:0.5rem"></div>
@@ -624,20 +628,26 @@ function toggleAuthMode() {
   document.getElementById('auth-submit-btn').textContent = _authMode === 'signin' ? 'Sign In' : 'Sign Up';
   document.getElementById('auth-toggle-label').textContent = _authMode === 'signin' ? 'Need an account?' : 'Already have an account?';
   document.getElementById('auth-toggle-btn').textContent = _authMode === 'signin' ? 'Sign Up' : 'Sign In';
+  document.getElementById('auth-name-fields').style.display = _authMode === 'signup' ? 'block' : 'none';
   document.getElementById('auth-error').textContent = '';
 }
 
 async function handleAuthSubmit() {
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
+  const firstName = document.getElementById('auth-first-name').value.trim();
+  const lastName = document.getElementById('auth-last-name').value.trim();
   const errEl = document.getElementById('auth-error');
   errEl.style.color = '#dc3545';
   errEl.textContent = '';
   if (!email || !password) { errEl.textContent = 'Email and password are required.'; return; }
+  if (_authMode === 'signup' && (!firstName || !lastName)) {
+    errEl.textContent = 'First and last name are required.'; return;
+  }
 
   const { error } = _authMode === 'signin'
     ? await sb.auth.signInWithPassword({ email, password })
-    : await sb.auth.signUp({ email, password });
+    : await sb.auth.signUp({ email, password, options: { data: { first_name: firstName, last_name: lastName } } });
   if (error) { errEl.textContent = error.message; return; }
 
   await resolveAuthState();
@@ -648,17 +658,41 @@ async function signOut() {
   await resolveAuthState();
 }
 
+function openEditNameModal() {
+  document.getElementById('my-first-name').value = _currentUserFirstName;
+  document.getElementById('my-last-name').value = _currentUserLastName;
+  document.getElementById('edit-name-error').textContent = '';
+  document.getElementById('edit-name-modal').classList.add('open');
+}
+
+async function saveMyName() {
+  const firstName = document.getElementById('my-first-name').value.trim();
+  const lastName = document.getElementById('my-last-name').value.trim();
+  const errEl = document.getElementById('edit-name-error');
+  if (!firstName || !lastName) { errEl.textContent = 'First and last name are required.'; return; }
+  const { error } = await sb.rpc('update_my_name', { p_first_name: firstName, p_last_name: lastName });
+  if (error) { errEl.textContent = error.message; return; }
+  _currentUserFirstName = firstName;
+  _currentUserLastName = lastName;
+  _currentUserName = [firstName, lastName].filter(Boolean).join(' ') || _currentUserEmail;
+  document.getElementById('note-author-display').textContent = _currentUserName;
+  closeModal('edit-name-modal');
+}
+
 async function renderAdminPanel() {
   const { data: profiles } = await sb.from('profiles').select('*').order('created_at', { ascending: true });
   const list = profiles || [];
-  const row = p => `
+  const row = p => {
+    const name = [p.first_name, p.last_name].filter(Boolean).join(' ');
+    return `
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f0f0f0;padding:0.5rem 0">
-      <div><div style="font-weight:500">${esc(p.email)}</div>
+      <div><div style="font-weight:500">${name ? esc(name) + ' — ' : ''}${esc(p.email)}</div>
       <div style="font-size:0.78rem;color:#888">${p.status}${p.is_admin ? ' · admin' : ''}</div></div>
       <div style="display:flex;gap:0.4rem">
         ${p.status !== 'approved' ? `<button class="btn btn-primary btn-sm" onclick="setUserStatus('${p.id}','approved')">Approve</button>` : ''}
         ${p.status !== 'denied'   ? `<button class="btn btn-danger btn-sm" onclick="setUserStatus('${p.id}','denied')">Deny</button>` : ''}
       </div></div>`;
+  };
   const pending = list.filter(p => p.status === 'pending');
   document.getElementById('admin-pending-list').innerHTML = pending.length ? pending.map(row).join('') : '<div class="empty-state">No pending requests.</div>';
   document.getElementById('admin-all-list').innerHTML = list.filter(p => p.status !== 'pending').map(row).join('');
@@ -719,6 +753,9 @@ async function loadAllData() {
 
 let _currentUserId = null;
 let _currentUserEmail = null;
+let _currentUserName = null;
+let _currentUserFirstName = '';
+let _currentUserLastName = '';
 
 async function resolveAuthState() {
   document.getElementById('auth-loading').style.display = 'block';
@@ -729,7 +766,7 @@ async function resolveAuthState() {
 
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
-    _currentUserId = null; _currentUserEmail = null;
+    _currentUserId = null; _currentUserEmail = null; _currentUserName = null;
     document.getElementById('auth-loading').style.display = 'none';
     document.getElementById('auth-screen').style.display = 'block';
     return;
@@ -750,6 +787,9 @@ async function resolveAuthState() {
     return;
   }
 
+  _currentUserFirstName = profile.first_name || '';
+  _currentUserLastName = profile.last_name || '';
+  _currentUserName = [_currentUserFirstName, _currentUserLastName].filter(Boolean).join(' ') || _currentUserEmail;
   document.getElementById('nav-admin-btn').style.display = profile.is_admin ? '' : 'none';
   await loadAllData();
 
@@ -2640,7 +2680,7 @@ function openNotesModal(type, id) {
     label = target.m1Name + (target.m2Name ? ' + ' + target.m2Name : '');
   }
   document.getElementById('notes-modal-title').textContent = `Notes — ${label}`;
-  document.getElementById('note-author-display').textContent = _currentUserEmail || '';
+  document.getElementById('note-author-display').textContent = _currentUserName || '';
   document.getElementById('note-text').value = '';
   document.getElementById('note-error').textContent = '';
   renderNotesList();
@@ -2683,7 +2723,7 @@ function addNote() {
   const target = getNotesTarget(_notesCtx);
   if (!target) return;
   if (!target.notes) target.notes = [];
-  target.notes.push({ id: uid(), author: _currentUserEmail || 'Unknown', text, date: new Date().toISOString() });
+  target.notes.push({ id: uid(), author: _currentUserName || 'Unknown', text, date: new Date().toISOString() });
   persistNotesTarget();
   document.getElementById('note-text').value = '';
   renderNotesList();
@@ -2810,7 +2850,11 @@ async function saveHHAddress(andGeocode) {
       <div style="font-size:0.78rem;font-weight:600;color:#888;margin-bottom:0.65rem;text-transform:uppercase;letter-spacing:0.05em">Add a Note</div>
       <div class="form-group">
         <label>Posting as</label>
-        <div id="note-author-display" style="font-size:0.88rem;color:#555;padding:0.3rem 0"></div>
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <div id="note-author-display" style="font-size:0.88rem;color:#555;padding:0.3rem 0"></div>
+          <button onclick="openEditNameModal()"
+            style="background:none;border:none;color:#1a3a5c;text-decoration:underline;cursor:pointer;font-size:0.78rem">edit</button>
+        </div>
       </div>
       <div class="form-group">
         <label>Note</label>
@@ -2823,6 +2867,20 @@ async function saveHHAddress(andGeocode) {
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('notes-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Name Modal -->
+<div class="modal-overlay" id="edit-name-modal">
+  <div class="modal">
+    <h3>Your Name</h3>
+    <div class="form-group"><label>First Name</label><input type="text" id="my-first-name"></div>
+    <div class="form-group"><label>Last Name</label><input type="text" id="my-last-name"></div>
+    <div id="edit-name-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('edit-name-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMyName()">Save</button>
     </div>
   </div>
 </div>
