@@ -5,12 +5,9 @@
 -- up from an earlier version of supabase_schema.sql.
 --
 -- Adds:
---   - A "profiles directory" so any approved user can see the list of
---     other approved collaborators, needed for the note @-tag picker.
 --   - An audit_log table (admin-only readable) recording every insert/
 --     update/delete on members/households/companionships/profiles.
---   - Admin-only email notifications (via Resend) for new signups and
---     for notes where a collaborator gets tagged.
+--   - Admin-only email notification (via Resend) for new signups.
 --
 -- BEFORE running this: you need a Resend account (resend.com) and an
 -- API key. AFTER running this, store that key in Supabase Vault by
@@ -23,10 +20,6 @@
 -- ═══════════════════════════════════════════════════════════════
 
 create extension if not exists pg_net;
-
--- ── Directory visibility (needed for the note @-tag picker) ─────
-create policy "profiles_select_approved_directory" on public.profiles
-  for select using (public.is_approved() and status = 'approved');
 
 -- ── Audit log ─────────────────────────────────────────────────
 create table public.audit_log (
@@ -177,38 +170,3 @@ begin
   return new;
 end;
 $$;
-
--- Called from the client after a note with tagged collaborators is saved.
-create or replace function public.notify_note_mention(
-  p_table text, p_record_label text, p_note_text text, p_author_email text, p_mention_ids uuid[]
-)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_mention_emails text[];
-begin
-  if not public.is_approved() then
-    return;
-  end if;
-  if p_mention_ids is null or array_length(p_mention_ids, 1) is null then
-    return;
-  end if;
-
-  select array_agg(email) into v_mention_emails
-  from public.profiles where id = any(p_mention_ids);
-
-  perform public.send_admin_email(
-    format('Note mention — %s', p_table),
-    format('%s tagged %s in a note on %s "%s": %s',
-      coalesce(p_author_email, 'someone'),
-      coalesce(array_to_string(v_mention_emails, ', '), 'a collaborator'),
-      p_table, p_record_label, coalesce(p_note_text, ''))
-  );
-end;
-$$;
-
-revoke all on function public.notify_note_mention(text, text, text, text, uuid[]) from public;
-grant execute on function public.notify_note_mention(text, text, text, text, uuid[]) to authenticated;

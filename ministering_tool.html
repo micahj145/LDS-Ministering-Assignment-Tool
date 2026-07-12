@@ -717,12 +717,6 @@ async function loadAllData() {
   S.proposed   = (proposed || []).map(rowToCompanionship);
 }
 
-let _directory = [];
-async function loadDirectory() {
-  const { data } = await sb.from('profiles').select('id,email').eq('status', 'approved');
-  _directory = data || [];
-}
-
 let _currentUserId = null;
 let _currentUserEmail = null;
 
@@ -2638,7 +2632,7 @@ function persistNotesTarget() {
   else if (_notesCtx.type === 'current' || _notesCtx.type === 'proposed') dbUpsertCompanionship(_notesCtx.type, target);
 }
 
-async function openNotesModal(type, id) {
+function openNotesModal(type, id) {
   _notesCtx = { type, id };
   const target = getNotesTarget(_notesCtx);
   let label = target?.name || '';
@@ -2649,14 +2643,8 @@ async function openNotesModal(type, id) {
   document.getElementById('note-author-display').textContent = _currentUserEmail || '';
   document.getElementById('note-text').value = '';
   document.getElementById('note-error').textContent = '';
-  document.getElementById('note-mentions').innerHTML = '<option disabled>Loading…</option>';
   renderNotesList();
   document.getElementById('notes-modal').classList.add('open');
-  await loadDirectory();
-  document.getElementById('note-mentions').innerHTML = _directory
-    .filter(p => p.email !== _currentUserEmail)
-    .map(p => `<option value="${p.id}">${esc(p.email)}</option>`).join('');
-  renderNotesList();
 }
 
 function renderNotesList() {
@@ -2667,12 +2655,7 @@ function renderNotesList() {
     el.innerHTML = '<div style="color:#aaa;font-size:0.85rem;padding:0.4rem 0">No notes yet.</div>';
     return;
   }
-  el.innerHTML = notes.map((n, i) => {
-    const mentionEmails = (n.mentions || []).map(id => _directory.find(p => p.id === id)?.email).filter(Boolean);
-    const mentionsHtml = mentionEmails.length
-      ? `<div style="margin-top:0.35rem">${mentionEmails.map(e => `<span class="household-tag" style="font-size:0.72rem">@${esc(e)}</span>`).join('')}</div>`
-      : '';
-    return `
+  el.innerHTML = notes.map((n, i) => `
     <div style="border:1px solid #e0e6ed;border-radius:6px;padding:0.6rem 0.75rem;margin-bottom:0.55rem">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem">
         <div style="font-size:0.78rem;color:#888">
@@ -2683,10 +2666,8 @@ function renderNotesList() {
                 onclick="deleteNote(${i})" title="Delete note">✕</button>
       </div>
       <div style="font-size:0.87rem;color:#333;white-space:pre-wrap">${esc(n.text)}</div>
-      ${mentionsHtml}
     </div>
-  `;
-  }).join('');
+  `).join('');
 }
 
 function formatNoteDate(iso) {
@@ -2694,7 +2675,7 @@ function formatNoteDate(iso) {
   catch { return iso || ''; }
 }
 
-async function addNote() {
+function addNote() {
   const text  = document.getElementById('note-text').value.trim();
   const errEl = document.getElementById('note-error');
   if (!text) { errEl.textContent = 'Please enter a note.'; document.getElementById('note-text').focus(); return; }
@@ -2702,28 +2683,15 @@ async function addNote() {
   const target = getNotesTarget(_notesCtx);
   if (!target) return;
   if (!target.notes) target.notes = [];
-  const mentions = Array.from(document.getElementById('note-mentions').selectedOptions).map(o => o.value);
-  const label = target.name || (target.m1Name ? target.m1Name + (target.m2Name ? ' + ' + target.m2Name : '') : '');
-  target.notes.push({ id: uid(), author: _currentUserEmail || 'Unknown', text, date: new Date().toISOString(), mentions });
+  target.notes.push({ id: uid(), author: _currentUserEmail || 'Unknown', text, date: new Date().toISOString() });
   persistNotesTarget();
   document.getElementById('note-text').value = '';
-  document.getElementById('note-mentions').selectedIndex = -1;
   renderNotesList();
   if (_notesCtx.type === 'member')    renderMembers();
   if (_notesCtx.type === 'household') renderHouseholds();
   if (_notesCtx.type === 'brother')   renderBrothers();
   if (_notesCtx.type === 'proposed')  renderProposed();
   if (_notesCtx.type === 'current')   renderCurrent();
-
-  if (mentions.length) {
-    const tableName = (_notesCtx.type === 'member' || _notesCtx.type === 'brother') ? 'members'
-      : _notesCtx.type === 'household' ? 'households' : 'companionships';
-    const { error } = await sb.rpc('notify_note_mention', {
-      p_table: tableName, p_record_label: label, p_note_text: text,
-      p_author_email: _currentUserEmail, p_mention_ids: mentions
-    });
-    if (error) console.error('notify_note_mention failed:', error);
-  }
 }
 
 function deleteNote(index) {
@@ -2847,10 +2815,6 @@ async function saveHHAddress(andGeocode) {
       <div class="form-group">
         <label>Note</label>
         <textarea id="note-text" rows="3" placeholder="Write a note or comment…" style="width:100%;padding:0.45rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem;resize:vertical;font-family:inherit"></textarea>
-      </div>
-      <div class="form-group">
-        <label>Tag collaborators (optional)</label>
-        <select id="note-mentions" multiple size="4" style="width:100%;border:1px solid #ddd;border-radius:6px;padding:0.3rem;font-size:0.84rem"></select>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div id="note-error" style="font-size:0.82rem;color:#dc3545"></div>

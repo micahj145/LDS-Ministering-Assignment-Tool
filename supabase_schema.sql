@@ -166,11 +166,6 @@ create policy "profiles_select_own_or_admin" on public.profiles
 create policy "profiles_update_admin_only" on public.profiles
   for update using (public.is_admin()) with check (public.is_admin());
 
--- Lets any approved user see the directory of other approved collaborators
--- (id + email), needed for the note @-tag picker.
-create policy "profiles_select_approved_directory" on public.profiles
-  for select using (public.is_approved() and status = 'approved');
-
 -- Shared single-tenant dataset: any approved user has full CRUD on all
 -- rows (no ownership/row-level restriction, per the "single shared ward
 -- dataset, last-write-wins" decision).
@@ -284,39 +279,3 @@ create trigger audit_companionships after insert or update or delete on public.c
   for each row execute function public.log_audit();
 create trigger audit_profiles after insert or update or delete on public.profiles
   for each row execute function public.log_audit();
-
--- ── Note @-mention notifications ─────────────────────────────────
--- Called from the client after a note with tagged collaborators is saved.
-create or replace function public.notify_note_mention(
-  p_table text, p_record_label text, p_note_text text, p_author_email text, p_mention_ids uuid[]
-)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_mention_emails text[];
-begin
-  if not public.is_approved() then
-    return;
-  end if;
-  if p_mention_ids is null or array_length(p_mention_ids, 1) is null then
-    return;
-  end if;
-
-  select array_agg(email) into v_mention_emails
-  from public.profiles where id = any(p_mention_ids);
-
-  perform public.send_admin_email(
-    format('Note mention — %s', p_table),
-    format('%s tagged %s in a note on %s "%s": %s',
-      coalesce(p_author_email, 'someone'),
-      coalesce(array_to_string(v_mention_emails, ', '), 'a collaborator'),
-      p_table, p_record_label, coalesce(p_note_text, ''))
-  );
-end;
-$$;
-
-revoke all on function public.notify_note_mention(text, text, text, text, uuid[]) from public;
-grant execute on function public.notify_note_mention(text, text, text, text, uuid[]) to authenticated;
