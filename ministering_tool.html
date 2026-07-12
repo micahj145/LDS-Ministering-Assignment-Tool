@@ -4,10 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ministering Assignment Tool</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f7fa;color:#333;min-height:100vh}
-header{background:#1a3a5c;color:white;padding:1rem 2rem}
+header{background:#1a3a5c;color:white;padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center}
 header h1{font-size:1.4rem;font-weight:600}
 header p{font-size:0.8rem;opacity:0.7;margin-top:0.2rem}
 nav{background:white;border-bottom:2px solid #e0e6ed;display:flex;padding:0 2rem;overflow-x:auto}
@@ -87,9 +88,42 @@ tr:hover td{background:#fafbfc}
 <body>
 
 <header>
-  <h1>Ministering Assignment Tool</h1>
-  <p>Ward Ministry Planner — data stays local in your browser</p>
+  <div>
+    <h1>Ministering Assignment Tool</h1>
+    <p>Ward Ministry Planner — shared ward data</p>
+  </div>
+  <div id="user-menu" style="display:none;align-items:center;gap:0.75rem;font-size:0.85rem">
+    <span id="user-email"></span>
+    <button class="btn btn-secondary btn-sm" onclick="signOut()">Sign Out</button>
+  </div>
 </header>
+
+<div id="auth-loading" class="container" style="max-width:420px;text-align:center;padding-top:3rem;color:#888">Loading…</div>
+
+<div id="auth-screen" class="container" style="display:none;max-width:420px">
+  <div class="card">
+    <h2 id="auth-title">Sign In</h2>
+    <div class="form-group"><label>Email</label><input type="email" id="auth-email" autocomplete="username"></div>
+    <div class="form-group"><label>Password</label><input type="password" id="auth-password" autocomplete="current-password"></div>
+    <div id="auth-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em;margin-bottom:0.5rem"></div>
+    <button class="btn btn-primary" id="auth-submit-btn" onclick="handleAuthSubmit()" style="width:100%">Sign In</button>
+    <div style="text-align:center;margin-top:0.9rem;font-size:0.85rem">
+      <span id="auth-toggle-label">Need an account?</span>
+      <button onclick="toggleAuthMode()" id="auth-toggle-btn"
+        style="background:none;border:none;color:#1a3a5c;text-decoration:underline;cursor:pointer;font-size:0.85rem">Sign Up</button>
+    </div>
+  </div>
+</div>
+
+<div id="pending-screen" class="container" style="display:none;max-width:480px">
+  <div class="card" style="text-align:center">
+    <h2 id="pending-title">Awaiting Approval</h2>
+    <p id="pending-message" style="font-size:0.9rem;color:#666;margin-bottom:1rem"></p>
+    <button class="btn btn-secondary" onclick="signOut()">Sign Out</button>
+  </div>
+</div>
+
+<div id="app-shell" style="display:none">
 
 <nav>
   <button class="active" onclick="showTab('import')">Import</button>
@@ -98,6 +132,7 @@ tr:hover td{background:#fafbfc}
   <button onclick="showTab('brothers')">Brothers <span id="brothers-count"></span></button>
   <button onclick="showTab('current')">Current Assignments</button>
   <button onclick="showTab('propose')">Proposed Assignments</button>
+  <button id="nav-admin-btn" onclick="showTab('admin')" style="display:none">Admin</button>
 </nav>
 
 <div class="container">
@@ -379,6 +414,17 @@ tr:hover td{background:#fafbfc}
   </div>
 </div>
 
+<div id="tab-admin" class="tab-content">
+  <div class="card">
+    <h2>Pending Requests</h2>
+    <div id="admin-pending-list"></div>
+  </div>
+  <div class="card">
+    <h2>All Users</h2>
+    <div id="admin-all-list"></div>
+  </div>
+</div>
+
 </div><!-- /container -->
 
 <!-- Add Modal -->
@@ -434,6 +480,11 @@ tr:hover td{background:#fafbfc}
 </div>
 
 <script>
+// ── Supabase Config — fill in after creating your Supabase project ──
+const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR-ANON-PUBLIC-KEY';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 // ── State ────────────────────────────────────────────────────
 const S = {
   members: [],      // individual people (brothers + others)
@@ -445,28 +496,209 @@ const S = {
   rawAssign: null,
 };
 
-// ── Init ─────────────────────────────────────────────────────
-(function init() {
-  try {
-    const m = localStorage.getItem('mat_m'); if (m) S.members    = JSON.parse(m);
-    const h = localStorage.getItem('mat_h'); if (h) {
-      S.households = JSON.parse(h);
-      // Normalize addresses from older imports that may have embedded newlines or ZIP+4
-      S.households.forEach(hh => { if (hh.address) hh.address = normalizeAddress(hh.address); });
-    }
-    const c = localStorage.getItem('mat_c'); if (c) S.current  = JSON.parse(c);
-    const p = localStorage.getItem('mat_p'); if (p) {
-      S.proposed = JSON.parse(p);
-      S.proposed.forEach(cp => {
-        if (typeof cp.notes === 'string' && cp.notes) {
-          cp.notes = [{ id: uid(), author: 'Legacy', text: cp.notes, date: new Date().toISOString() }];
-        } else if (!Array.isArray(cp.notes)) {
-          cp.notes = [];
-        }
-      });
-    }
-  } catch(e) {}
+// ── Supabase persistence layer ──────────────────────────────────
+function memberToRow(m) {
+  return { id: m.id, name: m.name, gender: m.gender || null, age: m.age || 0, phone: m.phone || null,
+           is_brother: m.isBrother !== false, household_id: m.householdId ?? null,
+           in_pool: m.inPool === undefined ? null : m.inPool, notes: m.notes || [] };
+}
+function rowToMember(r) {
+  return { id: r.id, name: r.name, gender: r.gender || '', age: r.age || 0, phone: r.phone || '',
+           isBrother: r.is_brother, householdId: r.household_id, inPool: r.in_pool ?? undefined,
+           notes: r.notes || [] };
+}
+function hhToRow(h) {
+  return { id: h.id, name: h.name, members: h.members || [], head: h.head || null, address: h.address || null,
+           phone: h.phone || null, email: h.email || null, notes: h.notes || [],
+           lat: h.lat ?? null, lng: h.lng ?? null, in_pool: h.inPool === undefined ? null : h.inPool };
+}
+function rowToHousehold(r) {
+  const out = { id: r.id, name: r.name, members: r.members || [], head: r.head || '', address: r.address || '',
+                phone: r.phone || '', email: r.email || '', notes: r.notes || [], inPool: r.in_pool ?? undefined };
+  if (r.lat != null) { out.lat = r.lat; out.lng = r.lng; }
+  return out;
+}
+function compToRow(list, c) {
+  return { id: c.id, list, m1_id: c.m1Id ?? null, m1_name: c.m1Name || null, m2_id: c.m2Id ?? null,
+           m2_name: c.m2Name || null, households: c.households || [], notes: c.notes || [], district: c.district || null };
+}
+function rowToCompanionship(r) {
+  return { id: r.id, m1Id: r.m1_id, m1Name: r.m1_name || '', m2Id: r.m2_id, m2Name: r.m2_name || '',
+           households: r.households || [], notes: r.notes || [], district: r.district || undefined };
+}
 
+function dbFail(error) {
+  console.error('Supabase error:', error);
+  alert('A save to the server failed: ' + (error?.message || 'unknown error') +
+        '\nYour change may not be visible to other users — try again or reload.');
+}
+
+async function dbUpsertMembers(members) {
+  if (!members.length) return;
+  const { error } = await sb.from('members').upsert(members.map(memberToRow));
+  if (error) dbFail(error);
+}
+function dbUpsertMember(m) { return dbUpsertMembers([m]); }
+
+async function dbDeleteMembers(ids) {
+  if (!ids.length) return;
+  const { error } = await sb.from('members').delete().in('id', ids);
+  if (error) dbFail(error);
+}
+
+async function dbUpsertHouseholds(households) {
+  if (!households.length) return;
+  const { error } = await sb.from('households').upsert(households.map(hhToRow));
+  if (error) dbFail(error);
+}
+function dbUpsertHousehold(hh) { return dbUpsertHouseholds([hh]); }
+
+async function dbDeleteHouseholds(ids) {
+  if (!ids.length) return;
+  const { error } = await sb.from('households').delete().in('id', ids);
+  if (error) dbFail(error);
+}
+
+async function dbUpsertCompanionship(list, record) {
+  const { error } = await sb.from('companionships').upsert(compToRow(list, record));
+  if (error) dbFail(error);
+}
+async function dbDeleteCompanionship(list, id) {
+  const { error } = await sb.from('companionships').delete().eq('list', list).eq('id', id);
+  if (error) dbFail(error);
+}
+async function dbReplaceCompanionshipList(list, records) {
+  const { error: delErr } = await sb.from('companionships').delete().eq('list', list);
+  if (delErr) return dbFail(delErr);
+  if (!records.length) return;
+  const { error } = await sb.from('companionships').insert(records.map(r => compToRow(list, r)));
+  if (error) dbFail(error);
+}
+
+async function dbReplaceTable(table, rows) {
+  const { error: delErr } = await sb.from(table).delete().not('id', 'is', null);
+  if (delErr) return dbFail(delErr);
+  if (!rows.length) return;
+  const { error } = await sb.from(table).insert(rows);
+  if (error) dbFail(error);
+}
+
+async function dbReplaceAll({ members, households, current, proposed }) {
+  await Promise.all([
+    dbReplaceTable('members', members.map(memberToRow)),
+    dbReplaceTable('households', households.map(hhToRow)),
+    dbReplaceCompanionshipList('current', current),
+    dbReplaceCompanionshipList('proposed', proposed),
+  ]);
+}
+
+// ── Auth ─────────────────────────────────────────────────────
+let _authMode = 'signin'; // 'signin' | 'signup'
+
+function toggleAuthMode() {
+  _authMode = _authMode === 'signin' ? 'signup' : 'signin';
+  document.getElementById('auth-title').textContent = _authMode === 'signin' ? 'Sign In' : 'Sign Up';
+  document.getElementById('auth-submit-btn').textContent = _authMode === 'signin' ? 'Sign In' : 'Sign Up';
+  document.getElementById('auth-toggle-label').textContent = _authMode === 'signin' ? 'Need an account?' : 'Already have an account?';
+  document.getElementById('auth-toggle-btn').textContent = _authMode === 'signin' ? 'Sign Up' : 'Sign In';
+  document.getElementById('auth-error').textContent = '';
+}
+
+async function handleAuthSubmit() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const errEl = document.getElementById('auth-error');
+  errEl.style.color = '#dc3545';
+  errEl.textContent = '';
+  if (!email || !password) { errEl.textContent = 'Email and password are required.'; return; }
+
+  const { error } = _authMode === 'signin'
+    ? await sb.auth.signInWithPassword({ email, password })
+    : await sb.auth.signUp({ email, password });
+  if (error) { errEl.textContent = error.message; return; }
+
+  await resolveAuthState();
+}
+
+async function signOut() {
+  await sb.auth.signOut();
+  await resolveAuthState();
+}
+
+async function renderAdminPanel() {
+  const { data: profiles } = await sb.from('profiles').select('*').order('created_at', { ascending: true });
+  const list = profiles || [];
+  const row = p => `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f0f0f0;padding:0.5rem 0">
+      <div><div style="font-weight:500">${esc(p.email)}</div>
+      <div style="font-size:0.78rem;color:#888">${p.status}${p.is_admin ? ' · admin' : ''}</div></div>
+      <div style="display:flex;gap:0.4rem">
+        ${p.status !== 'approved' ? `<button class="btn btn-primary btn-sm" onclick="setUserStatus('${p.id}','approved')">Approve</button>` : ''}
+        ${p.status !== 'denied'   ? `<button class="btn btn-danger btn-sm" onclick="setUserStatus('${p.id}','denied')">Deny</button>` : ''}
+      </div></div>`;
+  const pending = list.filter(p => p.status === 'pending');
+  document.getElementById('admin-pending-list').innerHTML = pending.length ? pending.map(row).join('') : '<div class="empty-state">No pending requests.</div>';
+  document.getElementById('admin-all-list').innerHTML = list.filter(p => p.status !== 'pending').map(row).join('');
+}
+async function setUserStatus(id, status) {
+  const { error } = await sb.from('profiles').update({ status }).eq('id', id);
+  if (error) { alert('Failed to update: ' + error.message); return; }
+  renderAdminPanel();
+}
+
+// ── Init ─────────────────────────────────────────────────────
+async function loadAllData() {
+  const [{ data: members }, { data: households }, { data: current }, { data: proposed }] = await Promise.all([
+    sb.from('members').select('*'), sb.from('households').select('*'),
+    sb.from('companionships').select('*').eq('list', 'current'),
+    sb.from('companionships').select('*').eq('list', 'proposed'),
+  ]);
+  S.members    = (members || []).map(rowToMember);
+  S.households = (households || []).map(rowToHousehold);
+  // Normalize addresses from older imports that may have embedded newlines or ZIP+4
+  S.households.forEach(hh => { if (hh.address) hh.address = normalizeAddress(hh.address); });
+  S.current    = (current || []).map(rowToCompanionship);
+  S.proposed   = (proposed || []).map(rowToCompanionship);
+}
+
+async function resolveAuthState() {
+  document.getElementById('auth-loading').style.display = 'block';
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('pending-screen').style.display = 'none';
+  document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('user-menu').style.display = 'none';
+
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    document.getElementById('auth-loading').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'block';
+    return;
+  }
+  document.getElementById('user-menu').style.display = 'flex';
+  document.getElementById('user-email').textContent = session.user.email;
+
+  const { data: profile } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
+  if (!profile || profile.status !== 'approved') {
+    document.getElementById('auth-loading').style.display = 'none';
+    document.getElementById('pending-title').textContent = profile?.status === 'denied' ? 'Access Denied' : 'Awaiting Approval';
+    document.getElementById('pending-message').textContent = profile?.status === 'denied'
+      ? 'The site admin has denied access for this account.'
+      : 'Your account has been created and is waiting for the site admin to approve access. Check back later.';
+    document.getElementById('pending-screen').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('nav-admin-btn').style.display = profile.is_admin ? '' : 'none';
+  await loadAllData();
+
+  document.getElementById('auth-loading').style.display = 'none';
+  document.getElementById('app-shell').style.display = 'block';
+
+  refreshBadge();
+  if (S.members.length && S.households.length) showLinkStatus();
+}
+
+(async function init() {
   setupDrop('member-drop', 'member-file', handleMemberFile);
   setupDrop('hh-drop',     'hh-file',     handleHouseholdsFile);
   setupDrop('assign-drop', 'assign-file', handleAssignFile);
@@ -475,16 +707,8 @@ const S = {
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
   );
 
-  refreshBadge();
-  if (S.members.length && S.households.length) showLinkStatus();
+  await resolveAuthState();
 })();
-
-function save() {
-  localStorage.setItem('mat_m', JSON.stringify(S.members));
-  localStorage.setItem('mat_h', JSON.stringify(S.households));
-  localStorage.setItem('mat_c', JSON.stringify(S.current));
-  localStorage.setItem('mat_p', JSON.stringify(S.proposed));
-}
 
 function uid()  { return Math.random().toString(36).slice(2,10); }
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -495,13 +719,14 @@ function showTab(name) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  const tabs = ['import','members','households','brothers','current','propose'];
+  const tabs = ['import','members','households','brothers','current','propose','admin'];
   document.querySelectorAll('nav button')[tabs.indexOf(name)].classList.add('active');
   if (name === 'members')    renderMembers();
   if (name === 'households') renderHouseholds();
   if (name === 'brothers')   renderBrothers();
   if (name === 'current')    renderCurrent();
   if (name === 'propose')    renderProposed();
+  if (name === 'admin')      renderAdminPanel();
 }
 
 // ── CSV Parsing ───────────────────────────────────────────────
@@ -655,14 +880,16 @@ function importMembers() {
     choice: 'keep',
   }));
 
-  const finish = (decs) => {
+  const finish = async (decs) => {
     decs = decs || [];
     updates.forEach(u => Object.assign(u.target, u.fields));
     adds.forEach(a => S.members.push(a));
     const toRemove = new Set(decs.filter(d => d.choice === 'remove').map(d => d.id));
     if (toRemove.size) S.members = S.members.filter(m => !toRemove.has(m.id));
     linkMembersToHouseholds(true);
-    save(); refreshBadge(); renderMembers(); renderBrothers();
+    await dbUpsertMembers(S.members);
+    await dbDeleteMembers([...toRemove]);
+    refreshBadge(); renderMembers(); renderBrothers();
     const bc = brothers().length;
     const parts = [`${adds.length} added`, `${updates.length} updated`];
     if (toRemove.size) parts.push(`${toRemove.size} removed`);
@@ -797,7 +1024,7 @@ function importHouseholds() {
       choice: 'keep',
     }));
 
-  const finish = (decs) => {
+  const finish = async (decs) => {
     decs = decs || [];
     updates.forEach(u => Object.assign(u.target, u.fields));
     // Apply address-change decisions.
@@ -814,7 +1041,10 @@ function importHouseholds() {
       S.members.forEach(m => { if (m.householdId && toRemove.has(m.householdId)) m.householdId = null; });
     }
     linkMembersToHouseholds(true);
-    save(); refreshBadge(); renderHouseholds(); renderMembers();
+    await dbUpsertHouseholds(S.households);
+    await dbDeleteHouseholds([...toRemove]);
+    await dbUpsertMembers(S.members);
+    refreshBadge(); renderHouseholds(); renderMembers();
     const parts = [`${adds.length} added`, `${updates.length} updated`];
     if (toRemove.size) parts.push(`${toRemove.size} removed`);
     document.getElementById('hh-status').innerHTML =
@@ -1000,7 +1230,7 @@ function autoAssignCols(headers) {
   };
 }
 
-function importAssignments() {
+async function importAssignments() {
   if (!S.rawAssign) return;
   const m1Col = document.getElementById('map-m1').value;
   if (!m1Col) { alert('Map the Minister 1 column first.'); return; }
@@ -1020,7 +1250,7 @@ function importAssignments() {
   });
 
   S.current = Object.values(map);
-  save();
+  await dbReplaceCompanionshipList('current', S.current);
   document.getElementById('assign-status').innerHTML =
     `<span style="color:#155724">✓ Imported ${S.current.length} companionships</span>`;
 }
@@ -1040,13 +1270,13 @@ function cyclePool(cur) {
 function toggleBrotherPool(id) {
   const b = S.members.find(x => x.id === id); if (!b) return;
   b.inPool = cyclePool(b.inPool);
-  save(); renderBrothers();
+  dbUpsertMember(b); renderBrothers();
 }
 
 function toggleHHPool(id) {
   const hh = S.households.find(x => x.id === id); if (!hh) return;
   hh.inPool = cyclePool(hh.inPool);
-  save(); renderHouseholds();
+  dbUpsertHousehold(hh); renderHouseholds();
 }
 
 // Returns the list of households to use in pickers.
@@ -1253,7 +1483,7 @@ function saveMemberLink(clear) {
     if (!hhId) { alert('Select a household first.'); return; }
     m.householdId = hhId;
   }
-  save(); showLinkStatus(); closeModal('link-modal'); renderMembers();
+  dbUpsertMember(m); showLinkStatus(); closeModal('link-modal'); renderMembers();
 }
 
 // ── Households Tab ─────────────────────────────────────────────
@@ -1527,7 +1757,7 @@ function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed') {
   </div>`;
 }
 
-function copyCurrentToProposed() {
+async function copyCurrentToProposed() {
   if (!S.current.length) { alert('No current assignments to copy.'); return; }
   const bList = brothers();
   const hhLookup = new Map(S.households.map(h => [norm(h.name), h.id]));
@@ -1539,17 +1769,19 @@ function copyCurrentToProposed() {
     const hhs = c.households.map(n => hhLookup.get(norm(n)) || n);
     return { id:uid(), m1Id:m1?.id||null, m1Name:c.m1Name, m2Id:m2?.id||null, m2Name:c.m2Name||'', households:hhs };
   });
-  save(); showTab('propose');
+  await dbReplaceCompanionshipList('proposed', S.proposed);
+  showTab('propose');
 }
 
-function promoteProposedToCurrent() {
+async function promoteProposedToCurrent() {
   if (!S.proposed.length) { alert('No proposed companionships to promote.'); return; }
   if (!confirm(`Replace Current Assignments with all ${S.proposed.length} proposed companionship(s)? Proposed will be left unchanged.`)) return;
   S.current = S.proposed.map(p => ({
     id: uid(), m1Id: p.m1Id, m1Name: p.m1Name, m2Id: p.m2Id, m2Name: p.m2Name || '',
     households: [...p.households], notes: []
   }));
-  save(); showTab('current');
+  await dbReplaceCompanionshipList('current', S.current);
+  showTab('current');
 }
 
 // ── Proposed Tab ──────────────────────────────────────────────
@@ -1858,8 +2090,9 @@ function saveNewCompanionship() {
   const m2  = resolveM2(document.getElementById('add-m2').value);
   const hhs = getSelectedHHIds('add');
   const m1  = S.members.find(b => b.id === m1Id);
-  S[_modalListKey].push({ id:uid(), m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:[] });
-  save(); closeModal('add-modal'); renderModalList();
+  const record = { id:uid(), m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:[] };
+  S[_modalListKey].push(record);
+  dbUpsertCompanionship(_modalListKey, record); closeModal('add-modal'); renderModalList();
 }
 
 function saveEditCompanionship() {
@@ -1871,15 +2104,16 @@ function saveEditCompanionship() {
   const m1  = S.members.find(b => b.id === m1Id);
   const idx = S[_modalListKey].findIndex(x => x.id === id); if (idx < 0) return;
   const existingNotes = S[_modalListKey][idx].notes || [];
-  S[_modalListKey][idx] = { id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:existingNotes };
-  save(); closeModal('edit-modal'); renderModalList();
+  const record = { id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:existingNotes };
+  S[_modalListKey][idx] = record;
+  dbUpsertCompanionship(_modalListKey, record); closeModal('edit-modal'); renderModalList();
 }
 
 function deleteCompanionship() {
   if (!confirm('Delete this companionship?')) return;
   const id = document.getElementById('edit-id').value;
   S[_modalListKey] = S[_modalListKey].filter(x=>x.id!==id);
-  save(); closeModal('edit-modal'); renderModalList();
+  dbDeleteCompanionship(_modalListKey, id); closeModal('edit-modal'); renderModalList();
 }
 
 // ── Distance & Geocoding ──────────────────────────────────────
@@ -2111,7 +2345,7 @@ async function calculateDistances() {
   }
 
   setTimeout(() => { prog.style.display = 'none'; }, 2000);
-  save();
+  dbUpsertHouseholds(toGeocode.filter(hh => hh.lat));
   renderProposed();
   renderCurrent();
   renderHouseholds();
@@ -2119,7 +2353,7 @@ async function calculateDistances() {
 
 function clearGeoCache() {
   S.households.forEach(hh => { delete hh.lat; delete hh.lng; });
-  save();
+  dbUpsertHouseholds(S.households);
   document.getElementById('geo-status').textContent = 'Geocoding cache cleared.';
   renderProposed();
   renderCurrent();
@@ -2145,11 +2379,12 @@ function loadGeoFile(file) {
     try {
       const coords = JSON.parse(e.target.result);
       let applied = 0;
+      const touched = [];
       S.households.forEach(hh => {
         const c = coords[hh.address];
-        if (c?.lat && c?.lng) { hh.lat = c.lat; hh.lng = c.lng; applied++; }
+        if (c?.lat && c?.lng) { hh.lat = c.lat; hh.lng = c.lng; applied++; touched.push(hh); }
       });
-      save();
+      dbUpsertHouseholds(touched);
       renderHouseholds();
       renderProposed();
       renderCurrent();
@@ -2178,9 +2413,11 @@ function exportProposed() {
   dlCSV(csv,'proposed-assignments.csv');
 }
 
-function clearProposed() {
+async function clearProposed() {
   if (!confirm('Clear all proposed assignments?')) return;
-  S.proposed = []; save(); renderProposed();
+  S.proposed = [];
+  await dbReplaceCompanionshipList('proposed', []);
+  renderProposed();
 }
 
 function exportCurrent() {
@@ -2222,7 +2459,7 @@ function exportSession() {
 function importSession(file) {
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = e => {
+  reader.onload = async e => {
     try {
       const data = JSON.parse(e.target.result);
       if (!data.members || !data.households) {
@@ -2238,7 +2475,8 @@ function importSession(file) {
       S.households = data.households || [];
       S.current    = data.current    || [];
       S.proposed   = data.proposed   || [];
-      save();
+      document.getElementById('session-status').textContent = 'Saving to server…';
+      await dbReplaceAll({ members: S.members, households: S.households, current: S.current, proposed: S.proposed });
       refreshBadge();
       if (S.members.length && S.households.length) showLinkStatus();
       document.getElementById('session-status').textContent = `Session loaded: ${counts}.`;
@@ -2250,14 +2488,16 @@ function importSession(file) {
   reader.readAsText(file);
 }
 
-function clearData(type) {
+async function clearData(type) {
   const labels = { all:'ALL data', members:'member data', households:'household data', assignments:'assignment data' };
   if (!confirm(`Clear ${labels[type]}?`)) return;
+  const tasks = [];
   if (type==='all'||type==='members') {
     S.members=[];
     document.getElementById('member-status').textContent='';
     document.getElementById('member-mapping').style.display='none';
     document.getElementById('member-link-status').style.display='none';
+    tasks.push(dbReplaceTable('members', []));
   }
   if (type==='all'||type==='households') {
     S.households=[];
@@ -2266,14 +2506,18 @@ function clearData(type) {
     document.getElementById('hh-link-status').style.display='none';
     // clear householdIds from members
     S.members.forEach(m => m.householdId = null);
+    tasks.push(dbReplaceTable('households', []));
+    if (type!=='all') tasks.push(dbUpsertMembers(S.members));
   }
   if (type==='all'||type==='assignments') {
     S.current=[];
     document.getElementById('assign-status').textContent='';
     document.getElementById('assign-mapping').style.display='none';
+    tasks.push(dbReplaceCompanionshipList('current', []));
   }
-  if (type==='all') S.proposed=[];
-  save(); refreshBadge();
+  if (type==='all') { S.proposed=[]; tasks.push(dbReplaceCompanionshipList('proposed', [])); }
+  await Promise.all(tasks);
+  refreshBadge();
   document.getElementById('csv-preview').style.display='none';
   if (type==='all'||type==='assignments') renderCurrent();
   if (type==='all') renderProposed();
@@ -2294,6 +2538,14 @@ function getNotesTarget(ctx) {
   if (ctx.type === 'household') return S.households.find(x => x.id === ctx.id);
   if (ctx.type === 'proposed' || ctx.type === 'current') return S[ctx.type].find(x => x.id === ctx.id);
   return null;
+}
+
+function persistNotesTarget() {
+  const target = getNotesTarget(_notesCtx);
+  if (!target) return;
+  if (_notesCtx.type === 'member' || _notesCtx.type === 'brother') dbUpsertMember(target);
+  else if (_notesCtx.type === 'household') dbUpsertHousehold(target);
+  else if (_notesCtx.type === 'current' || _notesCtx.type === 'proposed') dbUpsertCompanionship(_notesCtx.type, target);
 }
 
 function openNotesModal(type, id) {
@@ -2351,7 +2603,7 @@ function addNote() {
   if (!target) return;
   if (!target.notes) target.notes = [];
   target.notes.push({ id: uid(), author, text, date: new Date().toISOString() });
-  save();
+  persistNotesTarget();
   document.getElementById('note-text').value = '';
   renderNotesList();
   if (_notesCtx.type === 'member')    renderMembers();
@@ -2366,7 +2618,7 @@ function deleteNote(index) {
   const target = getNotesTarget(_notesCtx);
   if (!target?.notes) return;
   target.notes.splice(index, 1);
-  save();
+  persistNotesTarget();
   renderNotesList();
   if (_notesCtx.type === 'member')    renderMembers();
   if (_notesCtx.type === 'household') renderHouseholds();
@@ -2430,7 +2682,7 @@ async function saveHHAddress(andGeocode) {
     btn.disabled = false;
   }
 
-  save();
+  await dbUpsertHousehold(hh);
   renderHouseholds();
   if (!andGeocode) closeModal('hh-edit-modal');
 }
@@ -2526,5 +2778,7 @@ async function saveHHAddress(andGeocode) {
     </div>
   </div>
 </div>
+
+</div><!-- /app-shell -->
 </body>
 </html>
