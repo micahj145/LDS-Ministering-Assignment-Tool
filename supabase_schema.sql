@@ -8,6 +8,8 @@
 -- is already the real access gate).
 -- ═══════════════════════════════════════════════════════════════
 
+create extension if not exists pg_net;
+
 -- ── profiles (auth gating) ───────────────────────────────────────
 create table public.profiles (
   id         uuid primary key references auth.users(id) on delete cascade,
@@ -17,23 +19,64 @@ create table public.profiles (
   created_at timestamptz not null default now()
 );
 
+-- Sends a plain-text email to every admin via Resend. No-ops silently if
+-- the 'resend_api_key' Vault secret hasn't been configured yet — run
+-- `select vault.create_secret('YOUR_REAL_KEY', 'resend_api_key');` in the
+-- SQL Editor yourself (never commit the real key to the repo).
+create or replace function public.send_admin_email(p_subject text, p_body text)
+returns void
+language plpgsql
+security definer
+set search_path = public, vault, net
+as $$
+declare
+  v_api_key text;
+  v_admin record;
+begin
+  select decrypted_secret into v_api_key from vault.decrypted_secrets where name = 'resend_api_key';
+  if v_api_key is null then
+    return;
+  end if;
+
+  for v_admin in select email from public.profiles where is_admin = true loop
+    perform net.http_post(
+      url := 'https://api.resend.com/emails',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || v_api_key, 'Content-Type', 'application/json'),
+      body := jsonb_build_object(
+        'from', 'Ministering Tool <onboarding@resend.dev>',
+        'to', jsonb_build_array(v_admin.email),
+        'subject', p_subject,
+        'text', p_body
+      )
+    );
+  end loop;
+end;
+$$;
+
 -- Auto-create a profile row on signup. The designated admin is
 -- auto-approved and flagged admin so there's no bootstrap chicken-and-egg
--- problem (no admin exists yet to approve the first admin).
+-- problem (no admin exists yet to approve the first admin). Emails the
+-- admin(s) about any other (pending) signup.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_status text := case when lower(new.email) = 'micahj145@gmail.com' then 'approved' else 'pending' end;
+  v_is_admin boolean := lower(new.email) = 'micahj145@gmail.com';
 begin
   insert into public.profiles (id, email, status, is_admin)
-  values (
-    new.id,
-    new.email,
-    case when lower(new.email) = 'micahj145@gmail.com' then 'approved' else 'pending' end,
-    lower(new.email) = 'micahj145@gmail.com'
-  );
+  values (new.id, new.email, v_status, v_is_admin);
+
+  if v_status = 'pending' then
+    perform public.send_admin_email(
+      'New signup request — Ministering Tool',
+      new.email || ' has requested access and is awaiting your approval.'
+    );
+  end if;
+
   return new;
 end;
 $$;
@@ -123,6 +166,11 @@ create policy "profiles_select_own_or_admin" on public.profiles
 create policy "profiles_update_admin_only" on public.profiles
   for update using (public.is_admin()) with check (public.is_admin());
 
+-- Lets any approved user see the directory of other approved collaborators
+-- (id + email), needed for the note @-tag picker.
+create policy "profiles_select_approved_directory" on public.profiles
+  for select using (public.is_approved() and status = 'approved');
+
 -- Shared single-tenant dataset: any approved user has full CRUD on all
 -- rows (no ownership/row-level restriction, per the "single shared ward
 -- dataset, last-write-wins" decision).
@@ -144,3 +192,131 @@ create policy "companionships_all_approved" on public.companionships
 grant usage on schema public to authenticated;
 grant select, update on public.profiles to authenticated;
 grant select, insert, update, delete on public.members, public.households, public.companionships to authenticated;
+
+-- ── Audit log ─────────────────────────────────────────────────
+create table public.audit_log (
+  id          bigint generated always as identity primary key,
+  occurred_at timestamptz not null default now(),
+  actor_id    uuid,
+  actor_email text,
+  table_name  text not null,
+  record_id   text,
+  action      text not null check (action in ('insert','update','delete')),
+  summary     text,
+  old_data    jsonb,
+  new_data    jsonb
+);
+create index audit_log_occurred_at_idx on public.audit_log(occurred_at desc);
+
+alter table public.audit_log enable row level security;
+create policy "audit_log_admin_only" on public.audit_log for select using (public.is_admin());
+grant select on public.audit_log to authenticated;
+
+create or replace function public.log_audit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_actor_email text;
+  v_record_id text;
+  v_summary text;
+  v_label text;
+begin
+  select email into v_actor_email from public.profiles where id = v_actor;
+
+  v_record_id := coalesce((case when TG_OP = 'DELETE' then OLD.id else NEW.id end)::text, '');
+
+  if TG_TABLE_NAME = 'profiles' then
+    if TG_OP = 'INSERT' then
+      v_summary := format('%s signed up and is awaiting approval', NEW.email);
+    elsif TG_OP = 'UPDATE' then
+      v_summary := format('%s set %s''s status to %s', coalesce(v_actor_email, 'unknown'), NEW.email, NEW.status);
+    else
+      v_summary := format('%s removed user %s', coalesce(v_actor_email, 'unknown'), OLD.email);
+    end if;
+  else
+    if TG_TABLE_NAME = 'members' then
+      v_label := coalesce((case when TG_OP = 'DELETE' then OLD.name else NEW.name end), v_record_id);
+    elsif TG_TABLE_NAME = 'households' then
+      v_label := coalesce((case when TG_OP = 'DELETE' then OLD.name else NEW.name end), v_record_id);
+    elsif TG_TABLE_NAME = 'companionships' then
+      v_label := coalesce((case when TG_OP = 'DELETE' then OLD.m1_name else NEW.m1_name end), v_record_id);
+    else
+      v_label := v_record_id;
+    end if;
+
+    if TG_OP = 'UPDATE' and TG_TABLE_NAME in ('members','households','companionships') then
+      if jsonb_array_length(coalesce(NEW.notes,'[]'::jsonb)) > jsonb_array_length(coalesce(OLD.notes,'[]'::jsonb)) then
+        v_summary := format('%s added a note on %s "%s"', coalesce(v_actor_email,'unknown'), TG_TABLE_NAME, v_label);
+      elsif jsonb_array_length(coalesce(NEW.notes,'[]'::jsonb)) < jsonb_array_length(coalesce(OLD.notes,'[]'::jsonb)) then
+        v_summary := format('%s deleted a note on %s "%s"', coalesce(v_actor_email,'unknown'), TG_TABLE_NAME, v_label);
+      else
+        v_summary := format('%s updated %s "%s"', coalesce(v_actor_email,'unknown'), TG_TABLE_NAME, v_label);
+      end if;
+    elsif TG_OP = 'INSERT' then
+      v_summary := format('%s created %s "%s"', coalesce(v_actor_email,'unknown'), TG_TABLE_NAME, v_label);
+    elsif TG_OP = 'DELETE' then
+      v_summary := format('%s deleted %s "%s"', coalesce(v_actor_email,'unknown'), TG_TABLE_NAME, v_label);
+    else
+      v_summary := format('%s %s %s "%s"', coalesce(v_actor_email,'unknown'), lower(TG_OP), TG_TABLE_NAME, v_label);
+    end if;
+  end if;
+
+  insert into public.audit_log(actor_id, actor_email, table_name, record_id, action, summary, old_data, new_data)
+  values (
+    v_actor, v_actor_email, TG_TABLE_NAME, v_record_id, lower(TG_OP), v_summary,
+    case when TG_OP <> 'INSERT' then to_jsonb(OLD) else null end,
+    case when TG_OP <> 'DELETE' then to_jsonb(NEW) else null end
+  );
+
+  return coalesce(NEW, OLD);
+end;
+$$;
+
+create trigger audit_members after insert or update or delete on public.members
+  for each row execute function public.log_audit();
+create trigger audit_households after insert or update or delete on public.households
+  for each row execute function public.log_audit();
+create trigger audit_companionships after insert or update or delete on public.companionships
+  for each row execute function public.log_audit();
+create trigger audit_profiles after insert or update or delete on public.profiles
+  for each row execute function public.log_audit();
+
+-- ── Note @-mention notifications ─────────────────────────────────
+-- Called from the client after a note with tagged collaborators is saved.
+create or replace function public.notify_note_mention(
+  p_table text, p_record_label text, p_note_text text, p_author_email text, p_mention_ids uuid[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_mention_emails text[];
+begin
+  if not public.is_approved() then
+    return;
+  end if;
+  if p_mention_ids is null or array_length(p_mention_ids, 1) is null then
+    return;
+  end if;
+
+  select array_agg(email) into v_mention_emails
+  from public.profiles where id = any(p_mention_ids);
+
+  perform public.send_admin_email(
+    format('Note mention — %s', p_table),
+    format('%s tagged %s in a note on %s "%s": %s',
+      coalesce(p_author_email, 'someone'),
+      coalesce(array_to_string(v_mention_emails, ', '), 'a collaborator'),
+      p_table, p_record_label, coalesce(p_note_text, ''))
+  );
+end;
+$$;
+
+revoke all on function public.notify_note_mention(text, text, text, text, uuid[]) from public;
+grant execute on function public.notify_note_mention(text, text, text, text, uuid[]) to authenticated;
