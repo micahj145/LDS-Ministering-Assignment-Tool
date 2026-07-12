@@ -120,6 +120,7 @@ tr:hover td{background:#fafbfc}
     <h2 id="pending-title">Awaiting Approval</h2>
     <p id="pending-message" style="font-size:0.9rem;color:#666;margin-bottom:1rem"></p>
     <button class="btn btn-secondary" onclick="signOut()">Sign Out</button>
+    <div id="pending-debug" style="font-size:0.7rem;color:#aaa;margin-top:1.25rem;word-break:break-all;text-align:left"></div>
   </div>
 </div>
 
@@ -677,13 +678,17 @@ async function resolveAuthState() {
   document.getElementById('user-menu').style.display = 'flex';
   document.getElementById('user-email').textContent = session.user.email;
 
-  const { data: profile } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
+  const { data: profile, error: profileErr } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
   if (!profile || profile.status !== 'approved') {
     document.getElementById('auth-loading').style.display = 'none';
     document.getElementById('pending-title').textContent = profile?.status === 'denied' ? 'Access Denied' : 'Awaiting Approval';
     document.getElementById('pending-message').textContent = profile?.status === 'denied'
       ? 'The site admin has denied access for this account.'
       : 'Your account has been created and is waiting for the site admin to approve access. Check back later.';
+    document.getElementById('pending-debug').textContent =
+      `debug — session user id: ${session.user.id} · email: ${session.user.email} · profile found: ${!!profile}` +
+      (profile ? ` · status: ${profile.status} · is_admin: ${profile.is_admin}` : '') +
+      (profileErr ? ` · query error: ${profileErr.message} (${profileErr.code || 'no code'})` : '');
     document.getElementById('pending-screen').style.display = 'block';
     return;
   }
