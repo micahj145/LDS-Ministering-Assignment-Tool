@@ -34,6 +34,7 @@ tr:hover td{background:#fafbfc}
 .badge-blue{background:#d1ecf1;color:#0c5460}
 .badge-yellow{background:#fff3cd;color:#856404}
 .btn{display:inline-block;padding:0.45rem 0.9rem;border-radius:6px;border:none;cursor:pointer;font-size:0.88rem;font-weight:500;transition:all 0.15s}
+.btn:disabled{opacity:0.35;cursor:default}
 .btn-primary{background:#1a3a5c;color:white}
 .btn-primary:hover{background:#142e4a}
 .btn-secondary{background:#e9ecef;color:#333}
@@ -520,11 +521,13 @@ function rowToHousehold(r) {
 }
 function compToRow(list, c) {
   return { id: c.id, list, m1_id: c.m1Id ?? null, m1_name: c.m1Name || null, m2_id: c.m2Id ?? null,
-           m2_name: c.m2Name || null, households: c.households || [], notes: c.notes || [], district: c.district || null };
+           m2_name: c.m2Name || null, households: c.households || [], notes: c.notes || [], district: c.district || null,
+           position: c.position ?? 0 };
 }
 function rowToCompanionship(r) {
   return { id: r.id, m1Id: r.m1_id, m1Name: r.m1_name || '', m2Id: r.m2_id, m2Name: r.m2_name || '',
-           households: r.households || [], notes: r.notes || [], district: r.district || undefined };
+           households: r.households || [], notes: r.notes || [], district: r.district || undefined,
+           position: r.position ?? 0 };
 }
 
 function dbFail(error) {
@@ -563,6 +566,11 @@ async function dbUpsertCompanionship(list, record) {
   const { error } = await sb.from('companionships').upsert(compToRow(list, record));
   if (error) dbFail(error);
 }
+async function dbUpsertCompanionships(list, records) {
+  if (!records.length) return;
+  const { error } = await sb.from('companionships').upsert(records.map(r => compToRow(list, r)));
+  if (error) dbFail(error);
+}
 async function dbDeleteCompanionship(list, id) {
   const { error } = await sb.from('companionships').delete().eq('list', list).eq('id', id);
   if (error) dbFail(error);
@@ -571,7 +579,7 @@ async function dbReplaceCompanionshipList(list, records) {
   const { error: delErr } = await sb.from('companionships').delete().eq('list', list);
   if (delErr) return dbFail(delErr);
   if (!records.length) return;
-  const { error } = await sb.from('companionships').insert(records.map(r => compToRow(list, r)));
+  const { error } = await sb.from('companionships').insert(records.map((r, i) => compToRow(list, { ...r, position: i })));
   if (error) dbFail(error);
 }
 
@@ -650,8 +658,8 @@ async function setUserStatus(id, status) {
 async function loadAllData() {
   const [{ data: members }, { data: households }, { data: current }, { data: proposed }] = await Promise.all([
     sb.from('members').select('*'), sb.from('households').select('*'),
-    sb.from('companionships').select('*').eq('list', 'current'),
-    sb.from('companionships').select('*').eq('list', 'proposed'),
+    sb.from('companionships').select('*').eq('list', 'current').order('position', { ascending: true }),
+    sb.from('companionships').select('*').eq('list', 'proposed').order('position', { ascending: true }),
   ]);
   S.members    = (members || []).map(rowToMember);
   S.households = (households || []).map(rowToHousehold);
@@ -1654,7 +1662,7 @@ function renderCurrent() {
 
   document.getElementById('current-list').innerHTML = !list.length
     ? '<div class="empty-state"><div class="icon">🤝</div><p>No current assignments yet. Promote from Proposed or click "+ Add".</p></div>'
-    : list.map(c => companionshipHTML(c.m1Name, c.m2Name, c.households, c.district, c.id, 'current')).join('');
+    : list.map((c, i) => companionshipHTML(c.m1Name, c.m2Name, c.households, c.district, c.id, 'current', i, list.length)).join('');
 
   const unDiv = document.getElementById('current-unassigned-list');
   if (unDiv) {
@@ -1694,7 +1702,7 @@ function renderCurrent() {
   }
 }
 
-function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed') {
+function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed', idx, total) {
   const ministers = m2
     ? `${esc(m1)} <span style="color:#aaa">+</span> ${esc(m2)}`
     : `${esc(m1)} <span class="badge badge-blue">Solo</span>`;
@@ -1708,6 +1716,14 @@ function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed') {
   }).join('') || '<span style="color:#aaa;font-size:0.82rem">No households</span>';
 
   const notesArr = id ? (S[listKey].find(x => x.id === id)?.notes || []) : [];
+  const moveBtns = (id && idx !== undefined)
+    ? `<div style="display:flex;flex-direction:column;gap:0.15rem;flex-shrink:0">
+         <button class="btn btn-secondary btn-sm" style="padding:0.1rem 0.5rem;line-height:1.2" title="Move up"
+           ${idx === 0 ? 'disabled' : ''} onclick="event.stopPropagation();moveCompanionship('${listKey}','${id}',-1)">▲</button>
+         <button class="btn btn-secondary btn-sm" style="padding:0.1rem 0.5rem;line-height:1.2" title="Move down"
+           ${idx === total - 1 ? 'disabled' : ''} onclick="event.stopPropagation();moveCompanionship('${listKey}','${id}',1)">▼</button>
+       </div>`
+    : '';
   const editBtn = id
     ? `<div style="display:flex;gap:0.35rem;flex-shrink:0">
          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditModal('${id}','${listKey}')">Edit</button>
@@ -1747,8 +1763,9 @@ function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed') {
     : '';
 
   return `<div class="companionship-card" ${id?`onclick="openEditModal('${id}','${listKey}')"`:''}>
-    <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:0.35rem">
-      <div class="ministers">${ministers}</div>${editBtn}
+    <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:0.35rem;gap:0.5rem">
+      ${moveBtns}
+      <div class="ministers" style="flex:1">${ministers}</div>${editBtn}
     </div>
     ${district?`<div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem">District: ${esc(district)}</div>`:''}
     <div>${tags}</div>
@@ -1803,7 +1820,7 @@ function renderProposed() {
 
   document.getElementById('proposed-list').innerHTML = !list.length
     ? '<div class="empty-state"><div class="icon">✏️</div><p>No proposals yet. Click "+ Add" to start.</p></div>'
-    : list.map(p => companionshipHTML(p.m1Name, p.m2Name, p.households, '', p.id)).join('');
+    : list.map((p, i) => companionshipHTML(p.m1Name, p.m2Name, p.households, '', p.id, 'proposed', i, list.length)).join('');
 
   if (!unassigned.length) {
     document.getElementById('unassigned-list').innerHTML = bList.length === 0
@@ -2090,7 +2107,7 @@ function saveNewCompanionship() {
   const m2  = resolveM2(document.getElementById('add-m2').value);
   const hhs = getSelectedHHIds('add');
   const m1  = S.members.find(b => b.id === m1Id);
-  const record = { id:uid(), m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:[] };
+  const record = { id:uid(), m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:[], position:S[_modalListKey].length };
   S[_modalListKey].push(record);
   dbUpsertCompanionship(_modalListKey, record); closeModal('add-modal'); renderModalList();
 }
@@ -2104,7 +2121,8 @@ function saveEditCompanionship() {
   const m1  = S.members.find(b => b.id === m1Id);
   const idx = S[_modalListKey].findIndex(x => x.id === id); if (idx < 0) return;
   const existingNotes = S[_modalListKey][idx].notes || [];
-  const record = { id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:existingNotes };
+  const existingPosition = S[_modalListKey][idx].position;
+  const record = { id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:existingNotes, position:existingPosition };
   S[_modalListKey][idx] = record;
   dbUpsertCompanionship(_modalListKey, record); closeModal('edit-modal'); renderModalList();
 }
@@ -2114,6 +2132,18 @@ function deleteCompanionship() {
   const id = document.getElementById('edit-id').value;
   S[_modalListKey] = S[_modalListKey].filter(x=>x.id!==id);
   dbDeleteCompanionship(_modalListKey, id); closeModal('edit-modal'); renderModalList();
+}
+
+async function moveCompanionship(listKey, id, direction) {
+  const list = S[listKey];
+  const idx = list.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  const swapIdx = idx + direction;
+  if (swapIdx < 0 || swapIdx >= list.length) return;
+  [list[idx], list[swapIdx]] = [list[swapIdx], list[idx]];
+  list.forEach((c, i) => { c.position = i; });
+  if (listKey === 'current') renderCurrent(); else renderProposed();
+  await dbUpsertCompanionships(listKey, list);
 }
 
 // ── Distance & Geocoding ──────────────────────────────────────

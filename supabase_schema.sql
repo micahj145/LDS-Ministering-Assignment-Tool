@@ -102,6 +102,7 @@ create table public.companionships (
   households jsonb not null default '[]'::jsonb,  -- ids OR bare name strings, mixed
   notes      jsonb not null default '[]'::jsonb,
   district   text,               -- only ever populated by CSV import
+  position   integer not null default 0,  -- display order within its list, lower first
   updated_at timestamptz not null default now()
 );
 
