@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ministering Assignment Tool</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f7fa;color:#333;min-height:100vh}
@@ -95,6 +97,7 @@ tr:hover td{background:#fafbfc}
   </div>
   <div id="user-menu" style="display:none;align-items:center;gap:0.75rem;font-size:0.85rem">
     <span id="user-email"></span>
+    <button class="btn btn-secondary btn-sm" onclick="refreshFromCloud()" title="Pull the latest saved data — changes aren't pushed live, only on save/reload">&#8635; Refresh</button>
     <button class="btn btn-secondary btn-sm" onclick="signOut()">Sign Out</button>
   </div>
 </header>
@@ -500,10 +503,24 @@ tr:hover td{background:#fafbfc}
 </div>
 
 <script>
-// ── Supabase Config — fill in after creating your Supabase project ──
-const SUPABASE_URL = 'https://svszdeqilbzveguupsfo.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2c3pkZXFpbGJ6dmVndXVwc2ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NDYxMDUsImV4cCI6MjA5OTQyMjEwNX0.AcHlZUYSyZ-2XAO-2a-Pxcoggu5pwHMhXKZf_TJFSps';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// ── Firebase Config — fill in after creating your Firebase project ──
+// Client-safe values (like the old Supabase anon key) — real access
+// control lives in firestore.rules, not in keeping these secret.
+const firebaseConfig = {
+  apiKey: "AIzaSyD7j-JaXl9T11FKRKQaGnI8OZAjzkR07PE",
+  authDomain: "pb1-ward-council-planning.firebaseapp.com",
+  projectId: "pb1-ward-council-planning",
+  storageBucket: "pb1-ward-council-planning.firebasestorage.app",
+  messagingSenderId: "633648985018",
+  appId: "1:633648985018:web:8030ffa71391aa7da32383",
+};
+firebase.initializeApp(firebaseConfig);
+const fbAuth = firebase.auth();
+const db = firebase.firestore();
+const WARD_DOC = db.collection('wardData').doc('shared');
+
+// Must match the admin bootstrap email in firestore.rules exactly.
+const ADMIN_EMAIL = 'micahj145@gmail.com';
 
 // ── State ────────────────────────────────────────────────────
 const S = {
@@ -511,112 +528,101 @@ const S = {
   households: [],   // household units (imported separately)
   current: [],      // current companionship assignments
   proposed: [],     // user-drafted proposals
+  activityLog: [],  // { ts, user } — one entry per saved batch of changes
   rawMembers: null,
   rawHouseholds: null,
   rawAssign: null,
 };
 
-// ── Supabase persistence layer ──────────────────────────────────
-function memberToRow(m) {
-  return { id: m.id, name: m.name, gender: m.gender || null, age: m.age || 0, phone: m.phone || null,
-           is_brother: m.isBrother !== false, household_id: m.householdId ?? null,
-           in_pool: m.inPool === undefined ? null : m.inPool, notes: m.notes || [] };
-}
-function rowToMember(r) {
-  return { id: r.id, name: r.name, gender: r.gender || '', age: r.age || 0, phone: r.phone || '',
-           isBrother: r.is_brother, householdId: r.household_id, inPool: r.in_pool ?? undefined,
-           notes: r.notes || [] };
-}
-function hhToRow(h) {
-  return { id: h.id, name: h.name, members: h.members || [], head: h.head || null, address: h.address || null,
-           phone: h.phone || null, email: h.email || null, notes: h.notes || [],
-           lat: h.lat ?? null, lng: h.lng ?? null, in_pool: h.inPool === undefined ? null : h.inPool };
-}
-function rowToHousehold(r) {
-  const out = { id: r.id, name: r.name, members: r.members || [], head: r.head || '', address: r.address || '',
-                phone: r.phone || '', email: r.email || '', notes: r.notes || [], inPool: r.in_pool ?? undefined };
-  if (r.lat != null) { out.lat = r.lat; out.lng = r.lng; }
-  return out;
-}
-function compToRow(list, c) {
-  return { id: c.id, list, m1_id: c.m1Id ?? null, m1_name: c.m1Name || null, m2_id: c.m2Id ?? null,
-           m2_name: c.m2Name || null, households: c.households || [], notes: c.notes || [], district: c.district || null,
-           position: c.position ?? 0 };
-}
-function rowToCompanionship(r) {
-  return { id: r.id, m1Id: r.m1_id, m1Name: r.m1_name || '', m2Id: r.m2_id, m2Name: r.m2_name || '',
-           households: r.households || [], notes: r.notes || [], district: r.district || undefined,
-           position: r.position ?? 0 };
-}
-
+// ── Cloud persistence layer (single shared document) ────────────
+// The whole ward dataset lives in one Firestore document (wardData/shared)
+// instead of separate tables. Every mutation function elsewhere in this
+// file still calls the same dbUpsert*/dbDelete*/dbReplace* helpers as
+// before — they now all funnel into one debounced whole-document write,
+// since S is already the source of truth for members/households/current/
+// proposed by the time any of them run (the same pattern the original
+// localStorage-only save() used, before either backend existed). That
+// keeps every call site elsewhere in the file working unchanged.
 function dbFail(error) {
-  console.error('Supabase error:', error);
-  alert('A save to the server failed: ' + (error?.message || 'unknown error') +
+  console.error('Firestore sync error:', error);
+  alert('A save to the cloud failed: ' + (error?.message || 'unknown error') +
         '\nYour change may not be visible to other users — try again or reload.');
 }
 
-async function dbUpsertMembers(members) {
-  if (!members.length) return;
-  const { error } = await sb.from('members').upsert(members.map(memberToRow));
-  if (error) dbFail(error);
-}
-function dbUpsertMember(m) { return dbUpsertMembers([m]); }
+let _syncTimer = null;
+let _syncPromise = null;
+let _resolveSync = null;
 
-async function dbDeleteMembers(ids) {
-  if (!ids.length) return;
-  const { error } = await sb.from('members').delete().in('id', ids);
-  if (error) dbFail(error);
-}
-
-async function dbUpsertHouseholds(households) {
-  if (!households.length) return;
-  const { error } = await sb.from('households').upsert(households.map(hhToRow));
-  if (error) dbFail(error);
-}
-function dbUpsertHousehold(hh) { return dbUpsertHouseholds([hh]); }
-
-async function dbDeleteHouseholds(ids) {
-  if (!ids.length) return;
-  const { error } = await sb.from('households').delete().in('id', ids);
-  if (error) dbFail(error);
+// Debounces rapid-fire mutations (e.g. a bulk CSV import) into a single
+// write, ~600ms after the last change. Callers that `await` a db* helper
+// still correctly wait for that eventual write to finish.
+function scheduleSync() {
+  if (!_syncPromise) _syncPromise = new Promise(res => { _resolveSync = res; });
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(runSync, 600);
+  return _syncPromise;
 }
 
-async function dbUpsertCompanionship(list, record) {
-  const { error } = await sb.from('companionships').upsert(compToRow(list, record));
-  if (error) dbFail(error);
-}
-async function dbUpsertCompanionships(list, records) {
-  if (!records.length) return;
-  const { error } = await sb.from('companionships').upsert(records.map(r => compToRow(list, r)));
-  if (error) dbFail(error);
-}
-async function dbDeleteCompanionship(list, id) {
-  const { error } = await sb.from('companionships').delete().eq('list', list).eq('id', id);
-  if (error) dbFail(error);
-}
-async function dbReplaceCompanionshipList(list, records) {
-  const { error: delErr } = await sb.from('companionships').delete().eq('list', list);
-  if (delErr) return dbFail(delErr);
-  if (!records.length) return;
-  const { error } = await sb.from('companionships').insert(records.map((r, i) => compToRow(list, { ...r, position: i })));
-  if (error) dbFail(error);
-}
-
-async function dbReplaceTable(table, rows) {
-  const { error: delErr } = await sb.from(table).delete().not('id', 'is', null);
-  if (delErr) return dbFail(delErr);
-  if (!rows.length) return;
-  const { error } = await sb.from(table).insert(rows);
-  if (error) dbFail(error);
+async function runSync() {
+  const resolve = _resolveSync;
+  _syncTimer = null; _syncPromise = null; _resolveSync = null;
+  const who = _currentUserName || _currentUserEmail || 'unknown';
+  const log = (S.activityLog || []).concat([{ ts: Date.now(), user: who }]).slice(-200);
+  try {
+    await WARD_DOC.set({
+      members: S.members, households: S.households, current: S.current, proposed: S.proposed,
+      activityLog: log,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: who,
+    });
+    S.activityLog = log;
+  } catch (error) {
+    dbFail(error);
+  } finally {
+    if (resolve) resolve();
+  }
 }
 
-async function dbReplaceAll({ members, households, current, proposed }) {
-  await Promise.all([
-    dbReplaceTable('members', members.map(memberToRow)),
-    dbReplaceTable('households', households.map(hhToRow)),
-    dbReplaceCompanionshipList('current', current),
-    dbReplaceCompanionshipList('proposed', proposed),
-  ]);
+// Best-effort flush if the tab closes right after an edit, before the
+// debounce timer fires — not guaranteed (browsers can kill async work
+// mid-unload), but better than nothing.
+window.addEventListener('beforeunload', () => { if (_syncTimer) { clearTimeout(_syncTimer); runSync(); } });
+
+async function dbUpsertMembers(_members)              { return scheduleSync(); }
+function  dbUpsertMember(_m)                          { return scheduleSync(); }
+async function dbDeleteMembers(_ids)                  { return scheduleSync(); }
+async function dbUpsertHouseholds(_households)        { return scheduleSync(); }
+function  dbUpsertHousehold(_hh)                      { return scheduleSync(); }
+async function dbDeleteHouseholds(_ids)               { return scheduleSync(); }
+async function dbUpsertCompanionship(_list, _record)  { return scheduleSync(); }
+async function dbUpsertCompanionships(_list, _records){ return scheduleSync(); }
+async function dbDeleteCompanionship(_list, _id)      { return scheduleSync(); }
+async function dbReplaceCompanionshipList(_list, _r)  { return scheduleSync(); }
+async function dbReplaceTable(_table, _rows)          { return scheduleSync(); }
+async function dbReplaceAll(_all)                     { return scheduleSync(); }
+
+async function loadAllData() {
+  const snap = await WARD_DOC.get();
+  const data = snap.exists ? snap.data() : {};
+  S.members     = data.members     || [];
+  S.households  = data.households  || [];
+  S.current     = data.current     || [];
+  S.proposed    = data.proposed    || [];
+  S.activityLog = data.activityLog || [];
+  // Normalize addresses from older imports that may have embedded newlines or ZIP+4
+  S.households.forEach(hh => { if (hh.address) hh.address = normalizeAddress(hh.address); });
+}
+
+// Manual pull of the latest cloud state — no live/realtime sync by design
+// (decided against it: not necessary for this group's usage pattern).
+async function refreshFromCloud() {
+  await loadAllData();
+  refreshBadge();
+  showTab(currentTabName());
+}
+function currentTabName() {
+  const active = document.querySelector('.tab-content.active');
+  return active ? active.id.replace('tab-', '') : 'import';
 }
 
 // ── Auth ─────────────────────────────────────────────────────
@@ -645,16 +651,29 @@ async function handleAuthSubmit() {
     errEl.textContent = 'First and last name are required.'; return;
   }
 
-  const { error } = _authMode === 'signin'
-    ? await sb.auth.signInWithPassword({ email, password })
-    : await sb.auth.signUp({ email, password, options: { data: { first_name: firstName, last_name: lastName } } });
-  if (error) { errEl.textContent = error.message; return; }
+  try {
+    if (_authMode === 'signin') {
+      await fbAuth.signInWithEmailAndPassword(email, password);
+    } else {
+      const cred = await fbAuth.createUserWithEmailAndPassword(email, password);
+      const isBootstrapAdmin = email.toLowerCase() === ADMIN_EMAIL;
+      await db.collection('profiles').doc(cred.user.uid).set({
+        email, firstName, lastName,
+        status: isBootstrapAdmin ? 'approved' : 'pending',
+        isAdmin: isBootstrapAdmin,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    errEl.textContent = error.message;
+    return;
+  }
 
   await resolveAuthState();
 }
 
 async function signOut() {
-  await sb.auth.signOut();
+  await fbAuth.signOut();
   await resolveAuthState();
 }
 
@@ -670,8 +689,9 @@ async function saveMyName() {
   const lastName = document.getElementById('my-last-name').value.trim();
   const errEl = document.getElementById('edit-name-error');
   if (!firstName || !lastName) { errEl.textContent = 'First and last name are required.'; return; }
-  const { error } = await sb.rpc('update_my_name', { p_first_name: firstName, p_last_name: lastName });
-  if (error) { errEl.textContent = error.message; return; }
+  try {
+    await db.collection('profiles').doc(_currentUserId).update({ firstName, lastName });
+  } catch (error) { errEl.textContent = error.message; return; }
   _currentUserFirstName = firstName;
   _currentUserLastName = lastName;
   _currentUserName = [firstName, lastName].filter(Boolean).join(' ') || _currentUserEmail;
@@ -680,14 +700,14 @@ async function saveMyName() {
 }
 
 async function renderAdminPanel() {
-  const { data: profiles } = await sb.from('profiles').select('*').order('created_at', { ascending: true });
-  const list = profiles || [];
+  const snap = await db.collection('profiles').orderBy('createdAt', 'asc').get();
+  const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   const row = p => {
-    const name = [p.first_name, p.last_name].filter(Boolean).join(' ');
+    const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
     return `
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f0f0f0;padding:0.5rem 0">
       <div><div style="font-weight:500">${name ? esc(name) + ' — ' : ''}${esc(p.email)}</div>
-      <div style="font-size:0.78rem;color:#888">${p.status}${p.is_admin ? ' · admin' : ''}</div></div>
+      <div style="font-size:0.78rem;color:#888">${p.status}${p.isAdmin ? ' · admin' : ''}</div></div>
       <div style="display:flex;gap:0.4rem">
         ${p.status !== 'approved' ? `<button class="btn btn-primary btn-sm" onclick="setUserStatus('${p.id}','approved')">Approve</button>` : ''}
         ${p.status !== 'denied'   ? `<button class="btn btn-danger btn-sm" onclick="setUserStatus('${p.id}','denied')">Deny</button>` : ''}
@@ -707,50 +727,35 @@ async function renderAdminPanel() {
   loadAuditLog();
 }
 async function setUserStatus(id, status) {
-  const { error } = await sb.from('profiles').update({ status }).eq('id', id);
-  if (error) { alert('Failed to update: ' + error.message); return; }
+  try {
+    await db.collection('profiles').doc(id).update({ status });
+  } catch (error) { alert('Failed to update: ' + error.message); return; }
   renderAdminPanel();
 }
 
-async function loadAuditLog() {
+// Reads from S.activityLog (part of the shared document) instead of a
+// separate audit table — one entry per saved batch of changes ("Micah
+// saved changes"), not a per-field trail like the old Postgres trigger
+// gave. Simplified deliberately to avoid needing Cloud Functions (which
+// would require Firebase's paid Blaze plan) just for server-side logging.
+function loadAuditLog() {
   const el = document.getElementById('audit-log-list');
   const from = document.getElementById('audit-from').value;
   const to   = document.getElementById('audit-to').value;
   if (!from || !to) return;
-  const toExclusive = new Date(to + 'T00:00:00');
-  toExclusive.setDate(toExclusive.getDate() + 1);
-
-  el.innerHTML = '<div style="color:#aaa;font-size:0.85rem;padding:0.4rem 0">Loading…</div>';
-  const { data, error } = await sb.from('audit_log').select('*')
-    .gte('occurred_at', new Date(from + 'T00:00:00').toISOString())
-    .lt('occurred_at', toExclusive.toISOString())
-    .order('occurred_at', { ascending: false })
-    .limit(500);
-  if (error) { el.innerHTML = `<div style="color:#dc3545;font-size:0.85rem">Failed to load: ${esc(error.message)}</div>`; return; }
-  if (!data || !data.length) { el.innerHTML = '<div class="empty-state">No activity in this range.</div>'; return; }
-  el.innerHTML = data.map(a => `
+  const fromTs = new Date(from + 'T00:00:00').getTime();
+  const toTs   = new Date(to   + 'T00:00:00').getTime() + 24 * 60 * 60 * 1000;
+  const entries = (S.activityLog || []).filter(a => a.ts >= fromTs && a.ts < toTs).sort((a, b) => b.ts - a.ts);
+  if (!entries.length) { el.innerHTML = '<div class="empty-state">No activity in this range.</div>'; return; }
+  el.innerHTML = entries.map(a => `
     <div style="border-bottom:1px solid #f0f0f0;padding:0.5rem 0;font-size:0.85rem">
-      <span style="color:#888;font-size:0.78rem">${new Date(a.occurred_at).toLocaleString()}</span>
-      <div>${esc(a.summary || `${a.action} on ${a.table_name}`)}</div>
+      <span style="color:#888;font-size:0.78rem">${new Date(a.ts).toLocaleString()}</span>
+      <div>${esc(a.user || 'Unknown')} saved changes</div>
     </div>
   `).join('');
 }
 
 // ── Init ─────────────────────────────────────────────────────
-async function loadAllData() {
-  const [{ data: members }, { data: households }, { data: current }, { data: proposed }] = await Promise.all([
-    sb.from('members').select('*'), sb.from('households').select('*'),
-    sb.from('companionships').select('*').eq('list', 'current').order('position', { ascending: true }),
-    sb.from('companionships').select('*').eq('list', 'proposed').order('position', { ascending: true }),
-  ]);
-  S.members    = (members || []).map(rowToMember);
-  S.households = (households || []).map(rowToHousehold);
-  // Normalize addresses from older imports that may have embedded newlines or ZIP+4
-  S.households.forEach(hh => { if (hh.address) hh.address = normalizeAddress(hh.address); });
-  S.current    = (current || []).map(rowToCompanionship);
-  S.proposed   = (proposed || []).map(rowToCompanionship);
-}
-
 let _currentUserId = null;
 let _currentUserEmail = null;
 let _currentUserName = null;
@@ -764,19 +769,24 @@ async function resolveAuthState() {
   document.getElementById('app-shell').style.display = 'none';
   document.getElementById('user-menu').style.display = 'none';
 
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) {
+  const user = fbAuth.currentUser;
+  if (!user) {
     _currentUserId = null; _currentUserEmail = null; _currentUserName = null;
     document.getElementById('auth-loading').style.display = 'none';
     document.getElementById('auth-screen').style.display = 'block';
     return;
   }
-  _currentUserId = session.user.id;
-  _currentUserEmail = session.user.email;
+  _currentUserId = user.uid;
+  _currentUserEmail = user.email;
   document.getElementById('user-menu').style.display = 'flex';
-  document.getElementById('user-email').textContent = session.user.email;
+  document.getElementById('user-email').textContent = user.email;
 
-  const { data: profile } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
+  let profile = null;
+  try {
+    const doc = await db.collection('profiles').doc(user.uid).get();
+    profile = doc.exists ? doc.data() : null;
+  } catch (e) { /* falls through to the pending/denied screen below */ }
+
   if (!profile || profile.status !== 'approved') {
     document.getElementById('auth-loading').style.display = 'none';
     document.getElementById('pending-title').textContent = profile?.status === 'denied' ? 'Access Denied' : 'Awaiting Approval';
@@ -787,10 +797,10 @@ async function resolveAuthState() {
     return;
   }
 
-  _currentUserFirstName = profile.first_name || '';
-  _currentUserLastName = profile.last_name || '';
+  _currentUserFirstName = profile.firstName || '';
+  _currentUserLastName = profile.lastName || '';
   _currentUserName = [_currentUserFirstName, _currentUserLastName].filter(Boolean).join(' ') || _currentUserEmail;
-  document.getElementById('nav-admin-btn').style.display = profile.is_admin ? '' : 'none';
+  document.getElementById('nav-admin-btn').style.display = profile.isAdmin ? '' : 'none';
   await loadAllData();
 
   document.getElementById('auth-loading').style.display = 'none';
@@ -800,7 +810,7 @@ async function resolveAuthState() {
   if (S.members.length && S.households.length) showLinkStatus();
 }
 
-(async function init() {
+(function init() {
   setupDrop('member-drop', 'member-file', handleMemberFile);
   setupDrop('hh-drop',     'hh-file',     handleHouseholdsFile);
   setupDrop('assign-drop', 'assign-file', handleAssignFile);
@@ -809,7 +819,11 @@ async function resolveAuthState() {
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
   );
 
-  await resolveAuthState();
+  // Fires once immediately with the current user (or null) on load, then
+  // again on every future sign-in/sign-out — replaces the old one-shot
+  // getSession() call, since the Firebase SDK restores auth state
+  // asynchronously from local storage.
+  fbAuth.onAuthStateChanged(() => { resolveAuthState(); });
 })();
 
 function uid()  { return Math.random().toString(36).slice(2,10); }

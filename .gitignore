@@ -1,0 +1,6 @@
+# Session/data exports and derived seed data — contain real member PII
+# (names, addresses, phone numbers, personal notes). Never commit these.
+/*.json
+/*.csv
+errors.txt
+supabase/seed.sql

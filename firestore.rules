@@ -1,0 +1,79 @@
+// ═══════════════════════════════════════════════════════════════
+// Ministering Assignment Tool — Firestore security rules
+//
+// Deploy via Firebase Console -> Firestore Database -> Rules -> paste
+// this in and Publish (or `firebase deploy --only firestore:rules` if
+// you're using the CLI).
+//
+// Model: two collections.
+//   - profiles/{uid}   one doc per user, gates access (mirrors the old
+//                       Supabase `profiles` table + admin-approval flow).
+//   - wardData/shared  ONE doc holding the entire ward dataset as JSON
+//                       (members/households/current/proposed/activityLog)
+//                       — the "single shared blob" design, replacing the
+//                       old per-table Postgres schema.
+//
+// There's no Cloud Functions trigger here (unlike the old Postgres
+// handle_new_user()) — the client creates its own profile doc right
+// after signup. Because of that, these rules carry the real security
+// weight for signup: a client MUST NOT be able to self-approve or
+// self-promote to admin. The `create` rule below enforces that by
+// pinning status/isAdmin to exactly what the app would assign, based
+// on whether the signup email matches ADMIN_EMAIL.
+// ═══════════════════════════════════════════════════════════════
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
+    }
+
+    function isApproved() { return isSignedIn() && myProfile().status == 'approved'; }
+    function isAdmin()    { return isSignedIn() && myProfile().isAdmin == true; }
+
+    // Keep this in sync with ADMIN_EMAIL in ministering_tool.html.
+    function isBootstrapAdminEmail() {
+      return request.auth.token.email.lower() == 'micahj145@gmail.com';
+    }
+
+    match /profiles/{uid} {
+      // You can read your own profile (even while pending/denied, so the
+      // app can show you that status) — admins can read everyone's.
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Self-registration immediately after signup: only your OWN doc,
+      // and only with the exact status/isAdmin the app itself would set
+      // (approved+admin only for the designated bootstrap email; pending
+      // +non-admin for everyone else). This is what stops a client from
+      // signing up and just writing status:'approved' or isAdmin:true.
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['email','firstName','lastName','status','isAdmin','createdAt'])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.status == (isBootstrapAdminEmail() ? 'approved' : 'pending')
+        && request.resource.data.isAdmin == isBootstrapAdminEmail();
+
+      // You may update only your own first/last name — never your own
+      // status or isAdmin (that would be self-approval/self-promotion).
+      allow update: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.status  == resource.data.status
+        && request.resource.data.isAdmin == resource.data.isAdmin
+        && request.resource.data.email   == resource.data.email;
+
+      // Admins can update anyone's status/isAdmin (approve/deny/promote).
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // The single shared ward-data document. Any approved user has full
+    // read/write — same "shared dataset, last-write-wins" model the old
+    // Postgres RLS policies used, just collapsed to one document instead
+    // of per-row access on five tables.
+    match /wardData/shared {
+      allow read, write: if isApproved();
+    }
+  }
+}
