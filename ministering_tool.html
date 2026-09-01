@@ -114,7 +114,8 @@ tr:hover td{background:#fafbfc}
   </div>
   <div id="user-menu" style="display:none;align-items:center;gap:0.75rem;font-size:0.85rem">
     <span id="user-email"></span>
-    <button class="btn btn-secondary btn-sm" onclick="refreshFromCloud()" title="Pull the latest saved data — changes aren't pushed live, only on save/reload">&#8635; Refresh</button>
+    <span id="refresh-status" style="min-width:5.5rem;text-align:right;font-size:0.8rem"></span>
+    <button class="btn btn-secondary btn-sm" id="refresh-btn" onclick="refreshFromCloud()" title="Pull the latest saved data — changes aren't pushed live, only on save/reload">&#8635; Refresh</button>
     <button class="btn btn-secondary btn-sm" onclick="signOut()">Sign Out</button>
   </div>
 </header>
@@ -571,6 +572,11 @@ function dbFail(error) {
 let _syncTimer = null;
 let _syncPromise = null;
 let _resolveSync = null;
+// Outcome of the most recent write. runSync() swallows its own errors (it
+// alerts via dbFail and resolves anyway, so awaiting callers never hang), so
+// this is how a caller can tell whether that write actually landed —
+// refreshFromCloud() checks it before overwriting local state.
+let _lastSyncOk = true;
 
 // Debounces rapid-fire mutations (e.g. a bulk CSV import) into a single
 // write, ~600ms after the last change. Callers that `await` a db* helper
@@ -607,7 +613,9 @@ async function runSync() {
     payload.updatedBy = who;
     await WARD_DOC.set(payload);
     S.activityLog = log;
+    _lastSyncOk = true;
   } catch (error) {
+    _lastSyncOk = false;
     dbFail(error);
   } finally {
     if (resolve) resolve();
@@ -646,10 +654,58 @@ async function loadAllData() {
 
 // Manual pull of the latest cloud state — no live/realtime sync by design
 // (decided against it: not necessary for this group's usage pattern).
+//
+// Note this replaces S wholesale with the cloud copy, so it has to be careful
+// about two things: any edit whose debounced save hasn't fired yet, and a read
+// that fails (offline, or access revoked). Silently doing neither is what the
+// first version got wrong — it looked identical whether it worked or not.
 async function refreshFromCloud() {
-  await loadAllData();
-  refreshBadge();
-  showTab(currentTabName());
+  const btn = document.getElementById('refresh-btn');
+  const prevLabel = btn.innerHTML;
+
+  // A save may still be sitting on the ~600ms debounce. Flush it before
+  // pulling, or the incoming cloud copy would quietly discard that edit. Like
+  // any save, that flush writes the whole document, so it wins over a remote
+  // change that landed since this session loaded — the app's existing
+  // last-write-wins tradeoff, not something refresh introduces (the pending
+  // save was going to do exactly that 600ms later anyway). If the flush itself
+  // fails, stop — better to keep unsaved work on screen than to overwrite it
+  // (dbFail has already alerted with the details).
+  if (_syncTimer) {
+    clearTimeout(_syncTimer);
+    await runSync();
+    if (!_lastSyncOk) { setRefreshStatus('Not refreshed', '#ff9e9e'); return; }
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Refreshing…';
+  setRefreshStatus('', '');
+  try {
+    await loadAllData();
+    refreshBadge();
+    showTab(currentTabName());
+    setRefreshStatus('✓ Updated', '#7ee2a8');
+  } catch (error) {
+    console.error('Refresh failed:', error);
+    setRefreshStatus('Failed', '#ff9e9e');
+    alert('Could not pull the latest data: ' + (error?.message || 'unknown error') +
+          '\nYou may be offline, or your access may have changed. What you are looking at may be out of date.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = prevLabel;
+  }
+}
+
+let _refreshStatusTimer = null;
+function setRefreshStatus(text, color) {
+  const el = document.getElementById('refresh-status');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = color || '';
+  clearTimeout(_refreshStatusTimer);
+  // Clear after a few seconds so a stale "✓ Updated" can't sit there looking
+  // like it describes a later click that actually failed.
+  if (text) _refreshStatusTimer = setTimeout(() => { el.textContent = ''; }, 4000);
 }
 function currentTabName() {
   const active = document.querySelector('.tab-content.active');
