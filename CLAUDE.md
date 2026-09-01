@@ -98,6 +98,32 @@ draft had TOTP 2FA — it was superseded by this simpler flow, not retained). Th
 email (`micahj145@gmail.com`) is hardcoded in both `ministering_tool.html` (`ADMIN_EMAIL`) and
 `firestore.rules` (`isBootstrapAdminEmail()`) — keep those two in sync if it's ever changed.
 
+### Roles: two ways the tool is used
+The app serves two audiences, controlled by a `role` field on the profile and applied in
+`applyAccessVisibility()` / `hasFullAccess()`:
+
+- **`role: 'eq'` — Elders Quorum presidency.** The full tool: everything below plus Brothers,
+  Current Assignments and Proposed Assignments. This is the original use case — keeping
+  ministering companionships current.
+- **anything else — ward council member.** Import, Members, Households, and Ward Council
+  Collaboration. No ministering assignment tabs.
+- **`isAdmin`** is separate and orthogonal: it gates the Admin tab, the Data Management card and
+  Load Session File. **Admins always get full access regardless of role**, so the bootstrap admin
+  can't demote themselves out of the tab where roles are set.
+
+Notes for anyone changing this:
+- A profile with **no `role` predates this feature and is treated as ward council** (least
+  access). That's why the bootstrap admin, whose profile has no role, still sees everything —
+  via `isAdmin`, not via role.
+- **`role` is deliberately not written at signup.** `firestore.rules` pins a newly created
+  profile to exactly six keys (`hasOnly([...])`), so adding a seventh there would make every
+  signup fail. An admin assigns the role afterwards from the Admin tab, which the rules permit.
+- **None of this is a data boundary.** Every approved user can still read and write the whole
+  `wardData/shared` document, so hiding a tab keeps people in their lane and prevents accidents —
+  it does not withhold information. Making it real would mean encoding roles in `firestore.rules`
+  (and note the current self-update rule doesn't pin `role`, so a non-admin could set their own
+  from the console). Deliberate tradeoff for a small, trusted group.
+
 ### Files
 - `ministering_tool.html` — the app. `firebaseConfig` near the top of the `<script>` block holds
   the live project's real values (see "Live project" above) — client-safe values, not secrets;

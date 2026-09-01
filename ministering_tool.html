@@ -153,9 +153,10 @@ tr:hover td{background:#fafbfc}
   <button class="active" onclick="showTab('import')">Import</button>
   <button onclick="showTab('members')">Members <span id="members-count"></span></button>
   <button onclick="showTab('households')">Households <span id="households-count"></span></button>
-  <button onclick="showTab('brothers')">Brothers <span id="brothers-count"></span></button>
-  <button onclick="showTab('current')">Current Assignments</button>
-  <button onclick="showTab('propose')">Proposed Assignments</button>
+  <button id="nav-brothers-btn" onclick="showTab('brothers')">Brothers <span id="brothers-count"></span></button>
+  <button id="nav-current-btn" onclick="showTab('current')">Current Assignments</button>
+  <button id="nav-propose-btn" onclick="showTab('propose')">Proposed Assignments</button>
+  <button id="nav-council-btn" onclick="showTab('council')">Ward Council Collaboration</button>
   <button id="nav-admin-btn" onclick="showTab('admin')" style="display:none">Admin</button>
 </nav>
 
@@ -426,6 +427,14 @@ tr:hover td{background:#fafbfc}
         <div id="maybe-hh-list"></div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- WARD COUNCIL COLLABORATION TAB -->
+<div id="tab-council" class="tab-content">
+  <div class="card">
+    <h2>Ward Council Collaboration</h2>
+    <p style="font-size:0.88rem;color:#666">Nothing here yet — this space is reserved for ward council collaboration.</p>
   </div>
 </div>
 
@@ -784,11 +793,16 @@ async function renderAdminPanel() {
   const row = p => {
     const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
     const isSelf = p.id === _currentUserId;
+    const isEq = p.role === 'eq';
     return `
-    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f0f0f0;padding:0.5rem 0">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f0f0f0;padding:0.5rem 0;gap:0.6rem">
       <div><div style="font-weight:500">${name ? esc(name) + ' — ' : ''}${esc(p.email)}${isSelf ? ' <span style="font-weight:400;color:#888">(you)</span>' : ''}</div>
-      <div style="font-size:0.78rem;color:#888">${p.status}${p.isAdmin ? ' · admin' : ''}</div></div>
-      <div style="display:flex;gap:0.4rem">
+      <div style="font-size:0.78rem;color:#888">${p.status} · ${isEq ? 'EQ presidency' : 'ward council'}${p.isAdmin ? ' · admin' : ''}</div></div>
+      <div style="display:flex;gap:0.4rem;align-items:center;flex-shrink:0">
+        <select style="font-size:0.8rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px" onchange="setUserRole('${p.id}', this.value)" title="What this person can see">
+          <option value="council" ${isEq ? '' : 'selected'}>Ward Council</option>
+          <option value="eq" ${isEq ? 'selected' : ''}>EQ Presidency</option>
+        </select>
         ${p.status !== 'approved' ? `<button class="btn btn-primary btn-sm" onclick="setUserStatus('${p.id}','approved')">Approve</button>` : ''}
         ${p.status !== 'denied' && !isSelf ? `<button class="btn btn-danger btn-sm" onclick="setUserStatus('${p.id}','denied')">Deny</button>` : ''}
       </div></div>`;
@@ -806,6 +820,23 @@ async function renderAdminPanel() {
   }
   loadAuditLog();
 }
+async function setUserRole(id, role) {
+  if (!_currentUserIsAdmin) { alert('Only an admin can change roles.'); renderAdminPanel(); return; }
+  const p = _adminProfiles.find(x => x.id === id) || {};
+  const who = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'this user';
+  const detail = role === 'eq'
+    ? 'They will get the full tool, including Brothers and the Current and Proposed assignment tabs.'
+    : 'They will see Import, Members, Households and Ward Council Collaboration only — not the ministering assignment tabs.';
+  // Cancelling re-renders so the dropdown snaps back to the stored value.
+  if (!confirm(`Set ${who} to ${role === 'eq' ? 'EQ Presidency' : 'Ward Council'}?\n\n${detail}`)) { renderAdminPanel(); return; }
+  try {
+    await db.collection('profiles').doc(id).update({ role });
+  } catch (error) { alert('Failed to update: ' + error.message); renderAdminPanel(); return; }
+  // Changing your own role should take effect now, not at the next reload.
+  if (id === _currentUserId) { _currentUserRole = role === 'eq' ? 'eq' : 'council'; applyAccessVisibility(); }
+  renderAdminPanel();
+}
+
 async function setUserStatus(id, status) {
   if (!_currentUserIsAdmin) { alert('Only an admin can change access.'); return; }
 
@@ -867,16 +898,41 @@ let _currentUserName = null;
 let _currentUserFirstName = '';
 let _currentUserLastName = '';
 let _currentUserIsAdmin = false;
+// 'eq' = Elders Quorum presidency, the full ministering tool.
+// 'council' = ward council member: Import, Members, Households and Ward
+// Council Collaboration, without the ministering assignment tabs.
+let _currentUserRole = 'council';
 
-// Every admin-only piece of UI toggled from one place, so adding another one
-// later can't drift out of sync with the signed-out path. Note this only
-// hides things — each of these actions also checks _currentUserIsAdmin itself,
-// and the real boundary is firestore.rules on the server.
-function applyAdminVisibility() {
-  const show = _currentUserIsAdmin ? '' : 'none';
-  document.getElementById('nav-admin-btn').style.display        = show;
-  document.getElementById('data-management-card').style.display = show;
-  document.getElementById('session-load-wrap').style.display    = show;
+// ── Access model ──────────────────────────────────────────────
+// Two levels, plus the separate admin flag:
+//   isAdmin       → the Admin tab and the destructive data controls
+//   role === 'eq' → the full ministering tool (Brothers, Current, Proposed)
+//   anything else → ward council view: Import, Members, Households and Ward
+//                   Council Collaboration
+//
+// A profile with no `role` predates this and is treated as 'council' — the
+// least access. Admins are always given full access regardless of role, so the
+// bootstrap admin can't end up locked out of the very tab where roles are set.
+//
+// `role` is deliberately NOT written at signup: firestore.rules pins a new
+// profile to exactly six keys, so adding one there would make every signup
+// fail. An admin sets the role afterwards, which the rules allow.
+//
+// Everything below only shows or hides. Each guarded action re-checks for
+// itself, and none of it is a data boundary: any approved user can still read
+// the whole ward document. See CLAUDE.md.
+function hasFullAccess() { return _currentUserIsAdmin || _currentUserRole === 'eq'; }
+
+function applyAccessVisibility() {
+  const admin = _currentUserIsAdmin ? '' : 'none';
+  document.getElementById('nav-admin-btn').style.display        = admin;
+  document.getElementById('data-management-card').style.display = admin;
+  document.getElementById('session-load-wrap').style.display    = admin;
+
+  const full = hasFullAccess() ? '' : 'none';
+  document.getElementById('nav-brothers-btn').style.display = full;
+  document.getElementById('nav-current-btn').style.display  = full;
+  document.getElementById('nav-propose-btn').style.display  = full;
 }
 
 async function resolveAuthState() {
@@ -890,7 +946,8 @@ async function resolveAuthState() {
   if (!user) {
     _currentUserId = null; _currentUserEmail = null; _currentUserName = null;
     _currentUserIsAdmin = false;
-    applyAdminVisibility();
+    _currentUserRole = 'council';
+    applyAccessVisibility();
     document.getElementById('auth-loading').style.display = 'none';
     document.getElementById('auth-screen').style.display = 'block';
     return;
@@ -920,7 +977,11 @@ async function resolveAuthState() {
   _currentUserLastName = profile.lastName || '';
   _currentUserName = [_currentUserFirstName, _currentUserLastName].filter(Boolean).join(' ') || _currentUserEmail;
   _currentUserIsAdmin = profile.isAdmin === true;
-  applyAdminVisibility();
+  _currentUserRole = profile.role === 'eq' ? 'eq' : 'council';
+  applyAccessVisibility();
+  // A council member landing on a tab they can't use (e.g. the page was left
+  // on Proposed before their role changed) gets sent back to Import.
+  if (!hasFullAccess() && ['brothers','current','propose'].includes(currentTabName())) showTab('import');
   await loadAllData();
 
   document.getElementById('auth-loading').style.display = 'none';
@@ -951,10 +1012,16 @@ function norm(s){ return (s||'').toLowerCase().trim(); }
 
 // ── Tabs ─────────────────────────────────────────────────────
 function showTab(name) {
+  // Hiding the nav button isn't enough on its own — showTab is also reachable
+  // from refreshFromCloud() and the console.
+  if (['brothers','current','propose'].includes(name) && !hasFullAccess()) name = 'import';
+  if (name === 'admin' && !_currentUserIsAdmin) name = 'import';
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  const tabs = ['import','members','households','brothers','current','propose','admin'];
+  // Order must match the nav buttons in the DOM — the active-button lookup
+  // below is by index, so inserting a tab means inserting it here too.
+  const tabs = ['import','members','households','brothers','current','propose','council','admin'];
   document.querySelectorAll('nav button')[tabs.indexOf(name)].classList.add('active');
   if (name === 'members')    renderMembers();
   if (name === 'households') renderHouseholds();
