@@ -432,10 +432,12 @@ tr:hover td{background:#fafbfc}
 
 <!-- WARD COUNCIL COLLABORATION TAB -->
 <div id="tab-council" class="tab-content">
-  <div class="card">
-    <h2>Ward Council Collaboration</h2>
-    <p style="font-size:0.88rem;color:#666">Nothing here yet — this space is reserved for ward council collaboration.</p>
+  <div class="alert alert-info">
+    Shared watch-lists for the ward council. Everyone with access can add or remove people and post
+    <strong>Goals</strong> and <strong>Notes</strong> against each name — both are dated and signed, so the
+    council can see at a glance who is being looked after and what has been done.
   </div>
+  <div id="council-groups"></div>
 </div>
 
 <div id="tab-admin" class="tab-content">
@@ -545,9 +547,40 @@ const S = {
   current: [],      // current companionship assignments
   proposed: [],     // user-drafted proposals
   activityLog: [],  // { ts, user } — one entry per saved batch of changes
+  groups: {},       // ward council groups — see GROUPS / normalizeGroups()
   rawMembers: null,
   rawHouseholds: null,
 };
+
+// ── Ward Council groups ───────────────────────────────────────
+// Small watch-lists the ward council keeps together, each person carrying two
+// running comment threads: Goals and Notes. `fromMembers` groups pick people
+// out of the imported ward list; Ward Mission takes free-typed names, since
+// missionary contacts aren't in ward records.
+const GROUPS = [
+  { key: 'new',       label: 'New Members',       fromMembers: true,
+    blurb: 'Recently arrived or newly baptized members the council is looking after.' },
+  { key: 'returning', label: 'Returning Members', fromMembers: true,
+    blurb: 'Members returning to activity.' },
+  { key: 'mission',   label: 'Ward Mission',      fromMembers: false,
+    blurb: 'People the missionaries are working with — type any name, they need not be in the ward list.' },
+];
+
+// Always hand back all three lists, whatever the stored document contains —
+// this data was added after the first ward data was already live, so an older
+// document simply has no `groups` key.
+function normalizeGroups(raw) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const out = {};
+  GROUPS.forEach(g => {
+    out[g.key] = Array.isArray(src[g.key]) ? src[g.key].map(e => ({
+      ...e,
+      goals: Array.isArray(e.goals) ? e.goals : [],
+      notes: Array.isArray(e.notes) ? e.notes : [],
+    })) : [];
+  });
+  return out;
+}
 
 // ── Cloud persistence layer (single shared document) ────────────
 // The whole ward dataset lives in one Firestore document (wardData/shared)
@@ -602,7 +635,7 @@ async function runSync() {
     // round-trip rather than being part of what gets stringified.
     const payload = JSON.parse(JSON.stringify({
       members: S.members, households: S.households, current: S.current, proposed: S.proposed,
-      activityLog: log,
+      groups: normalizeGroups(S.groups), activityLog: log,
     }));
     payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
     payload.updatedBy = who;
@@ -634,6 +667,7 @@ async function dbDeleteCompanionship(_list, _id)      { return scheduleSync(); }
 async function dbReplaceCompanionshipList(_list, _r)  { return scheduleSync(); }
 async function dbReplaceTable(_table, _rows)          { return scheduleSync(); }
 async function dbReplaceAll(_all)                     { return scheduleSync(); }
+function  dbUpsertGroups()                            { return scheduleSync(); }
 
 async function loadAllData() {
   const snap = await WARD_DOC.get();
@@ -643,6 +677,7 @@ async function loadAllData() {
   S.current     = data.current     || [];
   S.proposed    = data.proposed    || [];
   S.activityLog = data.activityLog || [];
+  S.groups      = normalizeGroups(data.groups);
   // Normalize addresses from older imports that may have embedded newlines or ZIP+4
   S.households.forEach(hh => { if (hh.address) hh.address = normalizeAddress(hh.address); });
 }
@@ -1028,6 +1063,7 @@ function showTab(name) {
   if (name === 'brothers')   renderBrothers();
   if (name === 'current')    renderCurrent();
   if (name === 'propose')    renderProposed();
+  if (name === 'council')    renderCouncil();
   if (name === 'admin')      renderAdminPanel();
 }
 
@@ -2789,7 +2825,8 @@ function exportSession() {
     members:    S.members,
     households: S.households,
     current:    S.current,
-    proposed:   S.proposed
+    proposed:   S.proposed,
+    groups:     normalizeGroups(S.groups)
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
@@ -2827,9 +2864,14 @@ function importSession(file) {
       S.households = data.households || [];
       S.current    = data.current    || [];
       S.proposed   = data.proposed   || [];
+      // Session files exported before ward council groups existed simply have
+      // no `groups` key; normalizeGroups turns that into three empty lists
+      // rather than leaving the council tab broken.
+      S.groups     = normalizeGroups(data.groups);
       document.getElementById('session-status').textContent = 'Saving to server…';
       await dbReplaceAll({ members: S.members, households: S.households, current: S.current, proposed: S.proposed });
       refreshBadge();
+      renderCouncil();
       if (S.members.length && S.households.length) showLinkStatus();
       document.getElementById('session-status').textContent = `Session loaded: ${counts}.`;
       document.getElementById('session-import-file').value = '';
@@ -2874,11 +2916,15 @@ async function clearData(type) {
     tasks.push(dbReplaceCompanionshipList('current', []));
   }
   if (type==='all') { S.proposed=[]; tasks.push(dbReplaceCompanionshipList('proposed', [])); }
+  // Ward council groups only go with a full clear — they aren't member or
+  // household data, and clearing either of those shouldn't wipe the council's
+  // goals and notes.
+  if (type==='all') { S.groups = normalizeGroups(null); tasks.push(dbUpsertGroups()); }
   await Promise.all(tasks);
   refreshBadge();
   document.getElementById('csv-preview').style.display='none';
   if (type==='all'||type==='assignments') renderCurrent();
-  if (type==='all') renderProposed();
+  if (type==='all') { renderProposed(); renderCouncil(); }
 }
 
 function dlCSV(csv, name) {
@@ -2890,11 +2936,19 @@ function dlCSV(csv, name) {
 // ── Entity Notes ──────────────────────────────────────────────
 let _notesCtx = null;
 
+// _notesCtx carries an optional `field` so the same modal drives two separate
+// comment threads: the long-standing 'notes', and 'goals' on ward council
+// group entries. Anything that doesn't set it gets 'notes', so every existing
+// call site behaves exactly as before.
+function notesField() { return _notesCtx?.field === 'goals' ? 'goals' : 'notes'; }
+function notesFieldLabel() { return notesField() === 'goals' ? 'Goal' : 'Note'; }
+
 function getNotesTarget(ctx) {
   if (!ctx) return null;
   if (ctx.type === 'member' || ctx.type === 'brother') return S.members.find(x => x.id === ctx.id);
   if (ctx.type === 'household') return S.households.find(x => x.id === ctx.id);
   if (ctx.type === 'proposed' || ctx.type === 'current') return S[ctx.type].find(x => x.id === ctx.id);
+  if (ctx.type === 'group') return (S.groups?.[ctx.groupKey] || []).find(x => x.id === ctx.id);
   return null;
 }
 
@@ -2904,16 +2958,24 @@ function persistNotesTarget() {
   if (_notesCtx.type === 'member' || _notesCtx.type === 'brother') dbUpsertMember(target);
   else if (_notesCtx.type === 'household') dbUpsertHousehold(target);
   else if (_notesCtx.type === 'current' || _notesCtx.type === 'proposed') dbUpsertCompanionship(_notesCtx.type, target);
+  else if (_notesCtx.type === 'group') dbUpsertGroups();
 }
 
-function openNotesModal(type, id) {
-  _notesCtx = { type, id };
+// type/id as before; groupKey and field only used by ward council groups.
+function openNotesModal(type, id, groupKey, field) {
+  _notesCtx = { type, id, groupKey, field };
   const target = getNotesTarget(_notesCtx);
   let label = target?.name || '';
   if ((type === 'proposed' || type === 'current') && target) {
     label = target.m1Name + (target.m2Name ? ' + ' + target.m2Name : '');
   }
-  document.getElementById('notes-modal-title').textContent = `Notes — ${label}`;
+  if (type === 'group' && target) label = groupEntryName(target);
+  const heading = notesField() === 'goals' ? 'Goals' : 'Notes';
+  document.getElementById('notes-modal-title').textContent = `${heading} — ${label}`;
+  document.getElementById('notes-add-heading').textContent = `Add a ${notesFieldLabel()}`;
+  document.getElementById('note-label').textContent = notesFieldLabel();
+  document.getElementById('note-text').placeholder =
+    notesField() === 'goals' ? 'What are we aiming for, or what was achieved?…' : 'Write a note or comment…';
   document.getElementById('note-author-display').textContent = _currentUserName || '';
   document.getElementById('note-text').value = '';
   document.getElementById('note-error').textContent = '';
@@ -2923,10 +2985,10 @@ function openNotesModal(type, id) {
 
 function renderNotesList() {
   const target = getNotesTarget(_notesCtx);
-  const notes = target?.notes || [];
+  const notes = target?.[notesField()] || [];
   const el = document.getElementById('notes-list');
   if (!notes.length) {
-    el.innerHTML = '<div style="color:#aaa;font-size:0.85rem;padding:0.4rem 0">No notes yet.</div>';
+    el.innerHTML = `<div style="color:#aaa;font-size:0.85rem;padding:0.4rem 0">No ${notesFieldLabel().toLowerCase()}s yet.</div>`;
     return;
   }
   el.innerHTML = notes.map((n, i) => `
@@ -2952,34 +3014,187 @@ function formatNoteDate(iso) {
 function addNote() {
   const text  = document.getElementById('note-text').value.trim();
   const errEl = document.getElementById('note-error');
-  if (!text) { errEl.textContent = 'Please enter a note.'; document.getElementById('note-text').focus(); return; }
+  if (!text) { errEl.textContent = `Please enter a ${notesFieldLabel().toLowerCase()}.`; document.getElementById('note-text').focus(); return; }
   errEl.textContent = '';
   const target = getNotesTarget(_notesCtx);
   if (!target) return;
-  if (!target.notes) target.notes = [];
-  target.notes.push({ id: uid(), author: _currentUserName || 'Unknown', text, date: new Date().toISOString() });
+  const field = notesField();
+  if (!target[field]) target[field] = [];
+  target[field].push({ id: uid(), author: _currentUserName || 'Unknown', text, date: new Date().toISOString() });
   persistNotesTarget();
   document.getElementById('note-text').value = '';
   renderNotesList();
-  if (_notesCtx.type === 'member')    renderMembers();
-  if (_notesCtx.type === 'household') renderHouseholds();
-  if (_notesCtx.type === 'brother')   renderBrothers();
-  if (_notesCtx.type === 'proposed')  renderProposed();
-  if (_notesCtx.type === 'current')   renderCurrent();
+  refreshNotesSourceTab();
 }
 
 function deleteNote(index) {
-  if (!confirm('Delete this note?')) return;
+  if (!confirm(`Delete this ${notesFieldLabel().toLowerCase()}?`)) return;
   const target = getNotesTarget(_notesCtx);
-  if (!target?.notes) return;
-  target.notes.splice(index, 1);
+  const field = notesField();
+  if (!target?.[field]) return;
+  target[field].splice(index, 1);
   persistNotesTarget();
   renderNotesList();
+  refreshNotesSourceTab();
+}
+
+// Re-render whichever tab the modal was opened from, so its comment counts stay
+// honest while the modal is still open.
+function refreshNotesSourceTab() {
   if (_notesCtx.type === 'member')    renderMembers();
   if (_notesCtx.type === 'household') renderHouseholds();
   if (_notesCtx.type === 'brother')   renderBrothers();
   if (_notesCtx.type === 'proposed')  renderProposed();
   if (_notesCtx.type === 'current')   renderCurrent();
+  if (_notesCtx.type === 'group')     renderCouncil();
+}
+
+// ── Ward Council Collaboration ────────────────────────────────
+// Each group holds entries of:
+//   { id, memberId|null, name, goals: [], notes: [], addedBy, addedDate }
+// memberId links to the ward member list so a rename there follows through;
+// `name` is kept alongside it so an entry still reads correctly if that member
+// is later removed (the same denormalizing the companionship records use).
+function groupEntryName(e) {
+  if (!e) return '';
+  if (e.memberId) {
+    const m = S.members.find(x => x.id === e.memberId);
+    if (m) return m.name;
+  }
+  return e.name || '';
+}
+
+function groupList(key) {
+  if (!S.groups || !Array.isArray(S.groups[key])) S.groups = normalizeGroups(S.groups);
+  return S.groups[key];
+}
+
+function renderCouncil() {
+  const host = document.getElementById('council-groups');
+  if (!host) return;
+  host.innerHTML = GROUPS.map(g => {
+    const list = [...groupList(g.key)].sort((a, b) => groupEntryName(a).localeCompare(groupEntryName(b)));
+    const rows = list.map(e => {
+      const goals = (e.goals || []).length, notes = (e.notes || []).length;
+      const added = e.addedBy ? `Added by ${esc(e.addedBy)}${e.addedDate ? ' · ' + formatNoteDate(e.addedDate) : ''}` : '';
+      return `<tr>
+        <td><strong>${esc(groupEntryName(e))}</strong>${added ? `<div style="font-size:0.74rem;color:#aaa;margin-top:0.15rem">${added}</div>` : ''}</td>
+        <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','${g.key}','goals')">${goals ? `Goals (${goals})` : 'Goals'}</button></td>
+        <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','${g.key}','notes')">${notes ? `Notes (${notes})` : 'Notes'}</button></td>
+        <td style="white-space:nowrap"><button class="btn btn-danger btn-sm" onclick="removeGroupEntry('${g.key}','${e.id}')">Remove</button></td>
+      </tr>`;
+    }).join('');
+
+    const body = list.length
+      ? `<div style="overflow-x:auto"><table><thead><tr><th>Name</th><th>Goals</th><th>Notes</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<div class="empty-state" style="padding:1.2rem"><p>No one in this group yet.</p></div>`;
+
+    return `<div class="card">
+      <div class="flex-between">
+        <h2 style="margin:0">${esc(g.label)} <span style="font-size:0.8rem;font-weight:400;color:#888">(${list.length})</span></h2>
+        <button class="btn btn-primary btn-sm" onclick="openGroupAddModal('${g.key}')">+ Add ${g.fromMembers ? 'Member' : 'Name'}</button>
+      </div>
+      <p style="font-size:0.82rem;color:#888;margin:0 0 0.8rem">${esc(g.blurb)}</p>
+      ${body}
+    </div>`;
+  }).join('');
+}
+
+let _groupAddKey = null;
+
+function openGroupAddModal(key) {
+  const g = GROUPS.find(x => x.key === key);
+  if (!g) return;
+  _groupAddKey = key;
+  document.getElementById('group-add-title').textContent = `Add to ${g.label}`;
+  document.getElementById('group-add-status').textContent = '';
+  document.getElementById('group-add-error').textContent = '';
+  document.getElementById('group-add-member-wrap').style.display = g.fromMembers ? '' : 'none';
+  document.getElementById('group-add-name-wrap').style.display   = g.fromMembers ? 'none' : '';
+  if (g.fromMembers) {
+    document.getElementById('group-add-search').value = '';
+    renderGroupAddSelect();
+  } else {
+    document.getElementById('group-add-name').value = '';
+  }
+  document.getElementById('group-add-modal').classList.add('open');
+  (g.fromMembers ? document.getElementById('group-add-search') : document.getElementById('group-add-name')).focus();
+}
+
+// Members already in this group are left out, so the same person can't be
+// added twice.
+function renderGroupAddSelect() {
+  const taken = new Set(groupList(_groupAddKey).map(e => e.memberId).filter(Boolean));
+  const q = norm(document.getElementById('group-add-search').value);
+  const sel = document.getElementById('group-add-member');
+  sel.innerHTML = '';
+  const available = [...S.members]
+    .filter(m => !taken.has(m.id))
+    .filter(m => !q || norm(m.name).includes(q))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!available.length) {
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = S.members.length ? 'No matching members' : 'No members imported yet';
+    sel.appendChild(o);
+    return;
+  }
+  available.forEach(m => {
+    const o = document.createElement('option');
+    o.value = m.id;
+    o.textContent = m.name;
+    sel.appendChild(o);
+  });
+}
+
+// The modal deliberately stays open after each add — these lists get built up
+// a few people at a time.
+function addToGroup() {
+  const g = GROUPS.find(x => x.key === _groupAddKey);
+  if (!g) return;
+  const errEl = document.getElementById('group-add-error');
+  const statEl = document.getElementById('group-add-status');
+  errEl.textContent = '';
+  const entry = { id: uid(), memberId: null, name: '', goals: [], notes: [],
+                  addedBy: _currentUserName || _currentUserEmail || 'Unknown', addedDate: new Date().toISOString() };
+
+  if (g.fromMembers) {
+    const memberId = document.getElementById('group-add-member').value;
+    const m = S.members.find(x => x.id === memberId);
+    if (!m) { errEl.textContent = 'Pick a member first.'; return; }
+    entry.memberId = m.id;
+    entry.name = m.name;
+  } else {
+    const name = document.getElementById('group-add-name').value.trim();
+    if (!name) { errEl.textContent = 'Enter a name first.'; return; }
+    if (groupList(g.key).some(e => norm(groupEntryName(e)) === norm(name))) {
+      errEl.textContent = `${name} is already in this group.`; return;
+    }
+    entry.name = name;
+    document.getElementById('group-add-name').value = '';
+  }
+
+  groupList(g.key).push(entry);
+  dbUpsertGroups();
+  renderCouncil();
+  if (g.fromMembers) renderGroupAddSelect();
+  statEl.style.color = '#155724';
+  statEl.textContent = `✓ Added ${entry.name}`;
+  (g.fromMembers ? document.getElementById('group-add-search') : document.getElementById('group-add-name')).focus();
+}
+
+function removeGroupEntry(key, id) {
+  const list = groupList(key);
+  const e = list.find(x => x.id === id);
+  if (!e) return;
+  const counts = (e.goals || []).length + (e.notes || []).length;
+  const g = GROUPS.find(x => x.key === key);
+  let msg = `Remove ${groupEntryName(e)} from ${g ? g.label : 'this group'}?`;
+  if (counts) msg += `\n\nThis also deletes their ${(e.goals||[]).length} goal(s) and ${(e.notes||[]).length} note(s), for everyone.`;
+  if (!confirm(msg)) return;
+  S.groups[key] = list.filter(x => x.id !== id);
+  dbUpsertGroups();
+  renderCouncil();
 }
 
 // ── Household Address Edit ────────────────────────────────────
@@ -3192,13 +3407,47 @@ function deleteHousehold(id) {
   </div>
 </div>
 
+<!-- Add to Ward Council Group Modal -->
+<div class="modal-overlay" id="group-add-modal">
+  <div class="modal" style="max-width:480px">
+    <h3 id="group-add-title">Add</h3>
+
+    <div id="group-add-member-wrap">
+      <div class="form-group">
+        <label>Search members</label>
+        <input type="text" id="group-add-search" placeholder="Type to filter…" oninput="renderGroupAddSelect()">
+      </div>
+      <div class="form-group">
+        <label>Member</label>
+        <select id="group-add-member" size="8" style="width:100%"></select>
+        <div style="font-size:0.77rem;color:#888;margin-top:0.25rem">People already in this group aren't listed.</div>
+      </div>
+    </div>
+
+    <div id="group-add-name-wrap" style="display:none">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="group-add-name" placeholder="Any name — they need not be in the ward list"
+               onkeydown="if(event.key==='Enter') addToGroup()">
+      </div>
+    </div>
+
+    <div id="group-add-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em"></div>
+    <div id="group-add-status" style="font-size:0.82rem;min-height:1.2em"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('group-add-modal')">Done</button>
+      <button class="btn btn-primary" onclick="addToGroup()">Add</button>
+    </div>
+  </div>
+</div>
+
 <!-- Notes Modal -->
 <div class="modal-overlay" id="notes-modal">
   <div class="modal" style="max-width:520px">
     <h3 id="notes-modal-title">Notes</h3>
     <div id="notes-list" style="max-height:280px;overflow-y:auto"></div>
     <div style="border-top:1px solid #e0e6ed;margin-top:0.75rem;padding-top:0.85rem">
-      <div style="font-size:0.78rem;font-weight:600;color:#888;margin-bottom:0.65rem;text-transform:uppercase;letter-spacing:0.05em">Add a Note</div>
+      <div id="notes-add-heading" style="font-size:0.78rem;font-weight:600;color:#888;margin-bottom:0.65rem;text-transform:uppercase;letter-spacing:0.05em">Add a Note</div>
       <div class="form-group">
         <label>Posting as</label>
         <div style="display:flex;align-items:center;gap:0.5rem">
@@ -3208,7 +3457,7 @@ function deleteHousehold(id) {
         </div>
       </div>
       <div class="form-group">
-        <label>Note</label>
+        <label id="note-label">Note</label>
         <textarea id="note-text" rows="3" placeholder="Write a note or comment…" style="width:100%;padding:0.45rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem;resize:vertical;font-family:inherit"></textarea>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">

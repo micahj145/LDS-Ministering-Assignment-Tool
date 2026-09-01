@@ -98,6 +98,26 @@ draft had TOTP 2FA — it was superseded by this simpler flow, not retained). Th
 email (`micahj145@gmail.com`) is hardcoded in both `ministering_tool.html` (`ADMIN_EMAIL`) and
 `firestore.rules` (`isBootstrapAdminEmail()`) — keep those two in sync if it's ever changed.
 
+### Ward Council Collaboration
+A tab of shared watch-lists, visible to everyone with access (both roles) and editable by all of
+them — no admin gating. Three groups, defined in the `GROUPS` const: **New Members** and
+**Returning Members** pick people out of `S.members`; **Ward Mission** takes free-typed names,
+since missionary contacts aren't in ward records. Each entry carries *two* independent comment
+threads, **Goals** and **Notes**, both dated and signed by author.
+
+- Stored as `S.groups` — a fourth top-level key in the shared document alongside members/
+  households/current/proposed. `normalizeGroups()` always returns all three lists, so a document
+  written before this feature (which has no `groups` key at all) loads fine; the same guard runs
+  on session-file import.
+- Entries denormalize like companionship records do: `memberId` links to the ward list so a
+  rename follows through, and `name` is kept beside it so the entry still reads correctly if that
+  member is later deleted from Members. Deleting a member does **not** remove them from a group.
+- The Goals/Notes threads reuse the existing notes modal rather than duplicating it.
+  `_notesCtx.field` selects which array is being edited and defaults to `'notes'`, so every
+  pre-existing call site (`openNotesModal('member', id)` etc.) behaves exactly as before.
+- Clearing data: groups are wiped only by **Clear All Data**, not by clearing members or
+  households — the council's goals and notes aren't member or household data.
+
 ### Roles: two ways the tool is used
 The app serves two audiences, controlled by a `role` field on the profile and applied in
 `applyAccessVisibility()` / `hasFullAccess()`:
