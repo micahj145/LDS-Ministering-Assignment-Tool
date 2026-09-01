@@ -279,6 +279,7 @@ tr:hover td{background:#fafbfc}
         <option value="linked">Household Linked</option>
         <option value="unlinked">Not Linked</option>
       </select>
+      <button class="btn btn-primary btn-sm" onclick="openAddMemberModal()">+ Add Member</button>
     </div>
     <div id="members-table"></div>
   </div>
@@ -299,6 +300,7 @@ tr:hover td{background:#fafbfc}
         <option value="no-addr">No Address</option>
         <option value="geocoded">Geocoded</option>
       </select>
+      <button class="btn btn-primary btn-sm" onclick="openAddHouseholdModal()">+ Add Household</button>
     </div>
     <div id="households-table"></div>
   </div>
@@ -1547,7 +1549,7 @@ function renderMembers() {
 
   let t = `<div style="overflow-x:auto"><table><thead><tr>
     <th>Name</th><th>Gender</th><th>Age</th><th>Phone</th>
-    <th>Linked Household</th><th>Address on File</th><th>Link</th><th>Notes</th>
+    <th>Linked Household</th><th>Address on File</th><th>Link</th><th>Notes</th><th>Actions</th>
   </tr></thead><tbody>`;
 
   filtered.forEach(m => {
@@ -1565,6 +1567,9 @@ function renderMembers() {
       </td>
       <td style="white-space:nowrap">
         <button class="btn btn-secondary btn-sm" onclick="openNotesModal('member','${m.id}')">${(m.notes?.length||0) ? `Notes (${m.notes.length})` : 'Notes'}</button>
+      </td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-danger btn-sm" onclick="deleteMember('${m.id}')">Delete</button>
       </td>
     </tr>`;
   });
@@ -1614,6 +1619,62 @@ function saveMemberLink(clear) {
   dbUpsertMember(m); showLinkStatus(); closeModal('link-modal'); renderMembers();
 }
 
+function openAddMemberModal() {
+  document.getElementById('nmem-name').value = '';
+  document.getElementById('nmem-gender').value = '';
+  document.getElementById('nmem-age').value = '';
+  document.getElementById('nmem-phone').value = '';
+  document.getElementById('nmem-error').textContent = '';
+  const sel = document.getElementById('nmem-hh');
+  sel.innerHTML = '<option value="">None</option>';
+  [...S.households].sort((a, b) => a.name.localeCompare(b.name)).forEach(hh => {
+    const o = document.createElement('option');
+    o.value = hh.id;
+    o.textContent = hh.name;
+    sel.appendChild(o);
+  });
+  document.getElementById('new-member-modal').classList.add('open');
+  document.getElementById('nmem-name').focus();
+}
+
+function saveNewMember() {
+  const name = document.getElementById('nmem-name').value.trim();
+  if (!name) { document.getElementById('nmem-error').textContent = 'Name is required.'; return; }
+  const gender      = document.getElementById('nmem-gender').value;
+  const age         = parseInt(document.getElementById('nmem-age').value) || 0;
+  const phone       = document.getElementById('nmem-phone').value.trim();
+  const householdId = document.getElementById('nmem-hh').value || null;
+  const m = { id: uid(), name, gender, age, phone, isBrother: isMale(gender), householdId, notes: [] };
+  S.members.push(m);
+  dbUpsertMember(m);
+  closeModal('new-member-modal');
+  refreshBadge(); renderMembers(); renderBrothers();
+}
+
+function deleteMember(id) {
+  const m = S.members.find(x => x.id === id);
+  if (!m) return;
+  const assignedCount = S.current.filter(c => c.m1Id === id || c.m2Id === id).length
+                      + S.proposed.filter(c => c.m1Id === id || c.m2Id === id).length;
+  let msg = `Delete ${m.name}? This cannot be undone.`;
+  if (assignedCount) {
+    msg += `\n\n${m.name} appears in ${assignedCount} companionship assignment(s). ` +
+           `Their name will remain on those records, but you should update those assignments separately.`;
+  }
+  if (!confirm(msg)) return;
+  S.members = S.members.filter(x => x.id !== id);
+  // Keep any household's display-only "members" name list in sync.
+  const key = normNameKey(m.name);
+  S.households.forEach(hh => {
+    if (!hh.members || !hh.members.length) return;
+    const idx = hh.members.findIndex(n => normNameKey(n) === key);
+    if (idx > -1) hh.members.splice(idx, 1);
+  });
+  dbDeleteMembers([id]);
+  dbUpsertHouseholds(S.households);
+  refreshBadge(); renderMembers(); renderBrothers(); renderHouseholds();
+}
+
 // ── Households Tab ─────────────────────────────────────────────
 function renderHouseholds() {
   const list = S.households;
@@ -1651,7 +1712,7 @@ function renderHouseholds() {
   }
 
   let t = `<div style="overflow-x:auto"><table><thead><tr>
-    <th>Household Name</th><th>Members</th><th>Head</th><th>Address</th><th>Phone</th><th>Email</th><th>Pool</th><th>Status</th><th>Notes</th>
+    <th>Household Name</th><th>Members</th><th>Head</th><th>Address</th><th>Phone</th><th>Email</th><th>Pool</th><th>Status</th><th>Notes</th><th>Actions</th>
   </tr></thead><tbody>`;
 
   filtered.forEach(hh => {
@@ -1682,6 +1743,9 @@ function renderHouseholds() {
       <td>${addrBadge}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-secondary btn-sm" onclick="openNotesModal('household','${hh.id}')">${(hh.notes?.length||0) ? `Notes (${hh.notes.length})` : 'Notes'}</button>
+      </td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-danger btn-sm" onclick="deleteHousehold('${hh.id}')">Delete</button>
       </td>
     </tr>`;
   });
@@ -2833,6 +2897,48 @@ async function saveHHAddress(andGeocode) {
   renderHouseholds();
   if (!andGeocode) closeModal('hh-edit-modal');
 }
+
+// ── Add / Delete Households ─────────────────────────────────────
+function openAddHouseholdModal() {
+  document.getElementById('nhh-name').value = '';
+  document.getElementById('nhh-head').value = '';
+  document.getElementById('nhh-addr').value = '';
+  document.getElementById('nhh-phone').value = '';
+  document.getElementById('nhh-email').value = '';
+  document.getElementById('nhh-error').textContent = '';
+  document.getElementById('new-household-modal').classList.add('open');
+  document.getElementById('nhh-name').focus();
+}
+
+async function saveNewHousehold() {
+  const name = document.getElementById('nhh-name').value.trim();
+  if (!name) { document.getElementById('nhh-error').textContent = 'Household name is required.'; return; }
+  const head  = document.getElementById('nhh-head').value.trim();
+  const address = normalizeAddress(document.getElementById('nhh-addr').value.trim());
+  const phone = document.getElementById('nhh-phone').value.trim();
+  const email = document.getElementById('nhh-email').value.trim();
+  const hh = { id: uid(), name, members: [], head, address, phone, email, notes: [] };
+  S.households.push(hh);
+  await dbUpsertHousehold(hh);
+  closeModal('new-household-modal');
+  refreshBadge(); renderHouseholds();
+}
+
+function deleteHousehold(id) {
+  const hh = S.households.find(x => x.id === id);
+  if (!hh) return;
+  const linkedMembers = S.members.filter(m => m.householdId === id);
+  let msg = `Delete household "${hh.name}"? This cannot be undone.`;
+  if (linkedMembers.length) {
+    msg += `\n\n${linkedMembers.length} member(s) are currently linked to this household and will become unlinked.`;
+  }
+  if (!confirm(msg)) return;
+  S.households = S.households.filter(x => x.id !== id);
+  S.members.forEach(m => { if (m.householdId === id) m.householdId = null; });
+  dbDeleteHouseholds([id]);
+  dbUpsertMembers(S.members);
+  refreshBadge(); renderHouseholds(); renderMembers();
+}
 </script>
 
 <!-- Edit Household Modal -->
@@ -2863,6 +2969,81 @@ async function saveHHAddress(andGeocode) {
       <button class="btn btn-secondary" onclick="closeModal('hh-edit-modal')">Cancel</button>
       <button class="btn btn-secondary" onclick="saveHHAddress(false)">Save</button>
       <button class="btn btn-primary" id="hh-edit-geocode-btn" onclick="saveHHAddress(true)">Save &amp; Geocode</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Member Modal -->
+<div class="modal-overlay" id="new-member-modal">
+  <div class="modal" style="max-width:480px">
+    <h3>Add Member</h3>
+    <div class="form-group">
+      <label>Name *</label>
+      <input type="text" id="nmem-name" placeholder="Full name" onkeydown="if(event.key==='Enter') saveNewMember()">
+    </div>
+    <div class="two-col" style="gap:0.75rem">
+      <div class="form-group" style="margin:0">
+        <label>Gender</label>
+        <select id="nmem-gender">
+          <option value="">—</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Age</label>
+        <input type="number" id="nmem-age" min="0" placeholder="Optional">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Phone</label>
+      <input type="text" id="nmem-phone" placeholder="555-555-5555">
+    </div>
+    <div class="form-group">
+      <label>Household (optional)</label>
+      <select id="nmem-hh"><option value="">None</option></select>
+    </div>
+    <div id="nmem-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('new-member-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewMember()">Add Member</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Household Modal -->
+<div class="modal-overlay" id="new-household-modal">
+  <div class="modal" style="max-width:520px">
+    <h3>Add Household</h3>
+    <div class="form-group">
+      <label>Household Name *</label>
+      <input type="text" id="nhh-name" placeholder="e.g. Smith Family" onkeydown="if(event.key==='Enter') saveNewHousehold()">
+    </div>
+    <div class="form-group">
+      <label>Head of Household</label>
+      <input type="text" id="nhh-head" placeholder="Optional">
+    </div>
+    <div class="form-group">
+      <label>Address</label>
+      <input type="text" id="nhh-addr" placeholder="123 Main St, City, ST 12345">
+      <div style="font-size:0.77rem;color:#888;margin-top:0.25rem">
+        You can geocode the address afterward from the household's Edit button.
+      </div>
+    </div>
+    <div class="two-col" style="gap:0.75rem">
+      <div class="form-group" style="margin:0">
+        <label>Phone</label>
+        <input type="text" id="nhh-phone" placeholder="555-555-5555">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Email</label>
+        <input type="text" id="nhh-email" placeholder="email@example.com">
+      </div>
+    </div>
+    <div id="nhh-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('new-household-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewHousehold()">Add Household</button>
     </div>
   </div>
 </div>
