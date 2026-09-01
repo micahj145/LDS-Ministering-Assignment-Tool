@@ -268,8 +268,13 @@ tr:hover td{background:#fafbfc}
     <p style="font-size:0.85rem;color:#666;margin-bottom:0.9rem">Export your entire session — members, households, geocoding, current assignments, and proposed companionships — as a single file to share with collaborators. They can load it on any computer to pick up exactly where you left off.</p>
     <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center">
       <button class="btn btn-primary btn-sm" onclick="exportSession()">Export Session File</button>
-      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('session-import-file').click()">Load Session File</button>
-      <input type="file" id="session-import-file" accept=".json" style="display:none" onchange="importSession(this.files[0])">
+      <!-- Loading a session file REPLACES the whole shared dataset, so it's
+           admin-only (exporting is read-only, and stays open to everyone).
+           Hidden by default; resolveAuthState() reveals it for admins. -->
+      <span id="session-load-wrap" style="display:none">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('session-import-file').click()">Load Session File</button>
+        <input type="file" id="session-import-file" accept=".json" style="display:none" onchange="importSession(this.files[0])">
+      </span>
     </div>
     <div id="session-status" style="margin-top:0.6rem;font-size:0.82rem;color:#555"></div>
   </div>
@@ -855,6 +860,17 @@ let _currentUserFirstName = '';
 let _currentUserLastName = '';
 let _currentUserIsAdmin = false;
 
+// Every admin-only piece of UI toggled from one place, so adding another one
+// later can't drift out of sync with the signed-out path. Note this only
+// hides things — each of these actions also checks _currentUserIsAdmin itself,
+// and the real boundary is firestore.rules on the server.
+function applyAdminVisibility() {
+  const show = _currentUserIsAdmin ? '' : 'none';
+  document.getElementById('nav-admin-btn').style.display        = show;
+  document.getElementById('data-management-card').style.display = show;
+  document.getElementById('session-load-wrap').style.display    = show;
+}
+
 async function resolveAuthState() {
   document.getElementById('auth-loading').style.display = 'block';
   document.getElementById('auth-screen').style.display = 'none';
@@ -866,7 +882,7 @@ async function resolveAuthState() {
   if (!user) {
     _currentUserId = null; _currentUserEmail = null; _currentUserName = null;
     _currentUserIsAdmin = false;
-    document.getElementById('data-management-card').style.display = 'none';
+    applyAdminVisibility();
     document.getElementById('auth-loading').style.display = 'none';
     document.getElementById('auth-screen').style.display = 'block';
     return;
@@ -896,8 +912,7 @@ async function resolveAuthState() {
   _currentUserLastName = profile.lastName || '';
   _currentUserName = [_currentUserFirstName, _currentUserLastName].filter(Boolean).join(' ') || _currentUserEmail;
   _currentUserIsAdmin = profile.isAdmin === true;
-  document.getElementById('nav-admin-btn').style.display = _currentUserIsAdmin ? '' : 'none';
-  document.getElementById('data-management-card').style.display = _currentUserIsAdmin ? '' : 'none';
+  applyAdminVisibility();
   await loadAllData();
 
   document.getElementById('auth-loading').style.display = 'none';
@@ -2755,6 +2770,13 @@ function exportSession() {
 
 function importSession(file) {
   if (!file) return;
+  // Same reasoning as clearData(): the hidden button is cosmetic, this is the
+  // check that actually refuses. Still client-side — see firestore.rules.
+  if (!_currentUserIsAdmin) {
+    document.getElementById('session-import-file').value = '';
+    alert('Only an admin can load a session file — it replaces the shared ward data for everyone.');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = async e => {
     try {
