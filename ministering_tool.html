@@ -274,7 +274,9 @@ tr:hover td{background:#fafbfc}
     <div id="session-status" style="margin-top:0.6rem;font-size:0.82rem;color:#555"></div>
   </div>
 
-  <div class="card">
+  <!-- Admin-only: shown by resolveAuthState() when the signed-in user is an
+       admin. Hidden by default so a non-admin never sees it, even briefly. -->
+  <div class="card" id="data-management-card" style="display:none">
     <h2>Data Management</h2>
     <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
       <button class="btn btn-secondary btn-sm" onclick="clearData('members')">Clear Members</button>
@@ -282,7 +284,10 @@ tr:hover td{background:#fafbfc}
       <button class="btn btn-secondary btn-sm" onclick="clearData('assignments')">Clear Assignments</button>
       <button class="btn btn-danger btn-sm" onclick="clearData('all')">Clear All Data</button>
     </div>
-    <div style="margin-top:0.6rem;font-size:0.82rem;color:#888">Data persists across sessions in this browser.</div>
+    <div style="margin-top:0.6rem;font-size:0.82rem;color:#888">
+      Admin only. This clears the <strong>shared ward data for everyone</strong>, not just your
+      own browser — there's no undo.
+    </div>
   </div>
 </div>
 
@@ -848,6 +853,7 @@ let _currentUserEmail = null;
 let _currentUserName = null;
 let _currentUserFirstName = '';
 let _currentUserLastName = '';
+let _currentUserIsAdmin = false;
 
 async function resolveAuthState() {
   document.getElementById('auth-loading').style.display = 'block';
@@ -859,6 +865,8 @@ async function resolveAuthState() {
   const user = fbAuth.currentUser;
   if (!user) {
     _currentUserId = null; _currentUserEmail = null; _currentUserName = null;
+    _currentUserIsAdmin = false;
+    document.getElementById('data-management-card').style.display = 'none';
     document.getElementById('auth-loading').style.display = 'none';
     document.getElementById('auth-screen').style.display = 'block';
     return;
@@ -887,7 +895,9 @@ async function resolveAuthState() {
   _currentUserFirstName = profile.firstName || '';
   _currentUserLastName = profile.lastName || '';
   _currentUserName = [_currentUserFirstName, _currentUserLastName].filter(Boolean).join(' ') || _currentUserEmail;
-  document.getElementById('nav-admin-btn').style.display = profile.isAdmin ? '' : 'none';
+  _currentUserIsAdmin = profile.isAdmin === true;
+  document.getElementById('nav-admin-btn').style.display = _currentUserIsAdmin ? '' : 'none';
+  document.getElementById('data-management-card').style.display = _currentUserIsAdmin ? '' : 'none';
   await loadAllData();
 
   document.getElementById('auth-loading').style.display = 'none';
@@ -2776,8 +2786,14 @@ function importSession(file) {
 }
 
 async function clearData(type) {
+  // Hiding the card is only cosmetic — this stops a non-admin who still has
+  // the buttons on screen (a page left open from before their admin rights
+  // changed) or who calls this from the console. It is still a client-side
+  // check: firestore.rules is the only real boundary, and today those rules
+  // let any approved user write the shared document.
+  if (!_currentUserIsAdmin) { alert('Only an admin can clear ward data.'); return; }
   const labels = { all:'ALL data', members:'member data', households:'household data', assignments:'assignment data' };
-  if (!confirm(`Clear ${labels[type]}?`)) return;
+  if (!confirm(`Clear the shared ${labels[type]} for everyone? This cannot be undone.`)) return;
   const tasks = [];
   if (type==='all'||type==='members') {
     S.members=[];
