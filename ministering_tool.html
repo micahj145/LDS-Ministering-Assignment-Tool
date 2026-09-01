@@ -772,18 +772,25 @@ async function saveMyName() {
   closeModal('edit-name-modal');
 }
 
+// Last-rendered profile list, kept so setUserStatus() can name the person in
+// its confirm prompt. Looked up by id rather than passed through the inline
+// onclick, which would break on a name containing an apostrophe.
+let _adminProfiles = [];
+
 async function renderAdminPanel() {
   const snap = await db.collection('profiles').orderBy('createdAt', 'asc').get();
   const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  _adminProfiles = list;
   const row = p => {
     const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
+    const isSelf = p.id === _currentUserId;
     return `
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f0f0f0;padding:0.5rem 0">
-      <div><div style="font-weight:500">${name ? esc(name) + ' — ' : ''}${esc(p.email)}</div>
+      <div><div style="font-weight:500">${name ? esc(name) + ' — ' : ''}${esc(p.email)}${isSelf ? ' <span style="font-weight:400;color:#888">(you)</span>' : ''}</div>
       <div style="font-size:0.78rem;color:#888">${p.status}${p.isAdmin ? ' · admin' : ''}</div></div>
       <div style="display:flex;gap:0.4rem">
         ${p.status !== 'approved' ? `<button class="btn btn-primary btn-sm" onclick="setUserStatus('${p.id}','approved')">Approve</button>` : ''}
-        ${p.status !== 'denied'   ? `<button class="btn btn-danger btn-sm" onclick="setUserStatus('${p.id}','denied')">Deny</button>` : ''}
+        ${p.status !== 'denied' && !isSelf ? `<button class="btn btn-danger btn-sm" onclick="setUserStatus('${p.id}','denied')">Deny</button>` : ''}
       </div></div>`;
   };
   const pending = list.filter(p => p.status === 'pending');
@@ -800,6 +807,31 @@ async function renderAdminPanel() {
   loadAuditLog();
 }
 async function setUserStatus(id, status) {
+  if (!_currentUserIsAdmin) { alert('Only an admin can change access.'); return; }
+
+  const p = _adminProfiles.find(x => x.id === id) || {};
+  const who = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'this user';
+
+  // Denying yourself is refused outright rather than merely confirmed. It
+  // takes away the Admin tab, which is the only place to undo it — recovery
+  // means editing the profile document by hand in the Firebase console. A
+  // confirm can't help once someone has clicked through it.
+  if (status === 'denied' && id === _currentUserId) {
+    alert('You cannot deny your own account — it would lock you out of the Admin tab, ' +
+          'and undoing it would mean editing the database directly in the Firebase console.');
+    return;
+  }
+
+  const msg = status === 'approved'
+    ? `Approve ${who}?\n\n` +
+      `They will be able to see and edit all ward data — names, addresses, phone numbers, ` +
+      `and every note on members, households and companionships.`
+    : `Deny ${who}?\n\n` +
+      (p.isAdmin ? `${who} is an admin.\n\n` : '') +
+      `They will be locked out the next time they load the page, and cannot read or change ` +
+      `ward data from that moment on. You can approve them again later.`;
+  if (!confirm(msg)) return;
+
   try {
     await db.collection('profiles').doc(id).update({ status });
   } catch (error) { alert('Failed to update: ' + error.message); return; }
