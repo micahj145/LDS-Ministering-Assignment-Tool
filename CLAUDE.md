@@ -118,6 +118,26 @@ threads, **Goals** and **Notes**, both dated and signed by author.
 - Clearing data: groups are wiped only by **Clear All Data**, not by clearing members or
   households — the council's goals and notes aren't member or household data.
 
+**Notes written elsewhere are pulled into a group entry's Notes thread** (`groupLinkedNotes()` /
+`groupMergedNotes()`), so the council sees everything said about a person in one place. Sources:
+their own member record, their household, companionships they minister in or that serve their
+household, and *any* note anywhere whose text mentions their name.
+
+- **Pulled in live, never copied.** Copying would duplicate the text, drift when the original is
+  edited, miss anything written before the person joined the group, and grow the single shared
+  document. The tradeoff is that a pulled-in note disappears from the group if its original is
+  deleted, which is the correct behaviour anyway.
+- **Name matching** (`noteMentionsName()`) is deliberately generous — a missed note is worse than
+  a stray one. It matches when every significant part of the name appears in any order ("Daniel
+  Brooks" and "Brooks, Daniel" both hit), or when the surname alone appears *capitalised* in the
+  original text — that capitalisation check is what keeps "a brown couch" from matching a member
+  named Brown. `NAME_STOPWORDS` drops words like "family" and "Elder" that say nothing about
+  which person is meant.
+- **Dismissing a false positive** (`dismissLinkedNote()`) appends its key to `entry.hiddenLinks`,
+  hiding it from that group only; the original note is untouched. Keys are `source::noteId`, with
+  a text/date fallback for any note predating note ids.
+- Only the **Notes** thread aggregates. Goals stay purely the council's own.
+
 ### Roles: two ways the tool is used
 The app serves two audiences, controlled by a `role` field on the profile and applied in
 `applyAccessVisibility()` / `hasFullAccess()`:
