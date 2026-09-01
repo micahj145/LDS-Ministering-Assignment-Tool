@@ -3064,6 +3064,21 @@ function groupEntryName(e) {
   return e.name || '';
 }
 
+// The most recent entry in a thread, shown inline in the group tables so the
+// council can read the current state of things without opening every modal.
+// Entries are appended, so the newest is simply the last one.
+function latestCommentHTML(arr) {
+  const list = Array.isArray(arr) ? arr : [];
+  if (!list.length) return '<div style="font-size:0.78rem;color:#c4c4c4;margin-top:0.3rem">None yet</div>';
+  const n = list[list.length - 1];
+  const text = n.text || '';
+  const short = text.length > 140 ? text.slice(0, 140).trimEnd() + '…' : text;
+  return `<div style="margin-top:0.35rem;font-size:0.8rem;color:#444;white-space:normal;line-height:1.35" title="${esc(text)}">
+      ${esc(short)}
+      <div style="font-size:0.72rem;color:#999;margin-top:0.15rem">${esc(n.author || '')}${n.date ? ' · ' + formatNoteDate(n.date) : ''}${list.length > 1 ? ` · ${list.length} total` : ''}</div>
+    </div>`;
+}
+
 function groupList(key) {
   if (!S.groups || !Array.isArray(S.groups[key])) S.groups = normalizeGroups(S.groups);
   return S.groups[key];
@@ -3078,15 +3093,26 @@ function renderCouncil() {
       const goals = (e.goals || []).length, notes = (e.notes || []).length;
       const added = e.addedBy ? `Added by ${esc(e.addedBy)}${e.addedDate ? ' · ' + formatNoteDate(e.addedDate) : ''}` : '';
       return `<tr>
-        <td><strong>${esc(groupEntryName(e))}</strong>${added ? `<div style="font-size:0.74rem;color:#aaa;margin-top:0.15rem">${added}</div>` : ''}</td>
-        <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','${g.key}','goals')">${goals ? `Goals (${goals})` : 'Goals'}</button></td>
-        <td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','${g.key}','notes')">${notes ? `Notes (${notes})` : 'Notes'}</button></td>
-        <td style="white-space:nowrap"><button class="btn btn-danger btn-sm" onclick="removeGroupEntry('${g.key}','${e.id}')">Remove</button></td>
+        <td style="vertical-align:top"><strong>${esc(groupEntryName(e))}</strong>${added ? `<div style="font-size:0.74rem;color:#aaa;margin-top:0.15rem">${added}</div>` : ''}</td>
+        <td style="vertical-align:top">
+          <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','${g.key}','goals')">${goals ? `Goals (${goals})` : 'Goals'}</button>
+          ${latestCommentHTML(e.goals)}
+        </td>
+        <td style="vertical-align:top">
+          <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','${g.key}','notes')">${notes ? `Notes (${notes})` : 'Notes'}</button>
+          ${latestCommentHTML(e.notes)}
+        </td>
+        <td style="white-space:nowrap;vertical-align:top"><button class="btn btn-danger btn-sm" onclick="removeGroupEntry('${g.key}','${e.id}')">Remove</button></td>
       </tr>`;
     }).join('');
 
     const body = list.length
-      ? `<div style="overflow-x:auto"><table><thead><tr><th>Name</th><th>Goals</th><th>Notes</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ? `<div style="overflow-x:auto"><table><thead><tr>
+           <th style="width:22%">Name</th>
+           <th style="width:31%">Goals <span style="font-weight:400;color:#aaa">· most recent</span></th>
+           <th style="width:31%">Notes <span style="font-weight:400;color:#aaa">· most recent</span></th>
+           <th>Actions</th>
+         </tr></thead><tbody>${rows}</tbody></table></div>`
       : `<div class="empty-state" style="padding:1.2rem"><p>No one in this group yet.</p></div>`;
 
     return `<div class="card">
