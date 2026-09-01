@@ -94,14 +94,12 @@ tr:hover td{background:#fafbfc}
 .alert{padding:0.7rem 1rem;border-radius:6px;margin-bottom:1rem;font-size:0.88rem}
 .alert-info{background:#d1ecf1;color:#0c5460;border:1px solid #bee5eb}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
-.three-col{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;align-items:start}
 .flex-between{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem}
 .link-bar{font-size:0.82rem;padding:0.4rem 0.7rem;border-radius:6px;margin-top:0.6rem}
 .link-bar.linked{background:#d4edda;color:#155724}
 .link-bar.partial{background:#fff3cd;color:#856404}
 .link-bar.none{background:#f8d7da;color:#721c24}
-@media(max-width:900px){.three-col{grid-template-columns:1fr 1fr}}
-@media(max-width:640px){.three-col,.two-col{grid-template-columns:1fr}nav button{padding:0.75rem 0.75rem;font-size:0.82rem}.container{padding:1rem}}
+@media(max-width:640px){.two-col{grid-template-columns:1fr}nav button{padding:0.75rem 0.75rem;font-size:0.82rem}.container{padding:1rem}}
 @media print{nav,header p,button{display:none}.container{padding:0}.card{box-shadow:none;border:1px solid #ddd}}
 </style>
 </head>
@@ -170,40 +168,13 @@ tr:hover td{background:#fafbfc}
     Nothing leaves your browser — all data is stored locally.
   </div>
 
-  <div class="three-col">
-
-    <!-- Members -->
-    <div class="card">
-      <h2>1. Members CSV</h2>
-      <div class="drop-zone" id="member-drop" onclick="document.getElementById('member-file').click()">
-        <input type="file" id="member-file" accept=".csv" onchange="handleMemberFile(this.files[0])">
-        <div class="icon">👤</div>
-        <strong>Click or drag to upload</strong>
-        <div style="font-size:0.82rem;margin-top:0.3rem">Individual member list from LCR</div>
-      </div>
-      <div id="member-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
-
-      <div id="member-mapping" style="display:none;margin-top:1rem">
-        <div style="font-size:0.88rem;font-weight:600;color:#333;margin-bottom:0.6rem">Map Columns</div>
-        <div class="mapping-grid">
-          <label>Full Name *</label><select id="map-name"></select>
-          <label>Gender</label><select id="map-gender"></select>
-          <label>Age</label><select id="map-age"></select>
-          <label>Phone</label><select id="map-phone"></select>
-        </div>
-        <label style="font-size:0.82rem;color:#666;display:flex;align-items:center;gap:0.4rem;margin-top:0.75rem">
-          <input type="checkbox" id="male-only" checked>
-          Only include males as "Brothers"
-        </label>
-        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importMembers()">Import / Sync Members</button>
-        <div style="font-size:0.76rem;color:#888;margin-top:0.5rem">Merges with your current list: adds new people, refreshes existing ones (notes &amp; links kept), and asks before removing anyone missing from the file.</div>
-      </div>
-      <div id="member-link-status" class="link-bar" style="display:none"></div>
-    </div>
+  <!-- Households first, then Members: importing households first means the
+       member import can link people to their household straight away. -->
+  <div class="two-col">
 
     <!-- Households -->
     <div class="card">
-      <h2>2. Households CSV</h2>
+      <h2>1. Households CSV</h2>
       <div class="drop-zone" id="hh-drop" onclick="document.getElementById('hh-file').click()">
         <input type="file" id="hh-file" accept=".csv" onchange="handleHouseholdsFile(this.files[0])">
         <div class="icon">🏠</div>
@@ -231,30 +202,36 @@ tr:hover td{background:#fafbfc}
       <div id="hh-link-status" class="link-bar" style="display:none"></div>
     </div>
 
-    <!-- Current Assignments -->
+    <!-- Members -->
     <div class="card">
-      <h2>3. Assignments CSV <span style="font-size:0.78rem;color:#888;font-weight:400">(optional)</span></h2>
-      <div class="drop-zone" id="assign-drop" onclick="document.getElementById('assign-file').click()">
-        <input type="file" id="assign-file" accept=".csv" onchange="handleAssignFile(this.files[0])">
-        <div class="icon">🤝</div>
+      <h2>2. Members CSV</h2>
+      <div class="drop-zone" id="member-drop" onclick="document.getElementById('member-file').click()">
+        <input type="file" id="member-file" accept=".csv" onchange="handleMemberFile(this.files[0])">
+        <div class="icon">👤</div>
         <strong>Click or drag to upload</strong>
-        <div style="font-size:0.82rem;margin-top:0.3rem">Current ministering assignments from LCR</div>
+        <div style="font-size:0.82rem;margin-top:0.3rem">Individual member list from LCR</div>
       </div>
-      <div id="assign-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+      <div id="member-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
 
-      <div id="assign-mapping" style="display:none;margin-top:1rem">
+      <div id="member-mapping" style="display:none;margin-top:1rem">
         <div style="font-size:0.88rem;font-weight:600;color:#333;margin-bottom:0.6rem">Map Columns</div>
         <div class="mapping-grid">
-          <label>Minister 1 *</label><select id="map-m1"></select>
-          <label>Minister 2</label><select id="map-m2"></select>
-          <label>Assigned Household *</label><select id="map-hh"></select>
-          <label>District / Zone</label><select id="map-district"></select>
+          <label>Full Name *</label><select id="map-name"></select>
+          <label>Gender</label><select id="map-gender"></select>
+          <label>Age</label><select id="map-age"></select>
+          <label>Phone</label><select id="map-phone"></select>
         </div>
-        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importAssignments()">Import Assignments</button>
+        <label style="font-size:0.82rem;color:#666;display:flex;align-items:center;gap:0.4rem;margin-top:0.75rem">
+          <input type="checkbox" id="male-only" checked>
+          Only include males as "Brothers"
+        </label>
+        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importMembers()">Import / Sync Members</button>
+        <div style="font-size:0.76rem;color:#888;margin-top:0.5rem">Merges with your current list: adds new people, refreshes existing ones (notes &amp; links kept), and asks before removing anyone missing from the file.</div>
       </div>
+      <div id="member-link-status" class="link-bar" style="display:none"></div>
     </div>
 
-  </div><!-- /three-col -->
+  </div><!-- /two-col -->
 
   <div id="csv-preview" style="display:none">
     <div class="card">
@@ -561,7 +538,6 @@ const S = {
   activityLog: [],  // { ts, user } — one entry per saved batch of changes
   rawMembers: null,
   rawHouseholds: null,
-  rawAssign: null,
 };
 
 // ── Cloud persistence layer (single shared document) ────────────
@@ -925,7 +901,6 @@ async function resolveAuthState() {
 (function init() {
   setupDrop('member-drop', 'member-file', handleMemberFile);
   setupDrop('hh-drop',     'hh-file',     handleHouseholdsFile);
-  setupDrop('assign-drop', 'assign-file', handleAssignFile);
 
   document.querySelectorAll('.modal-overlay').forEach(o =>
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
@@ -1435,53 +1410,12 @@ function cancelSyncReview() {
   }
 }
 
-// ── Assignment Import ─────────────────────────────────────────
-function handleAssignFile(file) {
-  readFile(file, text => {
-    const parsed = parseCSV(text);
-    S.rawAssign = parsed;
-    document.getElementById('assign-status').textContent =
-      `Loaded: ${file.name} (${parsed.rows.length} rows, ${parsed.headers.length} cols)`;
-    fillDropdowns(['map-m1','map-m2','map-hh','map-district'], parsed.headers, autoAssignCols(parsed.headers));
-    document.getElementById('assign-mapping').style.display = 'block';
-  });
-}
-
-function autoAssignCols(headers) {
-  const h = headers.map(x => x.toLowerCase());
-  const find = (...kws) => headers[h.findIndex(x => kws.some(k => x.includes(k)))] || '';
-  return {
-    'map-m1':       find('minister 1','minister1','elder 1','companion 1','minister'),
-    'map-m2':       find('minister 2','minister2','companion 2','companion'),
-    'map-hh':       find('household','assigned','family','assignment'),
-    'map-district': find('district','zone','group'),
-  };
-}
-
-async function importAssignments() {
-  if (!S.rawAssign) return;
-  const m1Col = document.getElementById('map-m1').value;
-  if (!m1Col) { alert('Map the Minister 1 column first.'); return; }
-  const m2Col = document.getElementById('map-m2').value;
-  const hhCol = document.getElementById('map-hh').value;
-  const dCol  = document.getElementById('map-district').value;
-
-  const map = {};
-  S.rawAssign.rows.forEach(r => {
-    const m1 = (r[m1Col]||'').trim(); if (!m1) return;
-    const m2 = m2Col ? (r[m2Col]||'').trim() : '';
-    const hh = hhCol ? (r[hhCol]||'').trim() : '';
-    const d  = dCol  ? (r[dCol]||'').trim()  : '';
-    const key = [m1,m2].sort().join('|||');
-    if (!map[key]) map[key] = { id:uid(), m1Name:m1, m2Name:m2, households:[], district:d };
-    if (hh && !map[key].households.includes(hh)) map[key].households.push(hh);
-  });
-
-  S.current = Object.values(map);
-  await dbReplaceCompanionshipList('current', S.current);
-  document.getElementById('assign-status').innerHTML =
-    `<span style="color:#155724">✓ Imported ${S.current.length} companionships</span>`;
-}
+// Note: there used to be an Assignments CSV import here, building S.current
+// straight from an LCR assignments export. It was never used — assignments are
+// built in the app (Proposed → Promote, or "+ Add") — so it was removed rather
+// than left as a third import path that could overwrite Current Assignments
+// wholesale. Records it created are the only source of the optional `district`
+// field, which existing companionships may still carry and still display.
 
 // ── Core Helpers ──────────────────────────────────────────────
 function brothers() { return S.members.filter(m => m.isBrother !== false); }
@@ -2835,9 +2769,9 @@ async function clearData(type) {
     if (type!=='all') tasks.push(dbUpsertMembers(S.members));
   }
   if (type==='all'||type==='assignments') {
+    // Clears the Current Assignments list. (No assign-status/assign-mapping
+    // elements to reset any more — the Assignments CSV import was removed.)
     S.current=[];
-    document.getElementById('assign-status').textContent='';
-    document.getElementById('assign-mapping').style.display='none';
     tasks.push(dbReplaceCompanionshipList('current', []));
   }
   if (type==='all') { S.proposed=[]; tasks.push(dbReplaceCompanionshipList('proposed', [])); }

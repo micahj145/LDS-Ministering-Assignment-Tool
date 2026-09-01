@@ -20,9 +20,13 @@ within a minute or so — that's how the ward team gets updates.
 - **State**: a single in-memory object `S` (`members`, `households`, `current`, `proposed`,
   `activityLog`), synced as one whole document to a shared Firestore backend (see below) on
   every mutation.
-- **Import**: CSV upload for Members, Households, and (optionally) an Assignments CSV, with
-  column-mapping UI. Re-imports are a non-destructive merge/sync (adds new, updates existing,
-  confirms before removing anyone missing from the file) — not a wipe-and-replace.
+- **Import**: CSV upload for Households, then Members (that order — households first means the
+  member import can link people to a household immediately), with column-mapping UI. Re-imports
+  are a non-destructive merge/sync (adds new, updates existing, confirms before removing anyone
+  missing from the file) — not a wipe-and-replace. There was a third Assignments CSV import; it
+  was never used and was removed, since assignments are built in the app (Proposed → Promote, or
+  "+ Add") and that import replaced Current Assignments wholesale. It was the only writer of the
+  optional `district` field, which older companionships may still carry and still display.
 - **Geocoding**: household addresses are geocoded via Nominatim (OpenStreetMap), rate-limited to
   ~1 req/sec, cached in `S.households[].lat/lng`. Used to compute minister-to-minister and
   minister-to-household distances shown on companionship cards.
