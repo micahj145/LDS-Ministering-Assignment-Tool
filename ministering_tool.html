@@ -569,12 +569,24 @@ async function runSync() {
   const who = _currentUserName || _currentUserEmail || 'unknown';
   const log = (S.activityLog || []).concat([{ ts: Date.now(), user: who }]).slice(-200);
   try {
-    await WARD_DOC.set({
+    // Firestore's set() throws on any `undefined` field value anywhere in
+    // the object tree (unlike localStorage/Postgres, which never cared).
+    // Various pre-existing mutation functions elsewhere in this file can
+    // legitimately produce `undefined` for an unset optional field (e.g.
+    // district, inPool). Rather than chase down every call site, round-
+    // trip the plain-data part through JSON — its native behavior drops
+    // `undefined` object keys and turns `undefined` array entries into
+    // `null`, which is exactly what we want, and is far more robust
+    // against a *future* function doing the same thing. serverTimestamp()
+    // is a special sentinel, not plain data, so it's added after the
+    // round-trip rather than being part of what gets stringified.
+    const payload = JSON.parse(JSON.stringify({
       members: S.members, households: S.households, current: S.current, proposed: S.proposed,
       activityLog: log,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: who,
-    });
+    }));
+    payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    payload.updatedBy = who;
+    await WARD_DOC.set(payload);
     S.activityLog = log;
   } catch (error) {
     dbFail(error);
