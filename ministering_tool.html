@@ -4,6 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ministering Assignment Tool</title>
+<script>
+// ── Cache-buster ──────────────────────────────────────────────
+// GitHub Pages serves this file with a ~10-minute cache header, and browsers
+// hold onto it longer still, so someone who reloads right after a deploy can
+// keep seeing the old app (this bit us after the Firestore fix went out).
+// A query string makes the URL a distinct cache key, which forces a fresh
+// fetch from the server. Runs before the Firebase SDK loads so a redirect
+// doesn't waste those downloads. Two guards keep it safe:
+//   - only over http(s), so opening the file locally (file://) is untouched
+//   - only when there's no v= yet, so the redirect lands somewhere it won't
+//     fire again — no reload loop
+(function () {
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+  if (/[?&]v=/.test(location.search)) return;
+  location.replace(location.pathname + '?v=' + Date.now() + location.hash);
+})();
+</script>
 <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>

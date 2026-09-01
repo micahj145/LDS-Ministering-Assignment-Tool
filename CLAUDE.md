@@ -9,8 +9,11 @@ distance-aware planning, and track both a "Current Assignments" list and a separ
 workspace for drafting changes before they go live.
 
 The entire app is one file: **`ministering_tool.html`**. No build step, no framework — vanilla
-JS, inline `<style>`/`<script>`. Open it directly in a browser to run it. `index.html` is a
-one-line redirect to it, for a clean root URL if hosted (e.g. GitHub Pages).
+JS, inline `<style>`/`<script>`. Open it directly in a browser to run it. `index.html` redirects
+to it, for a clean root URL.
+
+It's deployed via **GitHub Pages** off `main` in this repo, so every push republishes the site
+within a minute or so — that's how the ward team gets updates.
 
 ## Architecture today
 
@@ -93,9 +96,14 @@ email (`micahj145@gmail.com`) is hardcoded in both `ministering_tool.html` (`ADM
 
 ### Files
 - `ministering_tool.html` — the app. `firebaseConfig` near the top of the `<script>` block holds
-  placeholder `REPLACE_ME` values until the real project's config is wired in (see
-  `FIREBASE_SETUP.md`) — these are client-safe values, not secrets; real access control is
-  entirely in `firestore.rules`.
+  the live project's real values (see "Live project" above) — client-safe values, not secrets;
+  real access control is entirely in `firestore.rules`.
+- `index.html` — redirects to the app with a `?v=<timestamp>` cache-busting stamp, and
+  `ministering_tool.html` self-redirects once to add the same stamp when loaded without one (so a
+  bookmark straight to the file is covered too). GitHub Pages serves with a ~10-minute cache
+  header and browsers hold on longer, which left ward members on a stale build after a deploy; a
+  query string is a distinct cache key, so the fetch has to go to the server. The self-redirect is
+  skipped over `file://`, so opening the file locally still works normally.
 - `firestore.rules` — the actual security boundary: who can read/write `wardData/shared`, and who
   can create/update `profiles/{uid}` docs (with the self-approval/self-promotion guardrails).
 - `FIREBASE_SETUP.md` — step-by-step one-time console setup (project, Auth provider, Firestore

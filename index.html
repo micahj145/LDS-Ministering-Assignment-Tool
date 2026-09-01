@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="refresh" content="0; url=ministering_tool.html">
 <title>Ministering Assignment Tool</title>
+<script>
+// Hand off to the app with a fresh cache-busting stamp so a plain reload
+// always pulls the newest ministering_tool.html instead of a copy the
+// browser (or GitHub Pages' ~10-minute cache) held on to. Even when THIS
+// page is served from cache, the script still runs at load time, so the
+// stamp is always current.
+location.replace('ministering_tool.html?v=' + Date.now());
+</script>
+<noscript><meta http-equiv="refresh" content="0; url=ministering_tool.html"></noscript>
 </head>
 <body>
 <p>Redirecting to the <a href="ministering_tool.html">Ministering Assignment Tool</a>&hellip;</p>
