@@ -157,6 +157,7 @@ tr:hover td{background:#fafbfc}
   <button id="nav-current-btn" onclick="showTab('current')">Current Assignments</button>
   <button id="nav-propose-btn" onclick="showTab('propose')">Proposed Assignments</button>
   <button id="nav-council-btn" onclick="showTab('council')">Ward Council Collaboration</button>
+  <button id="nav-moves-btn" onclick="showTab('moves')">New Member Move In/Move Outs</button>
   <button id="nav-admin-btn" onclick="showTab('admin')" style="display:none">Admin</button>
 </nav>
 
@@ -438,6 +439,10 @@ tr:hover td{background:#fafbfc}
     council can see at a glance who is being looked after and what has been done.
   </div>
   <div id="council-groups"></div>
+</div>
+
+<!-- NEW MEMBER MOVE IN/MOVE OUTS TAB (placeholder — no content yet) -->
+<div id="tab-moves" class="tab-content">
 </div>
 
 <div id="tab-admin" class="tab-content">
@@ -1056,7 +1061,7 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   // Order must match the nav buttons in the DOM — the active-button lookup
   // below is by index, so inserting a tab means inserting it here too.
-  const tabs = ['import','members','households','brothers','current','propose','council','admin'];
+  const tabs = ['import','members','households','brothers','current','propose','council','moves','admin'];
   document.querySelectorAll('nav button')[tabs.indexOf(name)].classList.add('active');
   if (name === 'members')    renderMembers();
   if (name === 'households') renderHouseholds();
