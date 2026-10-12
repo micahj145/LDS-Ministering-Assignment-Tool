@@ -226,6 +226,37 @@ ministering is in place, and for removing people who have moved out.
   than just hidden. An entry with no readable date is kept. Once pruned, a re-import shows
   that person as "Not in Members" rather than "Already removed".
 
+### Tagging and the Notifications tab
+- **Every** Notes / Goals / Next Steps thread can tag users. There is only one free-text input
+  in the app (the shared notes modal), and its tag picker is now shown for every field. A note
+  carries `tags: [{ uid, name }]` when anyone is tagged, plus `authorId` (new since this
+  feature; older notes only have `author`, a display name).
+- The tag list comes from `S.users` (see Move Ins above: names only, self-registered on
+  sign-in, rebuilt by an admin opening the Admin tab).
+- **Notifications tab** (`allTaggedNotes()`): every note anywhere that tags the signed-in user
+  (members, households, current/proposed companionships, every `GROUPS` list and its goals,
+  notes and next steps), newest first, each with an Open button into that thread.
+- **Unread** = dated after the user last opened the tab *and* not written by them
+  (`authorId`, falling back to the author name for older notes). The last-opened time is
+  `notifSeenAt` on the user's **own profile document**, not the shared ward doc. The existing
+  self-update rule allows it (it only pins status/isAdmin/email), so no rules change was needed.
+- Counts show on the nav button and, through the Badging API, on the installed app's icon
+  (`updateNotifBadges()`): iPhone/iPad Home Screen apps (only once notifications are allowed;
+  the tab offers an Allow button, but only when running installed) and installed Chrome/Edge
+  apps on Windows/Mac. Android has no badge API; it only dots icons for real notifications.
+- No live listener (by design), so new tags appear on load or ↻ Refresh, and the icon count
+  is as of the last time the app was open. Real push (Stage 2) needs a sender: Blaze + Cloud
+  Function, or possibly Apps Script + FCM (unbuilt).
+
+### Installable app (PWA)
+- `manifest.json` (start_url `./ministering_tool.html`, standalone), `icons/` (192, 512,
+  512 maskable, 180 apple-touch-icon), and head tags in `ministering_tool.html`.
+- `sw.js` is a deliberate **pass-through**: no fetch handler, no caching, so member data is
+  never stored on devices and the `?v=` cache-buster still controls updates. It exists because
+  installed apps and future push need one. It registers only over https (or localhost).
+- `.gitignore` ignores `/*.json` to keep exports out; `!/manifest.json` re-includes the manifest.
+- Verified with Chrome DevTools Protocol: no installability or manifest errors.
+
 ### Roles: two ways the tool is used
 The app serves two audiences, controlled by a `role` field on the profile and applied in
 `applyAccessVisibility()` / `hasFullAccess()`:
@@ -261,7 +292,9 @@ Notes for anyone changing this:
   bookmark straight to the file is covered too). GitHub Pages serves with a ~10-minute cache
   header and browsers hold on longer, which left ward members on a stale build after a deploy; a
   query string is a distinct cache key, so the fetch has to go to the server. The self-redirect is
-  skipped over `file://`, so opening the file locally still works normally.
+  skipped over `file://`, so opening the file locally still works normally. A stamp older than 10 minutes
+  is replaced too, because an iPhone Home Screen app or a bookmark saves the stamped URL and
+  would otherwise keep reopening a stale build.
 - `firestore.rules` — the actual security boundary: who can read/write `wardData/shared`, and who
   can create/update `profiles/{uid}` docs (with the self-approval/self-promotion guardrails).
 - `FIREBASE_SETUP.md` — step-by-step one-time console setup (project, Auth provider, Firestore
@@ -283,6 +316,6 @@ Notes for anyone changing this:
   matters more than it would for a private repo. When picking "the latest" export among several
   loose files in the project root, sort by actual file mtime, not filename — export filenames are
   date-stamped by day, not by exact time, so same-day exports need mtime to disambiguate.
-- Only `ministering_tool.html`, `index.html`, `firestore.rules`, `FIREBASE_SETUP.md`, and this
-  file should ever be staged/committed — the project root otherwise accumulates loose data export
+- Only `ministering_tool.html`, `index.html`, `firestore.rules`, `FIREBASE_SETUP.md`, this
+  file, and the PWA files (`manifest.json`, `sw.js`, `icons/`) should ever be staged/committed — the project root otherwise accumulates loose data export
   files that must stay untracked.

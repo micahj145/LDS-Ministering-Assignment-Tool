@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a3a5c">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ministering">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Ministering Assignment Tool</title>
 <script>
 // ── Cache-buster ──────────────────────────────────────────────
@@ -11,14 +19,19 @@
 // keep seeing the old app (this bit us after the Firestore fix went out).
 // A query string makes the URL a distinct cache key, which forces a fresh
 // fetch from the server. Runs before the Firebase SDK loads so a redirect
-// doesn't waste those downloads. Two guards keep it safe:
+// doesn't waste those downloads. Three guards keep it safe:
 //   - only over http(s), so opening the file locally (file://) is untouched
-//   - only when there's no v= yet, so the redirect lands somewhere it won't
-//     fire again — no reload loop
+//   - the redirect always lands on a fresh stamp, so it can't fire again —
+//     no reload loop
+//   - a stamp under 10 minutes old is left alone; an older one is replaced,
+//     because an iPhone Home Screen app (or a bookmark) saves the full URL,
+//     stamp included, and would otherwise keep reopening an old cached build
 (function () {
   if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
-  if (/[?&]v=/.test(location.search)) return;
-  location.replace(location.pathname + '?v=' + Date.now() + location.hash);
+  const m = location.search.match(/[?&]v=(\d+)/);
+  if (m && Date.now() - Number(m[1]) < 10 * 60 * 1000) return;
+  const rest = location.search.replace(/^\?/, '').split('&').filter(p => p && !/^v=/.test(p));
+  location.replace(location.pathname + '?' + ['v=' + Date.now()].concat(rest).join('&') + location.hash);
 })();
 </script>
 <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
@@ -151,6 +164,7 @@ tr:hover td{background:#fafbfc}
 
 <nav>
   <button class="active" onclick="showTab('import')">Import</button>
+  <button id="nav-notif-btn" onclick="showTab('notifications')">Notifications <span id="notif-count"></span></button>
   <button onclick="showTab('members')">Members <span id="members-count"></span></button>
   <button onclick="showTab('households')">Households <span id="households-count"></span></button>
   <button id="nav-brothers-btn" onclick="showTab('brothers')">Brothers <span id="brothers-count"></span></button>
@@ -162,6 +176,20 @@ tr:hover td{background:#fafbfc}
 </nav>
 
 <div class="container">
+
+<!-- NOTIFICATIONS TAB -->
+<div id="tab-notifications" class="tab-content">
+  <div id="notif-badge-perm"></div>
+  <div class="card">
+    <div class="flex-between">
+      <h2 style="margin:0">Tagged for you</h2>
+      <span id="notif-summary" style="font-size:0.82rem;color:#888"></span>
+    </div>
+    <p style="font-size:0.82rem;color:#888;margin:0.3rem 0 0.9rem">Notes, goals and next steps anywhere in the app that tag you, newest first.
+      New ones arrive when the page loads or you press ↻ Refresh.</p>
+    <div id="notif-list"></div>
+  </div>
+</div>
 
 <!-- IMPORT TAB -->
 <div id="tab-import" class="tab-content active">
@@ -766,6 +794,7 @@ async function refreshFromCloud() {
     await loadAllData();
     refreshBadge();
     updateMovesNavBadge();
+    updateNotifBadges();
     showTab(currentTabName());
     setRefreshStatus('✓ Updated', '#7ee2a8');
   } catch (error) {
@@ -1068,6 +1097,7 @@ async function resolveAuthState() {
   _currentUserName = [_currentUserFirstName, _currentUserLastName].filter(Boolean).join(' ') || _currentUserEmail;
   _currentUserIsAdmin = profile.isAdmin === true;
   _currentUserRole = profile.role === 'eq' ? 'eq' : 'council';
+  _notifSeenAt = Date.parse(profile.notifSeenAt) || 0;
   applyAccessVisibility();
   // A council member landing on a tab they can't use (e.g. the page was left
   // on Proposed before their role changed) gets sent back to Import.
@@ -1075,6 +1105,7 @@ async function resolveAuthState() {
   await loadAllData();
   registerSelfInDirectory();
   updateMovesNavBadge();
+  updateNotifBadges();
 
   document.getElementById('auth-loading').style.display = 'none';
   document.getElementById('app-shell').style.display = 'block';
@@ -1113,7 +1144,7 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   // Order must match the nav buttons in the DOM — the active-button lookup
   // below is by index, so inserting a tab means inserting it here too.
-  const tabs = ['import','members','households','brothers','current','propose','council','moves','admin'];
+  const tabs = ['import','notifications','members','households','brothers','current','propose','council','moves','admin'];
   document.querySelectorAll('nav button')[tabs.indexOf(name)].classList.add('active');
   if (name === 'members')    renderMembers();
   if (name === 'households') renderHouseholds();
@@ -1122,6 +1153,7 @@ function showTab(name) {
   if (name === 'propose')    renderProposed();
   if (name === 'council')    renderCouncil();
   if (name === 'moves')      renderMoves();
+  if (name === 'notifications') { renderNotifications(); markNotificationsSeen(); }
   if (name === 'admin')      renderAdminPanel();
 }
 
@@ -3039,9 +3071,9 @@ function openNotesModal(type, id, groupKey, field) {
     nextSteps: 'What happens next, and who is doing it?…',
   }[notesField()] || 'Write a note or comment…';
   document.getElementById('note-add-btn').textContent = `Add ${notesFieldLabel()}`;
-  const tagging = notesField() === 'nextSteps';
-  document.getElementById('note-tags-wrap').style.display = tagging ? '' : 'none';
-  if (tagging) renderNoteTagPicker();
+  // Every thread can tag users; tagged people see it on their Notifications tab.
+  document.getElementById('note-tags-wrap').style.display = '';
+  renderNoteTagPicker();
   document.getElementById('note-author-display').textContent = _currentUserName || '';
   document.getElementById('note-text').value = '';
   document.getElementById('note-error').textContent = '';
@@ -3104,6 +3136,7 @@ function renderGroupNotesList(entry) {
                 title="${linked ? 'Remove from this group (the original note stays where it was written)' : 'Delete note'}">✕</button>
       </div>
       <div style="font-size:0.87rem;color:#333;white-space:pre-wrap">${esc(r.n.text)}</div>
+      ${tagsHTML(r.n.tags)}
       ${linked ? `<div style="font-size:0.72rem;color:#9bb0c7;margin-top:0.35rem">from ${esc(r.source)}</div>` : ''}
     </div>`;
   }).join('');
@@ -3134,11 +3167,10 @@ function addNote() {
   if (!target) return;
   const field = notesField();
   if (!target[field]) target[field] = [];
-  const note = { id: uid(), author: _currentUserName || 'Unknown', text, date: new Date().toISOString() };
-  if (field === 'nextSteps') {
-    note.tags = [...document.querySelectorAll('#note-tags input:checked')].map(i => ({ uid: i.value, name: i.dataset.name }));
-    document.querySelectorAll('#note-tags input:checked').forEach(i => { i.checked = false; });
-  }
+  const note = { id: uid(), author: _currentUserName || 'Unknown', authorId: _currentUserId || null, text, date: new Date().toISOString() };
+  const tags = [...document.querySelectorAll('#note-tags input:checked')].map(i => ({ uid: i.value, name: i.dataset.name }));
+  if (tags.length) note.tags = tags;
+  document.querySelectorAll('#note-tags input:checked').forEach(i => { i.checked = false; });
   target[field].push(note);
   persistNotesTarget();
   document.getElementById('note-text').value = '';
@@ -3166,6 +3198,8 @@ function refreshNotesSourceTab() {
   if (_notesCtx.type === 'proposed')  renderProposed();
   if (_notesCtx.type === 'current')   renderCurrent();
   if (_notesCtx.type === 'group')     renderGroupViews();
+  updateNotifBadges();
+  if (currentTabName() === 'notifications') renderNotifications();
 }
 
 // Group entries now appear on two tabs (council groups and Move Ins).
@@ -4556,6 +4590,126 @@ function renderMoveOutLog() {
   </div>`;
 }
 
+// ── Notifications ─────────────────────────────────────────────
+// Every note, goal and next step anywhere in the app can tag users (the tag
+// picker in the shared notes modal). The Notifications tab gathers the ones
+// that tag the signed-in user, newest first. "Unread" means written after the
+// user last opened the tab, by someone else; the last-opened time lives on the
+// user's own profile document (notifSeenAt), which firestore.rules already
+// lets them update, so read-state is per person and never touches the shared
+// ward document. There is no live listener (by design, see refreshFromCloud),
+// so new tags arrive on load or ↻ Refresh.
+let _notifSeenAt = 0;
+
+function allTaggedNotes(uid) {
+  const out = [];
+  const take = (list, ctx) => (list || []).forEach(n => {
+    if ((n.tags || []).some(t => t.uid === uid)) out.push({ n, ...ctx });
+  });
+  S.members.forEach(m => take(m.notes, { where: `Members · ${m.name}`, open: ['member', m.id] }));
+  S.households.forEach(h => take(h.notes, { where: `Households · ${h.name}`, open: ['household', h.id] }));
+  [['current', 'Current Assignments'], ['proposed', 'Proposed Assignments']].forEach(([k, label]) =>
+    (S[k] || []).forEach(c => take(c.notes, { where: `${label} · ${c.m1Name}${c.m2Name ? ' + ' + c.m2Name : ''}`, open: [k, c.id] })));
+  GROUPS.forEach(g => groupList(g.key).forEach(e => {
+    [['goals', 'Goals'], ['notes', 'Notes'], ['nextSteps', 'Next Steps']].forEach(([f, fl]) =>
+      take(e[f], { where: `${g.label} · ${groupEntryName(e)} · ${fl}`, open: ['group', e.id, g.key, f] }));
+  }));
+  return out.sort((a, b) => (Date.parse(b.n.date) || 0) - (Date.parse(a.n.date) || 0));
+}
+
+function isUnread(item) {
+  // Notes from before authorId was recorded fall back to the author's name.
+  const mine = item.n.authorId ? item.n.authorId === _currentUserId : item.n.author === _currentUserName;
+  return (Date.parse(item.n.date) || 0) > _notifSeenAt && !mine;
+}
+
+function unreadCount() {
+  return _currentUserId ? allTaggedNotes(_currentUserId).filter(isUnread).length : 0;
+}
+
+// Nav count, plus the count on the installed app's icon where the platform
+// supports it (Home Screen apps on iPhone/iPad, installed apps on Windows and
+// Mac). Android has no badge API; it dots the icon for real notifications only.
+function updateNotifBadges() {
+  const n = unreadCount();
+  const el = document.getElementById('notif-count');
+  if (el) {
+    el.textContent = n || '';
+    el.style.cssText = n ? 'background:#dc3545;color:#fff;border-radius:10px;padding:0.15rem 0.5rem;font-size:0.75rem;margin-left:4px' : '';
+  }
+  try {
+    if ('setAppBadge' in navigator) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); }
+  } catch (e) { /* unsupported or not installed — the nav count still shows */ }
+}
+
+function renderNotifications() {
+  const host = document.getElementById('notif-list');
+  if (!host || !_currentUserId) return;
+  const items = allTaggedNotes(_currentUserId);
+  const unread = items.filter(isUnread).length;
+  document.getElementById('notif-summary').textContent = items.length
+    ? `${unread ? unread + ' new · ' : ''}${items.length} total` : '';
+  host.innerHTML = items.length ? items.map((it, i) => {
+    const text = it.n.text || '';
+    const short = text.length > 280 ? text.slice(0, 280).trimEnd() + '…' : text;
+    const isNew = isUnread(it);
+    return `<div style="border:1px solid ${isNew ? '#f5c2c7' : '#e0e6ed'};background:${isNew ? '#fff5f5' : '#fff'};border-radius:8px;padding:0.7rem 0.85rem;margin-bottom:0.6rem">
+      <div class="flex-between" style="gap:0.6rem;align-items:flex-start">
+        <div style="font-size:0.8rem;color:#1a3a5c;font-weight:600">${isNew ? '<span class="badge badge-red" style="font-size:0.68rem;margin-right:0.3rem">New</span>' : ''}${esc(it.where)}</div>
+        <button class="btn btn-secondary btn-sm" onclick="openNotification(${i})">Open</button>
+      </div>
+      <div style="font-size:0.87rem;color:#333;white-space:pre-wrap;margin-top:0.35rem">${esc(short)}</div>
+      ${tagsHTML(it.n.tags)}
+      <div style="font-size:0.74rem;color:#999;margin-top:0.25rem">${esc(it.n.author || '')}${it.n.date ? ' · ' + formatNoteDate(it.n.date) : ''}</div>
+    </div>`;
+  }).join('') : '<div class="empty-state" style="padding:1.5rem"><p>Nothing yet. When someone tags you on a note, goal or next step, it shows up here.</p></div>';
+  renderBadgePermission();
+}
+
+function openNotification(i) {
+  const it = allTaggedNotes(_currentUserId)[i];
+  if (it) openNotesModal(...it.open);
+}
+
+// Opening the tab marks everything as read — after it's been drawn, so this
+// visit still shows what was new.
+async function markNotificationsSeen() {
+  if (!_currentUserId) return;
+  const now = Date.now();
+  if (!allTaggedNotes(_currentUserId).some(isUnread)) { _notifSeenAt = Math.max(_notifSeenAt, now); return; }
+  _notifSeenAt = now;
+  updateNotifBadges();
+  try {
+    await db.collection('profiles').doc(_currentUserId).update({ notifSeenAt: new Date(now).toISOString() });
+  } catch (e) { console.warn('Could not save notification read state:', e?.message); }
+}
+
+// iPhone/iPad only draw the icon count once notifications are allowed, even
+// though nothing is sent yet; offered only where it can make a difference.
+function renderBadgePermission() {
+  const el = document.getElementById('notif-badge-perm');
+  if (!el) return;
+  const installed = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
+  const can = installed && 'setAppBadge' in navigator && typeof Notification !== 'undefined' && Notification.permission === 'default';
+  el.innerHTML = can ? `<div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem">
+      <span>Show your unread count on the app icon?</span>
+      <button class="btn btn-primary btn-sm" onclick="requestBadgePermission()">Allow</button></div>` : '';
+}
+
+async function requestBadgePermission() {
+  try { await Notification.requestPermission(); } catch (e) { /* user dismissed */ }
+  renderBadgePermission();
+  updateNotifBadges();
+}
+
+// ── Installable app (PWA) ─────────────────────────────────────
+// sw.js is a pass-through: it caches nothing, so member data is never stored
+// on a device and the ?v= cache-buster still controls updates. It exists
+// because installed web apps (and, later, push notifications) need one.
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('Service worker not registered:', e?.message));
+}
+
 // ── Household Address Edit ────────────────────────────────────
 let _hhEditId = null;
 
@@ -4820,9 +4974,9 @@ function deleteHousehold(id) {
         <textarea id="note-text" rows="3" placeholder="Write a note or comment…" style="width:100%;padding:0.45rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem;resize:vertical;font-family:inherit"></textarea>
       </div>
       <div class="form-group" id="note-tags-wrap" style="display:none">
-        <label>Tag people on this step</label>
+        <label>Tag people</label>
         <div id="note-tags" style="display:flex;flex-wrap:wrap;gap:0.3rem 0.9rem;max-height:120px;overflow-y:auto"></div>
-        <div style="font-size:0.75rem;color:#888;margin-top:0.25rem">Anyone with access appears here once they've signed in since this feature was added.</div>
+        <div style="font-size:0.75rem;color:#888;margin-top:0.25rem">Tagged people see this on their Notifications tab. Anyone with access appears here once they've signed in since tagging was added.</div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div id="note-error" style="font-size:0.82rem;color:#dc3545"></div>
