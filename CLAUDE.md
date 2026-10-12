@@ -220,6 +220,11 @@ ministering is in place, and for removing people who have moved out.
   `{ name, householdName, moveDate, newUnit, removedBy, removedDate }` and shown as the
   **Moved Out** list. A re-import marks those people "Already removed". The birth date is not
   stored.
+- The Moved Out list keeps only entries whose `removedDate` is within three months of when the
+  page was loaded (`MOVEOUT_KEEP_MONTHS`, `PAGE_LOADED_AT`). `pruneMoveOutLog()` runs in
+  `loadAllData()` and saves the shorter list, so old entries are deleted for everyone rather
+  than just hidden. An entry with no readable date is kept. Once pruned, a re-import shows
+  that person as "Not in Members" rather than "Already removed".
 
 ### Roles: two ways the tool is used
 The app serves two audiences, controlled by a `role` field on the profile and applied in

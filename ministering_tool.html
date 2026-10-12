@@ -612,7 +612,7 @@ const GROUPS = [
     blurb: 'Households that have moved into the ward, until their ministering assignments are in place.' },
   // A plain log of who a Members Moved Out import removed — see the Move Outs section.
   { key: 'moveout',   label: 'Moved Out',         fromMembers: false, tab: 'moves',
-    blurb: 'People removed from the ward records by a Members Moved Out import.' },
+    blurb: 'People removed from the ward records by a Members Moved Out import (kept for three months).' },
 ];
 
 // Always hand back all three lists, whatever the stored document contains —
@@ -729,6 +729,7 @@ async function loadAllData() {
   S.activityLog = data.activityLog || [];
   S.groups      = normalizeGroups(data.groups);
   S.users       = Array.isArray(data.users) ? data.users : [];
+  pruneMoveOutLog();
   // Normalize addresses from older imports that may have embedded newlines or ZIP+4
   S.households.forEach(hh => { if (hh.address) hh.address = normalizeAddress(hh.address); });
 }
@@ -4515,13 +4516,35 @@ async function applyMoveOutPlan() {
     (ministerWarnings ? `<div style="color:#856404;margin-top:0.25rem">${ministerWarnings} of them ${ministerWarnings === 1 ? 'was a minister' : 'were ministers'} — their names stay on Current/Proposed Assignments until you update those.</div>` : '');
 }
 
+// The Moved Out list only keeps people removed in the three months before the
+// page was loaded. Older entries are dropped from the shared document the
+// first time anyone loads the page after they age out, so it's pruned for
+// everyone, not just hidden.
+const PAGE_LOADED_AT = new Date();
+const MOVEOUT_KEEP_MONTHS = 3;
+function moveOutCutoff() {
+  const d = new Date(PAGE_LOADED_AT);
+  d.setMonth(d.getMonth() - MOVEOUT_KEEP_MONTHS);
+  return d.getTime();
+}
+function pruneMoveOutLog() {
+  const list = groupList('moveout');
+  const cutoff = moveOutCutoff();
+  const keep = list.filter(e => { const t = Date.parse(e.removedDate); return !Number.isFinite(t) || t >= cutoff; });
+  if (keep.length === list.length) return;
+  S.groups.moveout = keep;
+  // Only an approved, loaded session gets here (loadAllData runs after the
+  // access check), so this write can't wipe anything it hasn't just read.
+  scheduleSync();
+}
+
 function renderMoveOutLog() {
   const host = document.getElementById('moveout-log');
   if (!host) return;
   const list = [...groupList('moveout')].sort((a, b) => String(b.removedDate).localeCompare(String(a.removedDate)));
   host.innerHTML = `<div class="card">
     <h2 style="margin:0">Moved Out <span style="font-size:0.8rem;font-weight:400;color:#888">(${list.length})</span></h2>
-    <p style="font-size:0.82rem;color:#888;margin:0 0 0.8rem">People removed from the ward records by a Members Moved Out import.</p>
+    <p style="font-size:0.82rem;color:#888;margin:0 0 0.8rem">People removed from the ward records by a Members Moved Out import in the last ${MOVEOUT_KEEP_MONTHS} months. Older entries are cleared automatically.</p>
     ${list.length ? `<div style="overflow-x:auto"><table><thead><tr><th>Name</th><th>Household</th><th>Moved</th><th>Now in</th><th>Removed</th><th></th></tr></thead><tbody>
       ${list.map(e => `<tr>
         <td>${esc(e.name)}</td><td style="color:#666">${esc(e.householdName || '—')}</td>
