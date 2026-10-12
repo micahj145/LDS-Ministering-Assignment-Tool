@@ -140,7 +140,7 @@ household, and *any* note anywhere whose text mentions their name.
 
 ### New Member Move In/Move Outs — Move Ins
 A tab, visible to both roles, for following households that move into the ward until their
-ministering is in place. (Move Outs is planned but not built yet.)
+ministering is in place, and for removing people who have moved out.
 
 - **Storage**: `S.groups.movein` — a fourth `GROUPS` entry flagged `tab: 'moves'` (so
   `renderCouncil()` skips it and `renderMoves()` draws it) and `byHousehold: true`. Living in
@@ -151,6 +151,10 @@ ministering is in place. (Move Outs is planned but not built yet.)
   `householdId` so a household rename shows through.
 - **Status**: `MOVEIN_STATUSES` — new / contacted / pool (ministering pool decided) / assigned
   (ministering assignments done). Stamped with who set it and when.
+- **Pool** on each row reads and writes the household's own `hh.inPool` (true / 'maybe' /
+  false) — the same field the Households tab's In Pool / Maybe / Out badge cycles — so there is
+  no separate copy to drift. It's independent of Status; picking "Ministering pool decided"
+  doesn't set it, and setting it doesn't change Status.
 - **Notes** behave like a council group's: `groupLinkedNotes()` hands household entries to
   `moveInLinkedNotes()`, which pulls in notes for every person in the entry plus the household.
 - **Next Steps** is a third thread on the shared notes modal (`_notesCtx.field = 'nextSteps'`).
@@ -176,10 +180,46 @@ ministering is in place. (Move Outs is planned but not built yet.)
 - `buildMoveInPlan()` groups people into households by address (`addrKey()`), matches people
   to Members by `normNameKey()`, and households first via a matched member's household, then
   by address. New households are named LCR-style ("Last, First & Spouse").
+- **Same address, different families** (roommates): `moveInUnits()` splits an address's people
+  into likely households — anyone already linked stays with their household, a Spouse goes with
+  the primary contact whatever their surname, everyone else joins whoever shares a surname part
+  (`surnameTokens()` / `sharesFamily()`). Existing households at the address that nobody joined
+  come back as empty units. If that leaves more than one unit and any of them has no household
+  yet, the item is `ambiguous`: the review asks **One household** or **Separate households at
+  the same address**, and Add stays disabled until every ticked one is answered.
+  `expandMoveInItem()` turns the answer into ordinary items at apply time. When the records
+  already settle it (everyone linked to distinct households), nothing is asked.
+- **Split…** on a Move Ins row (shown when its people fall into more than one surname group)
+  fixes roommates already saved together: the primary contact's group keeps the household and
+  entry with its status and threads; each other group gets a new household at the same address
+  (coordinates copied, Pool left Out) and a fresh entry. The kept household is only renamed if
+  the import had named it. Deleting a member (by hand or Moved Out) also drops them from Move
+  Ins rows (`dropFromMoveIns()`).
 - The review lets you untick households; applying adds missing members/households, only
   *fills blanks* on existing records (never overwrites), adds or extends the Move Ins entry,
   then geocodes any touched household without coordinates through the existing
   `geocodeAddress()` (rate-limited Nominatim).
+
+**Importing the LCR "Members Moved Out" report (PDF)**:
+- Both report parsers share `parseLcrTable(pages, columns, anchors)`; each report only defines
+  its columns (`MOVEIN_COLUMNS`, `MOVEOUT_COLUMNS`) and which ones mark the start of a person.
+- Moved Out columns: Name, Birth Date, Move Date, New Unit ("Deceased" also appears there).
+  **No address**, so `buildMoveOutPlan()` matches by `normNameKey()` and cross-checks the age
+  worked out from the birth date (`ageFromBirth()`) against `member.age`, within a year.
+  Levels: *confirmed* (name + age) and *name* (no age on file) start ticked; *age* (ages
+  disagree) and *possible* (same surname and first name, different middle) start unticked;
+  *none* isn't in Members. Several members with the same name get a picker.
+- Households that would be left with no members are offered for removal too (ticked by
+  default), with warnings for companionships serving them, household notes, and a Move Ins
+  entry (removed along with the household).
+- Removal only happens after a `confirm()` naming everyone. It does what `deleteMember()` does
+  (drops the name from the household's display list) and warns when a removed person ministers
+  in a companionship — those records keep the name until someone updates them, same as a manual
+  delete. Notes on removed members/households go with them.
+- Every removal is logged in `S.groups.moveout` (`GROUPS` key `moveout`, `tab: 'moves'`) as
+  `{ name, householdName, moveDate, newUnit, removedBy, removedDate }` and shown as the
+  **Moved Out** list. A re-import marks those people "Already removed". The birth date is not
+  stored.
 
 ### Roles: two ways the tool is used
 The app serves two audiences, controlled by a `role` field on the profile and applied in

@@ -446,7 +446,8 @@ tr:hover td{background:#fafbfc}
   <div class="alert alert-info">
     Households moving into the ward, from LCR's <strong>Members Moved In</strong> report. Importing the report adds anyone
     not already in Members or Households, geocodes new addresses, and puts each household on <strong>Move Ins</strong>
-    with a status, Notes, and a running Next Step log you can tag people on.
+    with a status, Notes, and a running Next Step log you can tag people on. The <strong>Members Moved Out</strong> report
+    further down removes people who have left, once you've confirmed each match.
   </div>
   <div id="moves-tagged"></div>
   <div class="card">
@@ -463,6 +464,20 @@ tr:hover td{background:#fafbfc}
     <div id="movein-review"></div>
   </div>
   <div id="moves-groups"></div>
+  <div class="card">
+    <div class="flex-between">
+      <h2 style="margin:0">Members Moved Out Report</h2>
+      <div>
+        <input type="file" id="moveout-file" accept=".pdf,application/pdf" style="display:none" onchange="handleMoveOutPdf(this.files[0])">
+        <button class="btn btn-primary" onclick="document.getElementById('moveout-file').click()">Import Members Moved Out Report</button>
+      </div>
+    </div>
+    <p style="font-size:0.82rem;color:#888;margin:0.4rem 0 0">Save the Members Moved Out report from LCR as a PDF and import it here. Everyone in it is matched to
+      Members (by name, checked against the age on file) and to their household; nothing is removed until you confirm.</p>
+    <div id="moveout-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+    <div id="moveout-review"></div>
+  </div>
+  <div id="moveout-log"></div>
 </div>
 
 <div id="tab-admin" class="tab-content">
@@ -595,6 +610,9 @@ const GROUPS = [
   // the Move Ins section further down.
   { key: 'movein',    label: 'Move Ins',          fromMembers: true, byHousehold: true, tab: 'moves',
     blurb: 'Households that have moved into the ward, until their ministering assignments are in place.' },
+  // A plain log of who a Members Moved Out import removed — see the Move Outs section.
+  { key: 'moveout',   label: 'Moved Out',         fromMembers: false, tab: 'moves',
+    blurb: 'People removed from the ward records by a Members Moved Out import.' },
 ];
 
 // Always hand back all three lists, whatever the stored document contains —
@@ -1869,6 +1887,7 @@ function deleteMember(id) {
   }
   if (!confirm(msg)) return;
   S.members = S.members.filter(x => x.id !== id);
+  dropFromMoveIns(new Set([id]));
   // Keep any household's display-only "members" name list in sync.
   const key = normNameKey(m.name);
   S.households.forEach(hh => {
@@ -3480,33 +3499,14 @@ function removeGroupEntry(key, id) {
   renderGroupViews();
 }
 
-// ── Members Moved In report (LCR PDF) ─────────────────────────
+// ── LCR report PDFs (Members Moved In / Members Moved Out) ────
 // pdf.js hands back positioned text runs, not a table. Columns are found from
-// the header row on each page ("Name", "Age", "Move In Date", …) and every run
-// is assigned to the last column starting at or left of it. A row with text in
-// Name plus Age or Move In Date starts a new person; lines with only address
-// text are the wrapped street / unit / city lines of the person above.
-const MOVEIN_COLUMNS = [
-  { key: 'name',     re: /^name$/i },
-  { key: 'age',      re: /^age$/i },
-  { key: 'moveIn',   re: /^move\s*in(\s*date)?$/i },
-  { key: 'position', re: /^household(\s*position)?$/i },
-  { key: 'gender',   re: /^gender$/i },
-  { key: 'address',  re: /^(street\s*)?address$/i },
-  { key: 'phone',    re: /^phone(\s*number)?$/i },
-];
-const MONTHS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
-
-// "5 Mar 2026" → "2026-03-05"; anything unrecognised is kept as typed.
-function parseLcrDate(s) {
-  const m = String(s || '').trim().match(/^(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*\.?\s+(\d{4})$/);
-  if (!m || !MONTHS[m[2].toLowerCase()]) return String(s || '').trim();
-  return `${m[3]}-${String(MONTHS[m[2].toLowerCase()]).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-}
-
-// pages: [[{ str, x, y }]] with y measured upward (pdf.js transform[5]).
-function parseMoveInReport(pages) {
-  const people = [];
+// the header row on each page and every run is assigned to the last column
+// starting at or left of it. A line with text in Name plus one of the
+// `anchors` columns starts a new person; any other line continues the person
+// above (wrapped addresses, a long name). Each cell comes back as its lines.
+function parseLcrTable(pages, columns, anchors) {
+  const rows = [];
   let reportedCount = null;
   pages.forEach(items => {
     const lines = [];
@@ -3517,11 +3517,12 @@ function parseMoveInReport(pages) {
     lines.forEach(l => l.items.sort((a, b) => a.x - b.x));
 
     const headerIdx = lines.findIndex(l =>
-      l.items.some(i => /^name$/i.test(i.str.trim())) && l.items.some(i => /^age$/i.test(i.str.trim())));
+      l.items.some(i => /^name$/i.test(i.str.trim())) &&
+      l.items.filter(i => columns.some(c => c.re.test(i.str.trim()))).length >= 3);
     if (headerIdx < 0) return;
     const cols = [];
     lines[headerIdx].items.forEach(i => {
-      const c = MOVEIN_COLUMNS.find(c => c.re.test(i.str.trim()));
+      const c = columns.find(c => c.re.test(i.str.trim()));
       if (c && !cols.some(x => x.key === c.key)) cols.push({ key: c.key, x: i.x });
     });
     if (!cols.some(c => c.key === 'name')) return;
@@ -3536,31 +3537,79 @@ function parseMoveInReport(pages) {
       if (countM || /©/.test(text)) break;
       const cells = {};
       l.items.forEach(i => { const k = colAt(i.x); cells[k] = cells[k] ? cells[k] + ' ' + i.str.trim() : i.str.trim(); });
-      const startsPerson = cells.name && (cells.age || cells.moveIn);
-      if (startsPerson) {
-        cur = { name: cells.name, age: parseInt(cells.age, 10) || 0, moveInDate: parseLcrDate(cells.moveIn),
-                position: cells.position || '', gender: (cells.gender || '').toUpperCase(),
-                addressLines: cells.address ? [cells.address] : [], phone: cells.phone || '' };
-        people.push(cur);
-      } else if (cur) {
-        if (cells.name) cur.name += ' ' + cells.name;             // a long name wrapped
-        if (cells.position) cur.position += ' ' + cells.position;
-        if (cells.address) cur.addressLines.push(cells.address);
-        if (cells.phone) cur.phone = (cur.phone + ' ' + cells.phone).trim();
+      if (cells.name && anchors.some(k => cells[k])) {
+        cur = {};
+        rows.push(cur);
       }
+      if (!cur) continue;
+      Object.entries(cells).forEach(([k, v]) => { (cur[k] = cur[k] || []).push(v); });
     }
   });
-  // A line ahead of the street number (a community or building name) would
-  // stop the address geocoding, so it's split off and kept as addressNote.
-  const out = people.map(({ addressLines, ...p }) => {
-    const lines = addressLines.map(a => a.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  return { rows, reportedCount };
+}
+
+const MONTHS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+
+// "5 Mar 2026" → "2026-03-05"; anything unrecognised is kept as typed.
+function parseLcrDate(s) {
+  const m = String(s || '').trim().match(/^(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*\.?\s+(\d{4})$/);
+  if (!m || !MONTHS[m[2].toLowerCase()]) return String(s || '').trim();
+  return `${m[3]}-${String(MONTHS[m[2].toLowerCase()]).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+}
+
+const lcrCell = (r, k) => (r[k] || []).join(' ').replace(/\s+/g, ' ').trim();
+
+const MOVEIN_COLUMNS = [
+  { key: 'name',     re: /^name$/i },
+  { key: 'age',      re: /^age$/i },
+  { key: 'moveIn',   re: /^move\s*in(\s*date)?$/i },
+  { key: 'position', re: /^household(\s*position)?$/i },
+  { key: 'gender',   re: /^gender$/i },
+  { key: 'address',  re: /^(street\s*)?address$/i },
+  { key: 'phone',    re: /^phone(\s*number)?$/i },
+];
+
+// Positions seen: Primary Household Contact, Spouse, Household Member. The
+// address wraps over 2–3 lines; a line ahead of the street number (a community
+// or building name) would stop it geocoding, so it's split off as addressNote.
+function parseMoveInReport(pages) {
+  const { rows, reportedCount } = parseLcrTable(pages, MOVEIN_COLUMNS, ['age', 'moveIn']);
+  const people = rows.map(r => {
+    const lines = (r.address || []).map(a => a.replace(/\s+/g, ' ').trim()).filter(Boolean);
     const first = lines.findIndex(a => /^\d/.test(a));
-    const lead = first > 0 ? lines.slice(0, first) : [];
-    return { ...p, name: p.name.replace(/\s+/g, ' ').trim(),
-             address: (first > 0 ? lines.slice(first) : lines).join(', '),
-             addressNote: lead.join(', ') };
+    return {
+      name: lcrCell(r, 'name'),
+      age: parseInt(lcrCell(r, 'age'), 10) || 0,
+      moveInDate: parseLcrDate(lcrCell(r, 'moveIn')),
+      position: lcrCell(r, 'position'),
+      gender: lcrCell(r, 'gender').toUpperCase(),
+      phone: lcrCell(r, 'phone'),
+      address: (first > 0 ? lines.slice(first) : lines).join(', '),
+      addressNote: first > 0 ? lines.slice(0, first).join(', ') : '',
+    };
   });
-  return { people: out, reportedCount };
+  return { people, reportedCount };
+}
+
+// Columns: Name, Birth Date, Move Date, New Unit ("Deceased" also appears
+// there). No address, so matching to the records is by name, with the birth
+// date as a cross-check against the age on file.
+const MOVEOUT_COLUMNS = [
+  { key: 'name',      re: /^name$/i },
+  { key: 'birthDate', re: /^birth\s*date$/i },
+  { key: 'moveDate',  re: /^move(\s*out)?\s*date$/i },
+  { key: 'newUnit',   re: /^(new|next)\s*unit/i },
+];
+
+function parseMoveOutReport(pages) {
+  const { rows, reportedCount } = parseLcrTable(pages, MOVEOUT_COLUMNS, ['birthDate', 'moveDate']);
+  const people = rows.map(r => ({
+    name: lcrCell(r, 'name'),
+    birthDate: parseLcrDate(lcrCell(r, 'birthDate')),
+    moveDate: parseLcrDate(lcrCell(r, 'moveDate')),
+    newUnit: lcrCell(r, 'newUnit'),
+  }));
+  return { people, reportedCount };
 }
 
 // ── Move Ins ──────────────────────────────────────────────────
@@ -3684,6 +3733,7 @@ function movesTaggedToMe() {
 
 function renderMoves() {
   updateMovesNavBadge();
+  renderMoveOutLog();
   const host = document.getElementById('moves-groups');
   if (!host) return;
   const g = GROUPS.find(x => x.key === 'movein');
@@ -3710,6 +3760,17 @@ function renderMoves() {
         ${MOVEIN_STATUSES.map(s => `<option value="${s.value}" ${s.value === (e.status || 'new') ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}
       </select>
       ${e.statusBy ? `<div style="font-size:0.72rem;color:#999;margin-top:0.25rem">${esc(e.statusBy)}${e.statusDate ? ' · ' + formatNoteDate(e.statusDate) : ''}</div>` : ''}`;
+    // The same hh.inPool the Households tab sets (true / 'maybe' / anything
+    // else = Out), so changing it on either tab shows on the other.
+    const pool = !hh ? null : hh.inPool === true ? 'in' : hh.inPool === 'maybe' ? 'maybe' : 'out';
+    const poolColors = { in: 'background:#d4edda;color:#155724', maybe: 'background:#fff3cd;color:#856404', out: 'background:#f8d7da;color:#721c24' };
+    const poolSel = !hh ? '<span style="font-size:0.78rem;color:#aaa">No household</span>' : `
+      <select style="font-size:0.82rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px;font-weight:500;${poolColors[pool]}"
+        onchange="setMoveInPool('${hh.id}', this.value)" title="Whether this household is in the ministering pool — same setting as the Households tab">
+        <option value="in" ${pool === 'in' ? 'selected' : ''}>In Pool</option>
+        <option value="maybe" ${pool === 'maybe' ? 'selected' : ''}>Maybe</option>
+        <option value="out" ${pool === 'out' ? 'selected' : ''}>Out</option>
+      </select>`;
     const steps = e.nextSteps || [];
     const merged = groupMergedNotes(e);
     return `<tr>
@@ -3721,6 +3782,7 @@ function renderMoves() {
         ${e.addressNote ? `<div style="font-size:0.74rem;color:#aaa">${esc(e.addressNote)}</div>` : ''}
       </td>
       <td style="vertical-align:top">${statusSel}</td>
+      <td style="vertical-align:top">${poolSel}</td>
       <td style="vertical-align:top">
         <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','movein','nextSteps')">${steps.length ? `Next Steps (${steps.length})` : 'Next Step'}</button>
         ${latestCommentHTML(steps.map(n => ({ n, source: null })))}
@@ -3729,16 +3791,19 @@ function renderMoves() {
         <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','movein','notes')">${merged.length ? `Notes (${merged.length})` : 'Notes'}</button>
         ${latestCommentHTML(merged)}
       </td>
-      <td style="white-space:nowrap;vertical-align:top"><button class="btn btn-danger btn-sm" onclick="removeGroupEntry('movein','${e.id}')">Remove</button></td>
+      <td style="white-space:nowrap;vertical-align:top">
+        ${hh && moveInEntryClusters(e).length > 1 ? `<button class="btn btn-secondary btn-sm" style="margin-bottom:0.3rem" onclick="splitMoveInEntry('${e.id}')" title="People here share no surname — split them into separate households at the same address">Split…</button><br>` : ''}
+        <button class="btn btn-danger btn-sm" onclick="removeGroupEntry('movein','${e.id}')">Remove</button></td>
     </tr>`;
   }).join('');
 
   const body = list.length
     ? `<div style="overflow-x:auto"><table><thead><tr>
-         <th style="width:26%">Household</th>
-         <th style="width:16%">Status</th>
-         <th style="width:25%">Next Step <span style="font-weight:400;color:#aaa">· most recent</span></th>
-         <th style="width:25%">Notes <span style="font-weight:400;color:#aaa">· most recent</span></th>
+         <th style="width:24%">Household</th>
+         <th style="width:15%">Status</th>
+         <th style="width:9%">Pool</th>
+         <th style="width:22%">Next Step <span style="font-weight:400;color:#aaa">· most recent</span></th>
+         <th style="width:22%">Notes <span style="font-weight:400;color:#aaa">· most recent</span></th>
          <th>Actions</th>
        </tr></thead><tbody>${rows}</tbody></table></div>`
     : `<div class="empty-state" style="padding:1.2rem"><p>No one here yet — import the Members Moved In report above.</p></div>`;
@@ -3751,6 +3816,81 @@ function renderMoves() {
     <p style="font-size:0.82rem;color:#888;margin:0 0 0.8rem">${esc(g.blurb)}</p>
     ${body}
   </div>`;
+}
+
+// People on an existing Move Ins entry, grouped the same way the import does
+// (Spouse with the primary contact, otherwise by shared surname). More than
+// one group means the entry may be roommates combined into one household.
+function moveInEntryClusters(entry) {
+  const people = (entry.people || []).map(p => ({ ...p, name: moveInPersonName(p) }));
+  const primary = people.find(p => /primary/i.test(p.position)) || people[0];
+  const clusters = [];
+  [primary, ...people.filter(p => p !== primary)].filter(Boolean).forEach(p => {
+    const st = surnameTokens(p.name);
+    let c = /spouse/i.test(p.position) && p !== primary ? clusters.find(c => c.people.includes(primary)) : null;
+    if (!c) c = clusters.find(c => sharesFamily(c.sur, st));
+    if (!c) { c = { people: [], sur: [] }; clusters.push(c); }
+    c.people.push(p);
+    c.sur.push(...st);
+  });
+  return clusters;
+}
+
+// A deleted member comes off any Move Ins row they were listed on.
+function dropFromMoveIns(memberIds) {
+  groupList('movein').forEach(e => { e.people = (e.people || []).filter(p => !memberIds.has(p.memberId)); });
+  renderMoves();
+}
+
+// Splits roommates who were saved as one household: the first group (with the
+// primary contact) keeps the household and this entry with its status, notes
+// and next steps; each other group gets its own household at the same address
+// (coordinates copied, Pool left Out) and a fresh Move Ins entry.
+function splitMoveInEntry(id) {
+  const entry = groupList('movein').find(e => e.id === id);
+  const hh = entry && hhById(entry.householdId);
+  if (!entry || !hh) return;
+  const clusters = moveInEntryClusters(entry);
+  if (clusters.length < 2) return;
+  const [keep, ...rest] = clusters;
+  const names = c => c.people.map(p => p.name).join(', ');
+  if (!confirm(`Split ${hh.name} into separate households at the same address?\n\n` +
+      `Keeps this household and its status, notes and next steps:\n  • ${names(keep)}\n\n` +
+      `Each gets a new household and Move Ins entry:\n${rest.map(c => '  • ' + names(c)).join('\n')}`)) return;
+
+  const who = _currentUserName || _currentUserEmail || 'Unknown';
+  const wasAutoNamed = hh.name === lcrHouseholdName(clusters.flatMap(c => c.people));
+  rest.forEach(c => {
+    const members = c.people.map(p => S.members.find(m => m.id === p.memberId)).filter(Boolean);
+    const nh = { id: uid(), name: lcrHouseholdName(c.people), members: c.people.map(p => p.name), head: c.people[0].name,
+                 address: hh.address || '', phone: (members.find(m => m.phone) || {}).phone || '', email: '', notes: [] };
+    if (hh.lat) { nh.lat = hh.lat; nh.lng = hh.lng; }
+    S.households.push(nh);
+    members.forEach(m => { m.householdId = nh.id; });
+    const leaving = new Set(c.people.map(p => normNameKey(p.name)));
+    hh.members = (hh.members || []).filter(n => !leaving.has(normNameKey(n)));
+    const ids = new Set(c.people.map(p => p.memberId));
+    const people = entry.people.filter(p => ids.has(p.memberId));
+    entry.people = entry.people.filter(p => !ids.has(p.memberId));
+    const dates = people.map(p => p.moveInDate).filter(Boolean).sort();
+    groupList('movein').push({ id: uid(), householdId: nh.id, memberId: null, name: nh.name, people,
+      moveInDate: dates[0] || entry.moveInDate || '', addressNote: entry.addressNote || '', status: 'new', statusBy: '', statusDate: '',
+      goals: [], notes: [], nextSteps: [], hiddenLinks: [], addedBy: who, addedDate: new Date().toISOString(),
+      source: `Split from ${hh.name}` });
+  });
+  // Only rename a household this import named itself, never one from LCR's CSV.
+  if (wasAutoNamed) { hh.name = lcrHouseholdName(keep.people); entry.name = hh.name; if (hh.head && !keep.people.some(p => p.name === hh.head)) hh.head = keep.people[0].name; }
+  dbUpsertHouseholds(S.households);
+  renderMoves(); renderHouseholds(); renderMembers(); refreshBadge();
+}
+
+function setMoveInPool(householdId, value) {
+  const hh = hhById(householdId);
+  if (!hh) return;
+  hh.inPool = value === 'in' ? true : value === 'maybe' ? 'maybe' : false;
+  dbUpsertHousehold(hh);
+  renderMoves();
+  renderHouseholds();
 }
 
 function setMoveInStatus(id, value) {
@@ -3856,8 +3996,62 @@ function lcrHouseholdName(people) {
   return b.last && b.last !== a.last ? `${a.last}, ${a.first} & ${b.first} ${b.last}` : `${a.last}, ${a.first} & ${b.first}`;
 }
 
-// Group the report's people into households by address, and work out for each
-// person and household whether the ward records already have them.
+// Surname parts, so "Smith-Jones" shares family with both "Smith" and "Jones".
+function surnameTokens(name) {
+  return splitLcrName(name).last.toLowerCase().split(/[\s-]+/).filter(t => t.length > 1);
+}
+function sharesFamily(a, b) { return a.some(t => b.includes(t)); }
+function householdSurnames(hh) {
+  const names = [hh.name, hh.head, ...(hh.members || []), ...S.members.filter(m => m.householdId === hh.id).map(m => m.name)];
+  return [...new Set(names.filter(Boolean).flatMap(surnameTokens))];
+}
+
+// Split people at one address into likely households: anyone already linked
+// to a household stays with it; a Spouse goes with the primary contact; anyone
+// else joins whoever shares a surname with them. Existing households at the
+// address that nobody joined come back as units with no people, so the review
+// can ask whether a newcomer moved in with them.
+function moveInUnits(rows, key) {
+  const units = [];
+  const primary = rows.find(r => /primary/i.test(r.position)) || null;
+  rows.forEach(r => {
+    const hh = r.member && hhById(r.member.householdId);
+    if (!hh) return;
+    let u = units.find(u => u.hh && u.hh.id === hh.id);
+    if (!u) { u = { hh, people: [], sur: householdSurnames(hh) }; units.push(u); }
+    u.people.push(r);
+    u.sur.push(...surnameTokens(r.name));
+  });
+  rows.forEach(r => {
+    if (units.some(u => u.people.includes(r))) return;
+    const st = surnameTokens(r.name);
+    let u = /spouse/i.test(r.position) && primary && r !== primary ? units.find(u => u.people.includes(primary)) : null;
+    if (!u) u = units.find(u => sharesFamily(u.sur, st));
+    if (!u) { u = { hh: null, people: [], sur: [] }; units.push(u); }
+    u.people.push(r);
+    u.sur.push(...st);
+  });
+  if (!key.startsWith('name:')) {
+    S.households.filter(h => addrKey(h.address) === key && !units.some(u => u.hh && u.hh.id === h.id)).forEach(h => {
+      const sur = householdSurnames(h);
+      const u = units.find(u => !u.hh && sharesFamily(u.sur, sur));
+      if (u) { u.hh = h; u.sur.push(...sur); } else units.push({ hh: h, people: [], sur });
+    });
+  }
+  return units;
+}
+
+function makeMoveInItem(key, rows, household) {
+  const entry = household ? groupList('movein').find(e => e.householdId === household.id) || null : null;
+  rows = rows.map(r => ({ ...r, onList: !!entry && (entry.people || []).some(x =>
+    (r.member && x.memberId === r.member.id) || normNameKey(x.name) === normNameKey(r.name)) }));
+  return { key, people: rows, household, entry, hhName: household ? household.name : lcrHouseholdName(rows),
+           include: !(entry && rows.every(r => r.onList)) };
+}
+
+// Group the report's people by address, then into households. When people at
+// one address share no surname (roommates, say), the item is left `ambiguous`
+// and the review asks whether they're one household or several.
 function buildMoveInPlan(people) {
   const rank = p => /primary/i.test(p.position) ? 0 : /spouse/i.test(p.position) ? 1 : 2;
   const byKey = new Map();
@@ -3866,52 +4060,102 @@ function buildMoveInPlan(people) {
     if (!byKey.has(k)) byKey.set(k, []);
     byKey.get(k).push(p);
   });
-  return [...byKey.entries()].map(([key, ppl]) => {
+  const plan = [];
+  byKey.forEach((ppl, key) => {
     ppl.sort((a, b) => rank(a) - rank(b));
     const rows = ppl.map(p => ({ ...p, member: S.members.find(m => normNameKey(m.name) === normNameKey(p.name)) || null }));
-    const linkedHH = rows.map(r => r.member && hhById(r.member.householdId)).find(Boolean);
-    const household = linkedHH || (key.startsWith('name:') ? null : S.households.find(h => addrKey(h.address) === key)) || null;
-    const entry = household ? groupList('movein').find(e => e.householdId === household.id) || null : null;
-    rows.forEach(r => {
-      r.onList = !!entry && (entry.people || []).some(x =>
-        (r.member && x.memberId === r.member.id) || normNameKey(x.name) === normNameKey(r.name));
-    });
-    return { key, people: rows, household, entry, hhName: household ? household.name : lcrHouseholdName(rows),
-             include: !(entry && rows.every(r => r.onList)) };
+    const units = moveInUnits(rows, key);
+    const filled = units.filter(u => u.people.length);
+    // Only a question if someone would start a new household, or join one,
+    // without the records already saying which.
+    if (units.length > 1 && units.some(u => !u.hh)) {
+      const ambiguous = { key, ambiguous: true, units, people: rows, split: null, include: true };
+      ambiguous.include = !filled.every(u => u.hh && makeMoveInItem(key, u.people, u.hh).include === false);
+      plan.push(ambiguous);
+    } else {
+      filled.forEach(u => plan.push(makeMoveInItem(key, u.people, u.hh)));
+    }
   });
+  return plan;
+}
+
+// What an item turns into once applied: one household, or one per unit.
+function expandMoveInItem(item) {
+  if (!item.ambiguous) return [item];
+  if (item.split === true) return item.units.filter(u => u.people.length).map(u => makeMoveInItem(item.key, u.people, u.hh));
+  if (item.split === false) {
+    const target = item.units.find(u => u.hh) || item.units[0];
+    return [makeMoveInItem(item.key, item.people, target.hh)];
+  }
+  return [];
+}
+
+function setMoveInSplit(i, split) {
+  _moveInPlan[i].split = split;
+  renderMoveInReview();
 }
 
 function renderMoveInReview(parsed, reported) {
   const plan = _moveInPlan || [];
+  if (parsed !== undefined) { plan._parsed = parsed; plan._reported = reported; }
+  parsed = plan._parsed; reported = plan._reported;
   const warn = reported !== null && reported !== parsed
     ? `<div class="alert" style="background:#fff8e1;color:#856404;border:1px solid #ffe8a1">The report says ${reported} people but ${parsed} were read — check the list below against the PDF before adding.</div>` : '';
+  const peopleHTML = list => list.map(p => `<div style="font-size:0.82rem;margin:0.15rem 0">
+      ${esc(p.name)} <span style="color:#999">· ${esc(shortPosition(p.position))}${p.age ? ' · ' + p.age : ''}${p.moveInDate ? ' · moved in ' + esc(formatIsoDay(p.moveInDate)) : ''}</span>
+      ${p.member ? '<span class="badge badge-green" style="font-size:0.68rem">In Members</span>' : '<span class="badge badge-blue" style="font-size:0.68rem">New member</span>'}
+      ${p.onList ? '<span class="badge" style="background:#eee;color:#666;font-size:0.68rem">on list</span>' : ''}
+    </div>`).join('');
+  const geoText = (hh, addr) => hh?.lat ? 'already geocoded' : !addr ? 'no address' : isUngeocodeable(addr) ? "can't be geocoded" : 'will be geocoded';
+  const unitName = u => u.hh ? `${u.hh.name} (existing)` : `${lcrHouseholdName(u.people)} (new)`;
+
   const rows = plan.map((item, i) => {
+    const box = `<td style="vertical-align:top"><input type="checkbox" ${item.include ? 'checked' : ''} onchange="_moveInPlan[${i}].include=this.checked;updateMoveInApplyBtn()"></td>`;
+    if (item.ambiguous) {
+      const addr = normalizeAddress(item.people[0].address || '');
+      const target = item.units.find(u => u.hh) || item.units[0];
+      const joinName = target.hh ? `${target.hh.name} (existing)` : `${lcrHouseholdName(item.people)} (new)`;
+      const filled = item.units.filter(u => u.people.length);
+      const stays = item.units.filter(u => !u.people.length && u.hh).map(u => u.hh.name);
+      const radio = (val, label, detail) => `<label style="display:flex;gap:0.45rem;align-items:flex-start;font-weight:400;margin:0.25rem 0;font-size:0.84rem;cursor:pointer">
+          <input type="radio" name="movein-split-${i}" style="width:auto;margin-top:0.2rem" ${item.split === val ? 'checked' : ''} onchange="setMoveInSplit(${i}, ${val})">
+          <span><strong>${label}</strong><div style="font-size:0.78rem;color:#666">${detail}</div></span></label>`;
+      return `<tr style="background:${item.split === null && item.include ? '#fffbea' : ''}">
+        ${box}
+        <td style="vertical-align:top">${stays.length && filled.every(u => !u.hh)
+            ? `<strong>Moving in at ${esc(stays.join(', '))}'s address</strong> <span class="badge badge-yellow">Different surname — please choose</span>`
+            : `<strong>${item.people.length} people at one address</strong> <span class="badge badge-yellow">Different surnames — please choose</span>`}
+          <div style="font-size:0.78rem;color:#888;margin-top:0.2rem">${esc(addr || '—')} · ${geoText(target.hh, addr)}</div>
+          <div style="margin-top:0.4rem">
+            ${radio(false, 'One household', esc(joinName))}
+            ${radio(true, 'Separate households at the same address', esc(filled.map(unitName).join(' · ')) +
+              (stays.length ? `<br>${esc(stays.join(', '))} stays as it is` : ''))}
+          </div></td>
+        <td style="vertical-align:top">${peopleHTML(item.people)}</td>
+      </tr>`;
+    }
     const hh = item.household;
     const hhBadge = hh ? '<span class="badge badge-green">Existing household</span>' : '<span class="badge badge-blue">New household</span>';
     const addr = hh?.address || normalizeAddress(item.people[0].address || '');
-    const geo = hh?.lat ? 'already geocoded' : !addr ? 'no address' : isUngeocodeable(addr) ? "can't be geocoded" : 'will be geocoded';
     const listBadge = item.entry
       ? (item.include ? '<span class="badge badge-yellow">On Move Ins — adds new people</span>' : '<span class="badge" style="background:#eee;color:#666">Already on Move Ins</span>')
       : '';
-    const people = item.people.map(p => `<div style="font-size:0.82rem;margin:0.15rem 0">
-        ${esc(p.name)} <span style="color:#999">· ${esc(shortPosition(p.position))}${p.age ? ' · ' + p.age : ''}${p.moveInDate ? ' · moved in ' + esc(formatIsoDay(p.moveInDate)) : ''}</span>
-        ${p.member ? '<span class="badge badge-green" style="font-size:0.68rem">In Members</span>' : '<span class="badge badge-blue" style="font-size:0.68rem">New member</span>'}
-        ${p.onList ? '<span class="badge" style="background:#eee;color:#666;font-size:0.68rem">on list</span>' : ''}
-      </div>`).join('');
     return `<tr>
-      <td style="vertical-align:top"><input type="checkbox" ${item.include ? 'checked' : ''} onchange="_moveInPlan[${i}].include=this.checked;updateMoveInApplyBtn()"></td>
+      ${box}
       <td style="vertical-align:top"><strong>${esc(item.hhName)}</strong> ${hhBadge} ${listBadge}
-        <div style="font-size:0.78rem;color:#888;margin-top:0.2rem">${esc(addr || '—')} · ${geo}</div></td>
-      <td style="vertical-align:top">${people}</td>
+        <div style="font-size:0.78rem;color:#888;margin-top:0.2rem">${esc(addr || '—')} · ${geoText(hh, addr)}</div></td>
+      <td style="vertical-align:top">${peopleHTML(item.people)}</td>
     </tr>`;
   }).join('');
+  const addresses = plan.length;
   document.getElementById('movein-review').innerHTML = `
     <div style="margin-top:1rem">
-      <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.4rem">Found ${parsed} ${parsed === 1 ? 'person' : 'people'} in ${plan.length} household${plan.length === 1 ? '' : 's'}</div>
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.4rem">Found ${parsed} ${parsed === 1 ? 'person' : 'people'} at ${addresses} address${addresses === 1 ? '' : 'es'}</div>
       ${warn}
-      <div style="font-size:0.8rem;color:#888;margin-bottom:0.5rem">Ticked households are added to Members and Households where they're missing, put on Move Ins, and geocoded. Nothing already in the records is overwritten — blanks like phone or age are filled in.</div>
+      <div style="font-size:0.8rem;color:#888;margin-bottom:0.5rem">Ticked households are added to Members and Households where they're missing, put on Move Ins, and geocoded. Nothing already in the records is overwritten — blanks like phone or age are filled in. Where people at one address share no surname, choose whether they're one household or separate ones.</div>
       <div style="overflow-x:auto"><table><thead><tr><th></th><th style="width:45%">Household</th><th>People</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem">
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end;align-items:center;margin-top:0.75rem">
+        <span id="movein-apply-hint" style="font-size:0.8rem;color:#856404"></span>
         <button class="btn btn-secondary" onclick="cancelMoveInImport()">Cancel</button>
         <button class="btn btn-primary" id="movein-apply-btn" onclick="applyMoveInPlan()">Add</button>
       </div>
@@ -3922,9 +4166,13 @@ function renderMoveInReview(parsed, reported) {
 function updateMoveInApplyBtn() {
   const btn = document.getElementById('movein-apply-btn');
   if (!btn) return;
-  const n = (_moveInPlan || []).filter(i => i.include).length;
-  btn.disabled = !n;
-  btn.textContent = n ? `Add ${n} household${n === 1 ? '' : 's'}` : 'Nothing selected';
+  const chosen = (_moveInPlan || []).filter(i => i.include);
+  const undecided = chosen.filter(i => i.ambiguous && i.split === null).length;
+  const n = chosen.flatMap(expandMoveInItem).length;
+  btn.disabled = !n || undecided > 0;
+  btn.textContent = undecided ? 'Add' : n ? `Add ${n} household${n === 1 ? '' : 's'}` : 'Nothing selected';
+  document.getElementById('movein-apply-hint').textContent = undecided
+    ? `Choose one household or separate for ${undecided} address${undecided === 1 ? '' : 'es'} first` : '';
 }
 
 function cancelMoveInImport() {
@@ -3934,7 +4182,9 @@ function cancelMoveInImport() {
 }
 
 async function applyMoveInPlan() {
-  const items = (_moveInPlan || []).filter(i => i.include);
+  const chosen = (_moveInPlan || []).filter(i => i.include);
+  if (chosen.some(i => i.ambiguous && i.split === null)) return;
+  const items = chosen.flatMap(expandMoveInItem);
   if (!items.length) return;
   const statusEl = document.getElementById('movein-status');
   const who = _currentUserName || _currentUserEmail || 'Unknown';
@@ -4019,6 +4269,268 @@ async function applyMoveInPlan() {
   statusEl.innerHTML = `✓ ${esc(summary.join(' · '))}.` +
     (toGeo.length ? ` ${toGeo.length - failed.length} of ${toGeo.length} new address${toGeo.length === 1 ? '' : 'es'} geocoded.` : '') +
     (problems.length ? `<div style="color:#856404;margin-top:0.25rem">Couldn't geocode: ${esc(problems.join('; '))} — fix the address from the Households tab (Edit).</div>` : '');
+}
+
+// ── Members Moved Out import ──────────────────────────────────
+// Matches the report's people to Members by name, cross-checked against the
+// age on file using the report's birth date, and proposes removing them (and
+// any household left with nobody in it). Nothing is removed until the review
+// is confirmed. Each removal is logged in S.groups.moveout, the Moved Out list
+// on this tab, since the member record itself is gone afterwards.
+let _moveOutPlan = null;
+let _moveOutHHChoice = {};
+
+function ageFromBirth(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) return 0;
+  const b = new Date(iso + 'T12:00:00'), t = new Date();
+  let a = t.getFullYear() - b.getFullYear();
+  if (t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) a--;
+  return a;
+}
+
+function companionshipsAsMinister(memberId) {
+  return ['current', 'proposed'].reduce((n, k) => n + (S[k] || []).filter(c => c.m1Id === memberId || c.m2Id === memberId).length, 0);
+}
+
+function companionshipsServing(hh) {
+  return ['current', 'proposed'].reduce((n, k) => n + (S[k] || []).filter(c =>
+    (c.households || []).some(h => h === hh.id || h === hh.name)).length, 0);
+}
+
+async function handleMoveOutPdf(file) {
+  const statusEl = document.getElementById('moveout-status');
+  document.getElementById('moveout-file').value = '';
+  if (!file) return;
+  statusEl.style.color = '#555';
+  statusEl.textContent = `Reading ${file.name}…`;
+  document.getElementById('moveout-review').innerHTML = '';
+  try {
+    const lib = await loadPdfJs();
+    const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    const pages = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const tc = await (await doc.getPage(i)).getTextContent();
+      pages.push(tc.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] })));
+    }
+    const { people, reportedCount } = parseMoveOutReport(pages);
+    if (!people.length) {
+      statusEl.style.color = '#dc3545';
+      statusEl.textContent = `No people found in ${file.name}. Is it the Members Moved Out report saved as a PDF from LCR?`;
+      return;
+    }
+    _moveOutPlan = buildMoveOutPlan(people);
+    _moveOutHHChoice = {};
+    statusEl.textContent = '';
+    renderMoveOutReview(people.length, reportedCount);
+  } catch (err) {
+    console.error('Move-out import failed:', err);
+    statusEl.style.color = '#dc3545';
+    statusEl.textContent = 'Could not read that PDF: ' + (err?.message || 'unknown error');
+  }
+}
+
+// Match levels, and whether each is ticked for removal by default:
+//   confirmed — exact name, and the age on file agrees with the birth date (ticked)
+//   name      — exact name, no age on file to compare (ticked)
+//   age       — exact name but the ages disagree (not ticked)
+//   possible  — same surname and first name, different middle names (not ticked)
+//   none      — not in Members (nothing to remove)
+function buildMoveOutPlan(people) {
+  const removedKeys = new Set(groupList('moveout').map(e => normNameKey(e.name)));
+  return people.map(p => {
+    const reportAge = ageFromBirth(p.birthDate);
+    const key = normNameKey(p.name);
+    const ageOk = m => !m.age || !reportAge || Math.abs(m.age - reportAge) <= 1;
+    let candidates = S.members.filter(m => normNameKey(m.name) === key);
+    let level;
+    if (candidates.length) {
+      candidates.sort((a, b) => Math.abs((a.age || reportAge) - reportAge) - Math.abs((b.age || reportAge) - reportAge));
+      const m = candidates[0];
+      level = !ageOk(m) ? 'age' : (m.age && reportAge) ? 'confirmed' : 'name';
+      if (candidates.length > 1 && level !== 'age') level = 'name';
+    } else {
+      const a = splitLcrName(p.name);
+      candidates = S.members.filter(m => {
+        const b = splitLcrName(m.name);
+        return a.last && norm(a.last) === norm(b.last) && a.first && norm(a.first) === norm(b.first);
+      });
+      level = candidates.length ? 'possible' : 'none';
+    }
+    const member = candidates[0] || null;
+    return { person: p, reportAge, member, candidates, level,
+             dupes: level !== 'possible' && candidates.length > 1,
+             alreadyRemoved: level === 'none' && removedKeys.has(key),
+             include: level === 'confirmed' || level === 'name' };
+  });
+}
+
+// Households that would have nobody left once the ticked people go.
+function moveOutEmptyHouseholds() {
+  const leaving = new Set((_moveOutPlan || []).filter(r => r.include && r.member).map(r => r.member.id));
+  const hhIds = [...new Set((_moveOutPlan || []).filter(r => r.include && r.member?.householdId).map(r => r.member.householdId))];
+  return hhIds.map(hhById).filter(Boolean)
+    .filter(hh => !S.members.some(m => m.householdId === hh.id && !leaving.has(m.id)));
+}
+
+function setMoveOutMember(i, memberId) {
+  const r = _moveOutPlan[i];
+  r.member = S.members.find(m => m.id === memberId) || r.member;
+  renderMoveOutReview();
+}
+
+function renderMoveOutReview(parsed, reported) {
+  if (parsed !== undefined) { _moveOutPlan._parsed = parsed; _moveOutPlan._reported = reported; }
+  const plan = _moveOutPlan || [];
+  parsed = plan._parsed; reported = plan._reported;
+  const levelBadge = {
+    confirmed: '<span class="badge badge-green">Confirmed — name and age match</span>',
+    name:      '<span class="badge badge-green">Name match</span> <span style="font-size:0.74rem;color:#888">no age on file to compare</span>',
+    age:       '<span class="badge badge-yellow">Name matches, age differs</span>',
+    possible:  '<span class="badge badge-yellow">Possible match — middle name differs</span>',
+    none:      '<span class="badge" style="background:#eee;color:#666">Not in Members</span>',
+  };
+  const warn = reported !== null && reported !== parsed
+    ? `<div class="alert" style="background:#fff8e1;color:#856404;border:1px solid #ffe8a1">The report says ${reported} people but ${parsed} were read — check the list below against the PDF.</div>` : '';
+  const rows = plan.map((r, i) => {
+    const p = r.person, m = r.member;
+    const hh = m ? hhById(m.householdId) : null;
+    const asMinister = m ? companionshipsAsMinister(m.id) : 0;
+    const pick = r.candidates.length > 1
+      ? `<select style="font-size:0.8rem;margin-top:0.25rem" onchange="setMoveOutMember(${i}, this.value)">${r.candidates.map(c =>
+          `<option value="${c.id}" ${c.id === m.id ? 'selected' : ''}>${esc(c.name)}${c.age ? ' · ' + c.age : ''}${hhById(c.householdId) ? ' · ' + esc(hhById(c.householdId).name) : ''}</option>`).join('')}</select>` : '';
+    const record = m ? `<div style="font-size:0.84rem"><strong>${esc(m.name)}</strong>${m.age ? ` <span style="color:#999">· age on file ${m.age}</span>` : ''}</div>
+        <div style="font-size:0.78rem;color:#888">${hh ? 'Household: ' + esc(hh.name) : 'No household linked'}</div>
+        ${pick}
+        ${asMinister ? `<div style="font-size:0.76rem;color:#856404;margin-top:0.2rem">Ministers in ${asMinister} companionship${asMinister === 1 ? '' : 's'} — update those assignments separately</div>` : ''}
+        ${(m.notes || []).length ? `<div style="font-size:0.76rem;color:#856404">${m.notes.length} note${m.notes.length === 1 ? '' : 's'} on this member will be deleted</div>` : ''}`
+      : `<div style="font-size:0.8rem;color:#aaa">${r.alreadyRemoved ? 'Already removed — see Moved Out below' : 'Nothing to remove'}</div>`;
+    return `<tr>
+      <td style="vertical-align:top">${m ? `<input type="checkbox" ${r.include ? 'checked' : ''} onchange="_moveOutPlan[${i}].include=this.checked;renderMoveOutReview()">` : ''}</td>
+      <td style="vertical-align:top"><strong>${esc(p.name)}</strong>
+        <div style="font-size:0.78rem;color:#888">${r.reportAge ? 'Age ' + r.reportAge + ' · ' : ''}moved ${esc(formatIsoDay(p.moveDate))}${p.newUnit ? ' · ' + esc(p.newUnit) : ''}</div></td>
+      <td style="vertical-align:top">${levelBadge[r.level]}${r.dupes ? ' <span class="badge badge-yellow">more than one member has this name — pick below</span>' : ''}${record}</td>
+    </tr>`;
+  }).join('');
+
+  const empty = moveOutEmptyHouseholds();
+  const hhRows = empty.map(hh => {
+    if (!(hh.id in _moveOutHHChoice)) _moveOutHHChoice[hh.id] = true;
+    const serving = companionshipsServing(hh);
+    const entry = groupList('movein').find(e => e.householdId === hh.id);
+    const notes = (hh.notes || []).length;
+    const extras = [
+      serving ? `assigned in ${serving} companionship${serving === 1 ? '' : 's'} — update those separately` : '',
+      notes ? `${notes} household note${notes === 1 ? '' : 's'} will be deleted` : '',
+      entry ? 'its Move Ins entry is removed too' : '',
+    ].filter(Boolean);
+    return `<label style="display:flex;gap:0.5rem;align-items:flex-start;font-weight:400;margin:0.3rem 0;font-size:0.85rem;cursor:pointer">
+      <input type="checkbox" style="width:auto;margin-top:0.2rem" ${_moveOutHHChoice[hh.id] ? 'checked' : ''} onchange="_moveOutHHChoice['${hh.id}']=this.checked;updateMoveOutApplyBtn()">
+      <span>Remove household <strong>${esc(hh.name)}</strong>${hh.address ? ` <span style="color:#888">· ${esc(hh.address)}</span>` : ''}
+      ${extras.length ? `<div style="font-size:0.76rem;color:#856404">${extras.map(esc).join(' · ')}</div>` : ''}</span></label>`;
+  }).join('');
+
+  document.getElementById('moveout-review').innerHTML = `
+    <div style="margin-top:1rem">
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.4rem">Found ${parsed} ${parsed === 1 ? 'person' : 'people'} in the report</div>
+      ${warn}
+      <div style="font-size:0.8rem;color:#888;margin-bottom:0.5rem">Ticked people are removed from Members. Only confirmed matches are ticked to start with — check anything marked yellow before ticking it.</div>
+      <div style="overflow-x:auto"><table><thead><tr><th></th><th style="width:38%">In the report</th><th>In the ward records</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${empty.length ? `<div style="margin-top:0.8rem"><div style="font-size:0.85rem;font-weight:600">Households left with no one in them</div>${hhRows}</div>` : ''}
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem">
+        <button class="btn btn-secondary" onclick="cancelMoveOutImport()">Cancel</button>
+        <button class="btn btn-danger" id="moveout-apply-btn" onclick="applyMoveOutPlan()">Remove</button>
+      </div>
+    </div>`;
+  updateMoveOutApplyBtn();
+}
+
+function moveOutSelection() {
+  const members = (_moveOutPlan || []).filter(r => r.include && r.member);
+  const households = moveOutEmptyHouseholds().filter(hh => _moveOutHHChoice[hh.id] !== false);
+  return { members, households };
+}
+
+function updateMoveOutApplyBtn() {
+  const btn = document.getElementById('moveout-apply-btn');
+  if (!btn) return;
+  const { members, households } = moveOutSelection();
+  btn.disabled = !members.length;
+  btn.textContent = !members.length ? 'Nothing selected'
+    : `Remove ${members.length} member${members.length === 1 ? '' : 's'}` +
+      (households.length ? ` and ${households.length} household${households.length === 1 ? '' : 's'}` : '');
+}
+
+function cancelMoveOutImport() {
+  _moveOutPlan = null;
+  _moveOutHHChoice = {};
+  document.getElementById('moveout-review').innerHTML = '';
+  document.getElementById('moveout-status').textContent = '';
+}
+
+async function applyMoveOutPlan() {
+  const { members, households } = moveOutSelection();
+  if (!members.length) return;
+  const names = members.map(r => '  • ' + r.member.name).join('\n');
+  const hhNames = households.map(h => '  • ' + h.name).join('\n');
+  if (!confirm(`Remove ${members.length} member${members.length === 1 ? '' : 's'} from the ward records for everyone?\n\n${names}` +
+               (households.length ? `\n\nand ${households.length} household${households.length === 1 ? '' : 's'}:\n${hhNames}` : '') +
+               `\n\nThis cannot be undone. Notes on them are deleted with them.`)) return;
+
+  const who = _currentUserName || _currentUserEmail || 'Unknown';
+  const now = new Date().toISOString();
+  const memberIds = new Set(members.map(r => r.member.id));
+  const hhIds = new Set(households.map(h => h.id));
+  let ministerWarnings = 0;
+
+  members.forEach(r => {
+    const m = r.member;
+    ministerWarnings += companionshipsAsMinister(m.id) ? 1 : 0;
+    const hh = hhById(m.householdId);
+    groupList('moveout').push({ id: uid(), memberId: null, name: m.name, householdName: hh ? hh.name : '',
+      moveDate: r.person.moveDate, newUnit: r.person.newUnit, removedBy: who, removedDate: now,
+      goals: [], notes: [], nextSteps: [] });
+    // Same clean-up as deleteMember(): drop the name from the household's display list.
+    const key = normNameKey(m.name);
+    S.households.forEach(h => {
+      const idx = (h.members || []).findIndex(n => normNameKey(n) === key);
+      if (idx > -1) h.members.splice(idx, 1);
+    });
+  });
+  S.members = S.members.filter(m => !memberIds.has(m.id));
+  dropFromMoveIns(memberIds);
+  if (hhIds.size) {
+    S.households = S.households.filter(h => !hhIds.has(h.id));
+    S.groups.movein = groupList('movein').filter(e => !hhIds.has(e.householdId));
+  }
+
+  _moveOutPlan = null;
+  _moveOutHHChoice = {};
+  document.getElementById('moveout-review').innerHTML = '';
+  await dbDeleteMembers([...memberIds]);
+  refreshBadge(); renderMembers(); renderBrothers(); renderHouseholds(); renderMoves();
+  const statusEl = document.getElementById('moveout-status');
+  statusEl.style.color = '#155724';
+  statusEl.innerHTML = `✓ Removed ${members.length} member${members.length === 1 ? '' : 's'}` +
+    (hhIds.size ? ` and ${hhIds.size} household${hhIds.size === 1 ? '' : 's'}` : '') + '.' +
+    (ministerWarnings ? `<div style="color:#856404;margin-top:0.25rem">${ministerWarnings} of them ${ministerWarnings === 1 ? 'was a minister' : 'were ministers'} — their names stay on Current/Proposed Assignments until you update those.</div>` : '');
+}
+
+function renderMoveOutLog() {
+  const host = document.getElementById('moveout-log');
+  if (!host) return;
+  const list = [...groupList('moveout')].sort((a, b) => String(b.removedDate).localeCompare(String(a.removedDate)));
+  host.innerHTML = `<div class="card">
+    <h2 style="margin:0">Moved Out <span style="font-size:0.8rem;font-weight:400;color:#888">(${list.length})</span></h2>
+    <p style="font-size:0.82rem;color:#888;margin:0 0 0.8rem">People removed from the ward records by a Members Moved Out import.</p>
+    ${list.length ? `<div style="overflow-x:auto"><table><thead><tr><th>Name</th><th>Household</th><th>Moved</th><th>Now in</th><th>Removed</th><th></th></tr></thead><tbody>
+      ${list.map(e => `<tr>
+        <td>${esc(e.name)}</td><td style="color:#666">${esc(e.householdName || '—')}</td>
+        <td>${esc(formatIsoDay(e.moveDate))}</td><td>${esc(e.newUnit || '—')}</td>
+        <td style="font-size:0.8rem;color:#888">${esc(e.removedBy || '')}${e.removedDate ? ' · ' + formatNoteDate(e.removedDate) : ''}</td>
+        <td><button style="background:none;border:none;color:#bbb;cursor:pointer" title="Clear from this list" onclick="removeGroupEntry('moveout','${e.id}')">✕</button></td>
+      </tr>`).join('')}</tbody></table></div>`
+      : '<div class="empty-state" style="padding:1.2rem"><p>No one yet.</p></div>'}
+  </div>`;
 }
 
 // ── Household Address Edit ────────────────────────────────────
