@@ -157,7 +157,7 @@ tr:hover td{background:#fafbfc}
   <button id="nav-current-btn" onclick="showTab('current')">Current Assignments</button>
   <button id="nav-propose-btn" onclick="showTab('propose')">Proposed Assignments</button>
   <button id="nav-council-btn" onclick="showTab('council')">Ward Council Collaboration</button>
-  <button id="nav-moves-btn" onclick="showTab('moves')">New Member Move In/Move Outs</button>
+  <button id="nav-moves-btn" onclick="showTab('moves')">New Member Move In/Move Outs <span id="moves-mine"></span></button>
   <button id="nav-admin-btn" onclick="showTab('admin')" style="display:none">Admin</button>
 </nav>
 
@@ -441,8 +441,28 @@ tr:hover td{background:#fafbfc}
   <div id="council-groups"></div>
 </div>
 
-<!-- NEW MEMBER MOVE IN/MOVE OUTS TAB (placeholder — no content yet) -->
+<!-- NEW MEMBER MOVE IN/MOVE OUTS TAB -->
 <div id="tab-moves" class="tab-content">
+  <div class="alert alert-info">
+    Households moving into the ward, from LCR's <strong>Members Moved In</strong> report. Importing the report adds anyone
+    not already in Members or Households, geocodes new addresses, and puts each household on <strong>Move Ins</strong>
+    with a status, Notes, and a running Next Step log you can tag people on.
+  </div>
+  <div id="moves-tagged"></div>
+  <div class="card">
+    <div class="flex-between">
+      <h2 style="margin:0">Members Moved In Report</h2>
+      <div>
+        <input type="file" id="movein-file" accept=".pdf,application/pdf" style="display:none" onchange="handleMoveInPdf(this.files[0])">
+        <button class="btn btn-primary" onclick="document.getElementById('movein-file').click()">Import Members Moved In Report</button>
+      </div>
+    </div>
+    <p style="font-size:0.82rem;color:#888;margin:0.4rem 0 0">Save the Members Moved In report from LCR as a PDF, then import it here. The PDF is read in your
+      browser and isn't uploaded; only the households you confirm are saved to the ward data.</p>
+    <div id="movein-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+    <div id="movein-review"></div>
+  </div>
+  <div id="moves-groups"></div>
 </div>
 
 <div id="tab-admin" class="tab-content">
@@ -553,6 +573,7 @@ const S = {
   proposed: [],     // user-drafted proposals
   activityLog: [],  // { ts, user } — one entry per saved batch of changes
   groups: {},       // ward council groups — see GROUPS / normalizeGroups()
+  users: [],        // { uid, name } of people with access — who can be tagged on a Next Step
   rawMembers: null,
   rawHouseholds: null,
 };
@@ -569,6 +590,11 @@ const GROUPS = [
     blurb: 'Members returning to activity.' },
   { key: 'mission',   label: 'Ward Mission',      fromMembers: false,
     blurb: 'People the missionaries are working with — type any name, they need not be in the ward list.' },
+  // Lives on the New Member Move In/Move Outs tab rather than Ward Council
+  // Collaboration (`tab`), with one entry per household (`byHousehold`). See
+  // the Move Ins section further down.
+  { key: 'movein',    label: 'Move Ins',          fromMembers: true, byHousehold: true, tab: 'moves',
+    blurb: 'Households that have moved into the ward, until their ministering assignments are in place.' },
 ];
 
 // Always hand back all three lists, whatever the stored document contains —
@@ -582,6 +608,7 @@ function normalizeGroups(raw) {
       ...e,
       goals: Array.isArray(e.goals) ? e.goals : [],
       notes: Array.isArray(e.notes) ? e.notes : [],
+      nextSteps: Array.isArray(e.nextSteps) ? e.nextSteps : [],
     })) : [];
   });
   return out;
@@ -640,7 +667,7 @@ async function runSync() {
     // round-trip rather than being part of what gets stringified.
     const payload = JSON.parse(JSON.stringify({
       members: S.members, households: S.households, current: S.current, proposed: S.proposed,
-      groups: normalizeGroups(S.groups), activityLog: log,
+      groups: normalizeGroups(S.groups), users: S.users || [], activityLog: log,
     }));
     payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
     payload.updatedBy = who;
@@ -683,6 +710,7 @@ async function loadAllData() {
   S.proposed    = data.proposed    || [];
   S.activityLog = data.activityLog || [];
   S.groups      = normalizeGroups(data.groups);
+  S.users       = Array.isArray(data.users) ? data.users : [];
   // Normalize addresses from older imports that may have embedded newlines or ZIP+4
   S.households.forEach(hh => { if (hh.address) hh.address = normalizeAddress(hh.address); });
 }
@@ -718,6 +746,7 @@ async function refreshFromCloud() {
   try {
     await loadAllData();
     refreshBadge();
+    updateMovesNavBadge();
     showTab(currentTabName());
     setRefreshStatus('✓ Updated', '#7ee2a8');
   } catch (error) {
@@ -818,6 +847,7 @@ async function saveMyName() {
   _currentUserLastName = lastName;
   _currentUserName = [firstName, lastName].filter(Boolean).join(' ') || _currentUserEmail;
   document.getElementById('note-author-display').textContent = _currentUserName;
+  registerSelfInDirectory();
   closeModal('edit-name-modal');
 }
 
@@ -830,6 +860,7 @@ async function renderAdminPanel() {
   const snap = await db.collection('profiles').orderBy('createdAt', 'asc').get();
   const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   _adminProfiles = list;
+  syncUserDirectory(list);
   const row = p => {
     const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
     const isSelf = p.id === _currentUserId;
@@ -1023,6 +1054,8 @@ async function resolveAuthState() {
   // on Proposed before their role changed) gets sent back to Import.
   if (!hasFullAccess() && ['brothers','current','propose'].includes(currentTabName())) showTab('import');
   await loadAllData();
+  registerSelfInDirectory();
+  updateMovesNavBadge();
 
   document.getElementById('auth-loading').style.display = 'none';
   document.getElementById('app-shell').style.display = 'block';
@@ -1069,6 +1102,7 @@ function showTab(name) {
   if (name === 'current')    renderCurrent();
   if (name === 'propose')    renderProposed();
   if (name === 'council')    renderCouncil();
+  if (name === 'moves')      renderMoves();
   if (name === 'admin')      renderAdminPanel();
 }
 
@@ -2876,7 +2910,7 @@ function importSession(file) {
       document.getElementById('session-status').textContent = 'Saving to server…';
       await dbReplaceAll({ members: S.members, households: S.households, current: S.current, proposed: S.proposed });
       refreshBadge();
-      renderCouncil();
+      renderGroupViews();
       if (S.members.length && S.households.length) showLinkStatus();
       document.getElementById('session-status').textContent = `Session loaded: ${counts}.`;
       document.getElementById('session-import-file').value = '';
@@ -2929,7 +2963,7 @@ async function clearData(type) {
   refreshBadge();
   document.getElementById('csv-preview').style.display='none';
   if (type==='all'||type==='assignments') renderCurrent();
-  if (type==='all') { renderProposed(); renderCouncil(); }
+  if (type==='all') { renderProposed(); renderGroupViews(); }
 }
 
 function dlCSV(csv, name) {
@@ -2945,8 +2979,9 @@ let _notesCtx = null;
 // comment threads: the long-standing 'notes', and 'goals' on ward council
 // group entries. Anything that doesn't set it gets 'notes', so every existing
 // call site behaves exactly as before.
-function notesField() { return _notesCtx?.field === 'goals' ? 'goals' : 'notes'; }
-function notesFieldLabel() { return notesField() === 'goals' ? 'Goal' : 'Note'; }
+// 'nextSteps' is the Move Ins log, whose entries can also tag users.
+function notesField() { return ['goals', 'nextSteps'].includes(_notesCtx?.field) ? _notesCtx.field : 'notes'; }
+function notesFieldLabel() { return { goals: 'Goal', nextSteps: 'Next Step' }[notesField()] || 'Note'; }
 
 function getNotesTarget(ctx) {
   if (!ctx) return null;
@@ -2975,12 +3010,18 @@ function openNotesModal(type, id, groupKey, field) {
     label = target.m1Name + (target.m2Name ? ' + ' + target.m2Name : '');
   }
   if (type === 'group' && target) label = groupEntryName(target);
-  const heading = notesField() === 'goals' ? 'Goals' : 'Notes';
+  const heading = { goals: 'Goals', nextSteps: 'Next Steps' }[notesField()] || 'Notes';
   document.getElementById('notes-modal-title').textContent = `${heading} — ${label}`;
   document.getElementById('notes-add-heading').textContent = `Add a ${notesFieldLabel()}`;
   document.getElementById('note-label').textContent = notesFieldLabel();
-  document.getElementById('note-text').placeholder =
-    notesField() === 'goals' ? 'What are we aiming for, or what was achieved?…' : 'Write a note or comment…';
+  document.getElementById('note-text').placeholder = {
+    goals: 'What are we aiming for, or what was achieved?…',
+    nextSteps: 'What happens next, and who is doing it?…',
+  }[notesField()] || 'Write a note or comment…';
+  document.getElementById('note-add-btn').textContent = `Add ${notesFieldLabel()}`;
+  const tagging = notesField() === 'nextSteps';
+  document.getElementById('note-tags-wrap').style.display = tagging ? '' : 'none';
+  if (tagging) renderNoteTagPicker();
   document.getElementById('note-author-display').textContent = _currentUserName || '';
   document.getElementById('note-text').value = '';
   document.getElementById('note-error').textContent = '';
@@ -3014,6 +3055,7 @@ function renderNotesList() {
                 onclick="deleteNote(${i})" title="Delete note">✕</button>
       </div>
       <div style="font-size:0.87rem;color:#333;white-space:pre-wrap">${esc(n.text)}</div>
+      ${tagsHTML(n.tags)}
     </div>
   `).join('');
 }
@@ -3055,7 +3097,7 @@ function dismissLinkedNote(key) {
   if (!entry.hiddenLinks.includes(key)) entry.hiddenLinks.push(key);
   dbUpsertGroups();
   renderNotesList();
-  renderCouncil();
+  renderGroupViews();
 }
 
 function formatNoteDate(iso) {
@@ -3072,7 +3114,12 @@ function addNote() {
   if (!target) return;
   const field = notesField();
   if (!target[field]) target[field] = [];
-  target[field].push({ id: uid(), author: _currentUserName || 'Unknown', text, date: new Date().toISOString() });
+  const note = { id: uid(), author: _currentUserName || 'Unknown', text, date: new Date().toISOString() };
+  if (field === 'nextSteps') {
+    note.tags = [...document.querySelectorAll('#note-tags input:checked')].map(i => ({ uid: i.value, name: i.dataset.name }));
+    document.querySelectorAll('#note-tags input:checked').forEach(i => { i.checked = false; });
+  }
+  target[field].push(note);
   persistNotesTarget();
   document.getElementById('note-text').value = '';
   renderNotesList();
@@ -3098,8 +3145,11 @@ function refreshNotesSourceTab() {
   if (_notesCtx.type === 'brother')   renderBrothers();
   if (_notesCtx.type === 'proposed')  renderProposed();
   if (_notesCtx.type === 'current')   renderCurrent();
-  if (_notesCtx.type === 'group')     renderCouncil();
+  if (_notesCtx.type === 'group')     renderGroupViews();
 }
+
+// Group entries now appear on two tabs (council groups and Move Ins).
+function renderGroupViews() { renderCouncil(); renderMoves(); }
 
 // ── Ward Council Collaboration ────────────────────────────────
 // Each group holds entries of:
@@ -3109,6 +3159,10 @@ function refreshNotesSourceTab() {
 // is later removed (the same denormalizing the companionship records use).
 function groupEntryName(e) {
   if (!e) return '';
+  if (e.householdId) {
+    const hh = hhById(e.householdId);
+    if (hh) return hh.name;
+  }
   if (e.memberId) {
     const m = S.members.find(x => x.id === e.memberId);
     if (m) return m.name;
@@ -3176,6 +3230,7 @@ function linkKey(n, source) {
 // Every note the app holds about this person: their own record, their
 // household, their companionships, and anywhere their name is written.
 function groupLinkedNotes(entry) {
+  if (entry.householdId) return moveInLinkedNotes(entry);
   const out = [];
   const seen = new Set();
   const hidden = new Set(entry.hiddenLinks || []);
@@ -3235,6 +3290,7 @@ function latestCommentHTML(rows) {
   const short = text.length > 140 ? text.slice(0, 140).trimEnd() + '…' : text;
   return `<div style="margin-top:0.35rem;font-size:0.8rem;color:#444;white-space:normal;line-height:1.35" title="${esc(text)}">
       ${esc(short)}
+      ${tagsHTML(n.tags)}
       <div style="font-size:0.72rem;color:#999;margin-top:0.15rem">${esc(n.author || '')}${n.date ? ' · ' + formatNoteDate(n.date) : ''}${list.length > 1 ? ` · ${list.length} total` : ''}</div>
       ${source ? `<div style="font-size:0.7rem;color:#b0b0b0;margin-top:0.1rem">from ${esc(source)}</div>` : ''}
     </div>`;
@@ -3248,7 +3304,7 @@ function groupList(key) {
 function renderCouncil() {
   const host = document.getElementById('council-groups');
   if (!host) return;
-  host.innerHTML = GROUPS.map(g => {
+  host.innerHTML = GROUPS.filter(g => !g.tab).map(g => {
     const list = [...groupList(g.key)].sort((a, b) => groupEntryName(a).localeCompare(groupEntryName(b)));
     const rows = list.map(e => {
       const mergedNotes = groupMergedNotes(e);
@@ -3299,6 +3355,10 @@ function openGroupAddModal(key) {
   document.getElementById('group-add-error').textContent = '';
   document.getElementById('group-add-member-wrap').style.display = g.fromMembers ? '' : 'none';
   document.getElementById('group-add-name-wrap').style.display   = g.fromMembers ? 'none' : '';
+  document.getElementById('group-add-member-label').textContent = g.byHousehold ? 'Household' : 'Member';
+  document.getElementById('group-add-search-label').textContent = g.byHousehold ? 'Search households' : 'Search members';
+  document.getElementById('group-add-member-hint').textContent =
+    g.byHousehold ? "Households already on this list aren't shown." : "People already in this group aren't listed.";
   if (g.fromMembers) {
     document.getElementById('group-add-search').value = '';
     renderGroupAddSelect();
@@ -3312,6 +3372,7 @@ function openGroupAddModal(key) {
 // Members already in this group are left out, so the same person can't be
 // added twice.
 function renderGroupAddSelect() {
+  if (GROUPS.find(x => x.key === _groupAddKey)?.byHousehold) return renderGroupAddHouseholdSelect();
   const taken = new Set(groupList(_groupAddKey).map(e => e.memberId).filter(Boolean));
   const q = norm(document.getElementById('group-add-search').value);
   const sel = document.getElementById('group-add-member');
@@ -3335,6 +3396,30 @@ function renderGroupAddSelect() {
   });
 }
 
+function renderGroupAddHouseholdSelect() {
+  const taken = new Set(groupList(_groupAddKey).map(e => e.householdId).filter(Boolean));
+  const q = norm(document.getElementById('group-add-search').value);
+  const sel = document.getElementById('group-add-member');
+  sel.innerHTML = '';
+  const available = [...S.households]
+    .filter(h => !taken.has(h.id))
+    .filter(h => !q || norm(h.name).includes(q))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!available.length) {
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = S.households.length ? 'No matching households' : 'No households imported yet';
+    sel.appendChild(o);
+    return;
+  }
+  available.forEach(h => {
+    const o = document.createElement('option');
+    o.value = h.id;
+    o.textContent = h.name;
+    sel.appendChild(o);
+  });
+}
+
 // The modal deliberately stays open after each add — these lists get built up
 // a few people at a time.
 function addToGroup() {
@@ -3346,7 +3431,15 @@ function addToGroup() {
   const entry = { id: uid(), memberId: null, name: '', goals: [], notes: [],
                   addedBy: _currentUserName || _currentUserEmail || 'Unknown', addedDate: new Date().toISOString() };
 
-  if (g.fromMembers) {
+  if (g.byHousehold) {
+    const hh = hhById(document.getElementById('group-add-member').value);
+    if (!hh) { errEl.textContent = 'Pick a household first.'; return; }
+    Object.assign(entry, {
+      householdId: hh.id, name: hh.name, nextSteps: [], hiddenLinks: [], status: 'new', statusBy: '', statusDate: '',
+      people: S.members.filter(m => m.householdId === hh.id).map(m => ({ memberId: m.id, name: m.name, position: '', age: m.age || 0, moveInDate: m.moveInDate || '' })),
+      moveInDate: '', addressNote: '', source: 'Added by hand',
+    });
+  } else if (g.fromMembers) {
     const memberId = document.getElementById('group-add-member').value;
     const m = S.members.find(x => x.id === memberId);
     if (!m) { errEl.textContent = 'Pick a member first.'; return; }
@@ -3364,7 +3457,7 @@ function addToGroup() {
 
   groupList(g.key).push(entry);
   dbUpsertGroups();
-  renderCouncil();
+  renderGroupViews();
   if (g.fromMembers) renderGroupAddSelect();
   statEl.style.color = '#155724';
   statEl.textContent = `✓ Added ${entry.name}`;
@@ -3375,14 +3468,557 @@ function removeGroupEntry(key, id) {
   const list = groupList(key);
   const e = list.find(x => x.id === id);
   if (!e) return;
-  const counts = (e.goals || []).length + (e.notes || []).length;
+  const counts = (e.goals || []).length + (e.notes || []).length + (e.nextSteps || []).length;
   const g = GROUPS.find(x => x.key === key);
   let msg = `Remove ${groupEntryName(e)} from ${g ? g.label : 'this group'}?`;
-  if (counts) msg += `\n\nThis also deletes their ${(e.goals||[]).length} goal(s) and ${(e.notes||[]).length} note(s), for everyone.`;
+  if (counts) msg += g?.byHousehold
+    ? `\n\nThis also deletes its ${(e.nextSteps||[]).length} next step(s) and ${(e.notes||[]).length} note(s), for everyone. Members and Households are not changed.`
+    : `\n\nThis also deletes their ${(e.goals||[]).length} goal(s) and ${(e.notes||[]).length} note(s), for everyone.`;
   if (!confirm(msg)) return;
   S.groups[key] = list.filter(x => x.id !== id);
   dbUpsertGroups();
-  renderCouncil();
+  renderGroupViews();
+}
+
+// ── Members Moved In report (LCR PDF) ─────────────────────────
+// pdf.js hands back positioned text runs, not a table. Columns are found from
+// the header row on each page ("Name", "Age", "Move In Date", …) and every run
+// is assigned to the last column starting at or left of it. A row with text in
+// Name plus Age or Move In Date starts a new person; lines with only address
+// text are the wrapped street / unit / city lines of the person above.
+const MOVEIN_COLUMNS = [
+  { key: 'name',     re: /^name$/i },
+  { key: 'age',      re: /^age$/i },
+  { key: 'moveIn',   re: /^move\s*in(\s*date)?$/i },
+  { key: 'position', re: /^household(\s*position)?$/i },
+  { key: 'gender',   re: /^gender$/i },
+  { key: 'address',  re: /^(street\s*)?address$/i },
+  { key: 'phone',    re: /^phone(\s*number)?$/i },
+];
+const MONTHS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+
+// "5 Mar 2026" → "2026-03-05"; anything unrecognised is kept as typed.
+function parseLcrDate(s) {
+  const m = String(s || '').trim().match(/^(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*\.?\s+(\d{4})$/);
+  if (!m || !MONTHS[m[2].toLowerCase()]) return String(s || '').trim();
+  return `${m[3]}-${String(MONTHS[m[2].toLowerCase()]).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+}
+
+// pages: [[{ str, x, y }]] with y measured upward (pdf.js transform[5]).
+function parseMoveInReport(pages) {
+  const people = [];
+  let reportedCount = null;
+  pages.forEach(items => {
+    const lines = [];
+    items.filter(it => it.str && it.str.trim()).sort((a, b) => b.y - a.y || a.x - b.x).forEach(it => {
+      const line = lines.find(l => Math.abs(l.y - it.y) < 2.5);
+      if (line) line.items.push(it); else lines.push({ y: it.y, items: [it] });
+    });
+    lines.forEach(l => l.items.sort((a, b) => a.x - b.x));
+
+    const headerIdx = lines.findIndex(l =>
+      l.items.some(i => /^name$/i.test(i.str.trim())) && l.items.some(i => /^age$/i.test(i.str.trim())));
+    if (headerIdx < 0) return;
+    const cols = [];
+    lines[headerIdx].items.forEach(i => {
+      const c = MOVEIN_COLUMNS.find(c => c.re.test(i.str.trim()));
+      if (c && !cols.some(x => x.key === c.key)) cols.push({ key: c.key, x: i.x });
+    });
+    if (!cols.some(c => c.key === 'name')) return;
+    cols.sort((a, b) => a.x - b.x);
+    const colAt = x => { let k = cols[0].key; cols.forEach(c => { if (x >= c.x - 3) k = c.key; }); return k; };
+
+    let cur = null;
+    for (const l of lines.slice(headerIdx + 1)) {
+      const text = l.items.map(i => i.str).join(' ').trim();
+      const countM = text.match(/^count\s*:\s*(\d+)/i);
+      if (countM) reportedCount = (reportedCount || 0) + parseInt(countM[1], 10);
+      if (countM || /©/.test(text)) break;
+      const cells = {};
+      l.items.forEach(i => { const k = colAt(i.x); cells[k] = cells[k] ? cells[k] + ' ' + i.str.trim() : i.str.trim(); });
+      const startsPerson = cells.name && (cells.age || cells.moveIn);
+      if (startsPerson) {
+        cur = { name: cells.name, age: parseInt(cells.age, 10) || 0, moveInDate: parseLcrDate(cells.moveIn),
+                position: cells.position || '', gender: (cells.gender || '').toUpperCase(),
+                addressLines: cells.address ? [cells.address] : [], phone: cells.phone || '' };
+        people.push(cur);
+      } else if (cur) {
+        if (cells.name) cur.name += ' ' + cells.name;             // a long name wrapped
+        if (cells.position) cur.position += ' ' + cells.position;
+        if (cells.address) cur.addressLines.push(cells.address);
+        if (cells.phone) cur.phone = (cur.phone + ' ' + cells.phone).trim();
+      }
+    }
+  });
+  // A line ahead of the street number (a community or building name) would
+  // stop the address geocoding, so it's split off and kept as addressNote.
+  const out = people.map(({ addressLines, ...p }) => {
+    const lines = addressLines.map(a => a.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const first = lines.findIndex(a => /^\d/.test(a));
+    const lead = first > 0 ? lines.slice(0, first) : [];
+    return { ...p, name: p.name.replace(/\s+/g, ' ').trim(),
+             address: (first > 0 ? lines.slice(first) : lines).join(', '),
+             addressNote: lead.join(', ') };
+  });
+  return { people: out, reportedCount };
+}
+
+// ── Move Ins ──────────────────────────────────────────────────
+// One entry per household in S.groups.movein (a GROUPS entry with tab:'moves',
+// so it saves, exports and clears with the council groups). Each entry has a
+// status, the group-style Notes thread, and a Next Steps log whose entries can
+// tag users of the site. Entry shape:
+//   { id, householdId, name, people: [{ memberId, name, position, age, moveInDate }],
+//     moveInDate, addressNote, status, statusBy, statusDate,
+//     notes: [], nextSteps: [{ …note, tags: [{ uid, name }] }], hiddenLinks: [],
+//     addedBy, addedDate, source }
+const MOVEIN_STATUSES = [
+  { value: 'new',       label: 'New' },
+  { value: 'contacted', label: 'Contacted' },
+  { value: 'pool',      label: 'Ministering pool decided' },
+  { value: 'assigned',  label: 'Ministering assignments done' },
+];
+
+// Who can be tagged. profiles/ can only be read by admins (firestore.rules),
+// so the app keeps its own names-only list in the shared document: everyone
+// adds themselves on sign-in, and an admin opening the Admin tab brings it in
+// line with the approved profiles. No emails are stored here.
+function registerSelfInDirectory() {
+  if (!_currentUserId) return;
+  const name = _currentUserName || (_currentUserEmail || '').split('@')[0] || 'Unknown';
+  if (!Array.isArray(S.users)) S.users = [];
+  const ex = S.users.find(u => u.uid === _currentUserId);
+  if (ex && ex.name === name) return;
+  if (ex) ex.name = name; else S.users.push({ uid: _currentUserId, name });
+  scheduleSync();
+}
+
+function syncUserDirectory(profiles) {
+  if (!_currentUserIsAdmin || !Array.isArray(profiles)) return;
+  const next = profiles.filter(p => p.status === 'approved').map(p => ({
+    uid: p.id,
+    name: [p.firstName, p.lastName].filter(Boolean).join(' ') || (p.email || '').split('@')[0] || 'Unknown',
+  })).sort((a, b) => a.uid.localeCompare(b.uid));
+  const cur = [...(S.users || [])].sort((a, b) => a.uid.localeCompare(b.uid));
+  if (JSON.stringify(next) === JSON.stringify(cur)) return;
+  S.users = next;
+  scheduleSync();
+}
+
+function tagsHTML(tags) {
+  if (!Array.isArray(tags) || !tags.length) return '';
+  return `<div style="margin-top:0.3rem;display:flex;flex-wrap:wrap;gap:0.25rem">${tags.map(t =>
+    `<span class="badge ${t.uid === _currentUserId ? 'badge-yellow' : 'badge-blue'}">@${esc(t.name)}${t.uid === _currentUserId ? ' (you)' : ''}</span>`).join('')}</div>`;
+}
+
+function renderNoteTagPicker() {
+  const el = document.getElementById('note-tags');
+  const users = [...(S.users || [])].sort((a, b) =>
+    (b.uid === _currentUserId) - (a.uid === _currentUserId) || a.name.localeCompare(b.name));
+  el.innerHTML = users.length ? users.map(u => `
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;font-weight:400;margin:0;font-size:0.85rem;white-space:nowrap;cursor:pointer">
+      <input type="checkbox" style="width:auto;margin:0" value="${esc(u.uid)}" data-name="${esc(u.name)}"> ${esc(u.name)}${u.uid === _currentUserId ? ' (me)' : ''}
+    </label>`).join('') : '<span style="color:#aaa">No one to tag yet.</span>';
+}
+
+// Every note about the household: each person's own record, the household,
+// their companionships, and anywhere their names are written — the same rules
+// as a council group entry, applied per person.
+function moveInLinkedNotes(entry) {
+  const out = [];
+  const seen = new Set();
+  const hidden = new Set(entry.hiddenLinks || []);
+  (entry.people || []).forEach(p => {
+    const m = p.memberId ? S.members.find(x => x.id === p.memberId) : null;
+    if (!m) return;
+    groupLinkedNotes({ memberId: m.id, name: m.name, hiddenLinks: entry.hiddenLinks }).forEach(l => {
+      if (seen.has(l.key)) return;
+      seen.add(l.key);
+      out.push({ ...l, source: l.source === 'Members' ? `Members · ${m.name}` : l.source });
+    });
+  });
+  const hh = hhById(entry.householdId);
+  if (hh) (hh.notes || []).forEach(n => {
+    const source = `Household · ${hh.name}`;
+    const key = linkKey(n, source);
+    if (seen.has(key) || hidden.has(key)) return;
+    seen.add(key);
+    out.push({ n, source, key });
+  });
+  return out;
+}
+
+function moveInPersonName(p) {
+  const m = p.memberId ? S.members.find(x => x.id === p.memberId) : null;
+  return m ? m.name : (p.name || '');
+}
+
+function shortPosition(pos) {
+  if (/primary/i.test(pos || '')) return 'Primary contact';
+  if (/spouse/i.test(pos || '')) return 'Spouse';
+  if (/member/i.test(pos || '')) return 'Household member';
+  return pos || '';
+}
+
+function formatIsoDay(d) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d || '')) return d || '';
+  return new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function updateMovesNavBadge() {
+  const el = document.getElementById('moves-mine');
+  if (!el) return;
+  const n = movesTaggedToMe().length;
+  el.textContent = n ? `${n} for you` : '';
+  el.style.cssText = n ? 'background:#fff3cd;color:#856404;border-radius:10px;padding:0.15rem 0.5rem;font-size:0.75rem;margin-left:4px' : '';
+}
+
+// Households whose latest Next Step tags the current user and aren't done yet.
+function movesTaggedToMe() {
+  if (!_currentUserId) return [];
+  return groupList('movein').filter(e => {
+    const last = (e.nextSteps || [])[(e.nextSteps || []).length - 1];
+    return e.status !== 'assigned' && last && (last.tags || []).some(t => t.uid === _currentUserId);
+  });
+}
+
+function renderMoves() {
+  updateMovesNavBadge();
+  const host = document.getElementById('moves-groups');
+  if (!host) return;
+  const g = GROUPS.find(x => x.key === 'movein');
+  const order = v => { const i = MOVEIN_STATUSES.findIndex(s => s.value === v); return i < 0 ? 0 : i; };
+  const list = [...groupList('movein')].sort((a, b) =>
+    order(a.status) - order(b.status) || String(b.moveInDate || '').localeCompare(String(a.moveInDate || '')));
+
+  const mine = movesTaggedToMe();
+  document.getElementById('moves-tagged').innerHTML = mine.length
+    ? `<div class="alert" style="background:#fff8e1;color:#856404;border:1px solid #ffe8a1">
+         You're tagged on the latest next step for <strong>${mine.map(e => esc(groupEntryName(e))).join(', ')}</strong>.
+       </div>` : '';
+
+  const rows = list.map(e => {
+    const hh = hhById(e.householdId);
+    const people = (e.people || []).map(p => `<div style="font-size:0.8rem;color:#555">${esc(moveInPersonName(p))}
+        <span style="color:#999">· ${esc(shortPosition(p.position))}${p.age ? ' · ' + p.age : ''}</span></div>`).join('');
+    const addr = hh?.address || '';
+    const geo = !addr ? '' : hh?.lat
+      ? '<span class="badge badge-green" style="font-size:0.68rem">📍 geocoded</span>'
+      : `<span class="badge badge-yellow" style="font-size:0.68rem" title="Fix the address from the Households tab">not geocoded</span>`;
+    const statusSel = `<select style="font-size:0.82rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px;max-width:100%"
+        onchange="setMoveInStatus('${e.id}', this.value)">
+        ${MOVEIN_STATUSES.map(s => `<option value="${s.value}" ${s.value === (e.status || 'new') ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}
+      </select>
+      ${e.statusBy ? `<div style="font-size:0.72rem;color:#999;margin-top:0.25rem">${esc(e.statusBy)}${e.statusDate ? ' · ' + formatNoteDate(e.statusDate) : ''}</div>` : ''}`;
+    const steps = e.nextSteps || [];
+    const merged = groupMergedNotes(e);
+    return `<tr>
+      <td style="vertical-align:top">
+        <strong>${esc(groupEntryName(e))}</strong>
+        ${people}
+        ${e.moveInDate ? `<div style="font-size:0.76rem;color:#888;margin-top:0.2rem">Moved in ${esc(formatIsoDay(e.moveInDate))}</div>` : ''}
+        ${addr ? `<div style="font-size:0.76rem;color:#888">${esc(addr)} ${geo}</div>` : ''}
+        ${e.addressNote ? `<div style="font-size:0.74rem;color:#aaa">${esc(e.addressNote)}</div>` : ''}
+      </td>
+      <td style="vertical-align:top">${statusSel}</td>
+      <td style="vertical-align:top">
+        <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','movein','nextSteps')">${steps.length ? `Next Steps (${steps.length})` : 'Next Step'}</button>
+        ${latestCommentHTML(steps.map(n => ({ n, source: null })))}
+      </td>
+      <td style="vertical-align:top">
+        <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','movein','notes')">${merged.length ? `Notes (${merged.length})` : 'Notes'}</button>
+        ${latestCommentHTML(merged)}
+      </td>
+      <td style="white-space:nowrap;vertical-align:top"><button class="btn btn-danger btn-sm" onclick="removeGroupEntry('movein','${e.id}')">Remove</button></td>
+    </tr>`;
+  }).join('');
+
+  const body = list.length
+    ? `<div style="overflow-x:auto"><table><thead><tr>
+         <th style="width:26%">Household</th>
+         <th style="width:16%">Status</th>
+         <th style="width:25%">Next Step <span style="font-weight:400;color:#aaa">· most recent</span></th>
+         <th style="width:25%">Notes <span style="font-weight:400;color:#aaa">· most recent</span></th>
+         <th>Actions</th>
+       </tr></thead><tbody>${rows}</tbody></table></div>`
+    : `<div class="empty-state" style="padding:1.2rem"><p>No one here yet — import the Members Moved In report above.</p></div>`;
+
+  host.innerHTML = `<div class="card">
+    <div class="flex-between">
+      <h2 style="margin:0">${esc(g.label)} <span style="font-size:0.8rem;font-weight:400;color:#888">(${list.length})</span></h2>
+      <button class="btn btn-primary btn-sm" onclick="openGroupAddModal('movein')">+ Add Household</button>
+    </div>
+    <p style="font-size:0.82rem;color:#888;margin:0 0 0.8rem">${esc(g.blurb)}</p>
+    ${body}
+  </div>`;
+}
+
+function setMoveInStatus(id, value) {
+  const e = groupList('movein').find(x => x.id === id);
+  if (!e || !MOVEIN_STATUSES.some(s => s.value === value)) return;
+  e.status = value;
+  e.statusBy = _currentUserName || _currentUserEmail || 'Unknown';
+  e.statusDate = new Date().toISOString();
+  dbUpsertGroups();
+  renderMoves();
+}
+
+// ── Members Moved In import ───────────────────────────────────
+// pdf.js is only fetched when someone actually imports a report, so nobody
+// else pays for the download. The PDF itself is read in the browser and never
+// uploaded anywhere; only the people confirmed in the review are saved.
+// Two CDNs serving the same pinned build, tried in order.
+const PDFJS_SOURCES = [
+  { lib: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+    worker: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js' },
+  { lib: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
+    worker: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js' },
+];
+let _pdfjsPromise = null;
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => { s.remove(); reject(new Error('failed: ' + src)); };
+    document.head.appendChild(s);
+  });
+}
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (!_pdfjsPromise) _pdfjsPromise = (async () => {
+    for (const src of PDFJS_SOURCES) {
+      try {
+        await loadScript(src.lib);
+        if (!window.pdfjsLib) continue;
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = src.worker;
+        return window.pdfjsLib;
+      } catch (e) { console.warn(e.message); }
+    }
+    _pdfjsPromise = null;
+    throw new Error('Could not load the PDF reader — check your connection and try again.');
+  })();
+  return _pdfjsPromise;
+}
+
+let _moveInPlan = null;
+
+async function handleMoveInPdf(file) {
+  const statusEl = document.getElementById('movein-status');
+  document.getElementById('movein-file').value = '';
+  if (!file) return;
+  statusEl.style.color = '#555';
+  statusEl.textContent = `Reading ${file.name}…`;
+  document.getElementById('movein-review').innerHTML = '';
+  try {
+    const lib = await loadPdfJs();
+    const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    const pages = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const tc = await (await doc.getPage(i)).getTextContent();
+      pages.push(tc.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] })));
+    }
+    const { people, reportedCount } = parseMoveInReport(pages);
+    if (!people.length) {
+      statusEl.style.color = '#dc3545';
+      statusEl.textContent = `No people found in ${file.name}. Is it the Members Moved In report saved as a PDF from LCR?`;
+      return;
+    }
+    _moveInPlan = buildMoveInPlan(people);
+    statusEl.textContent = '';
+    renderMoveInReview(people.length, reportedCount);
+  } catch (err) {
+    console.error('Move-in import failed:', err);
+    statusEl.style.color = '#dc3545';
+    statusEl.textContent = 'Could not read that PDF: ' + (err?.message || 'unknown error');
+  }
+}
+
+// Comparable form of an address: same normalisation the households get, then
+// case and punctuation dropped so "Apt 5" and ", Apt 5" agree.
+function addrKey(a) {
+  return normalizeAddress(String(a || '')).toLowerCase().replace(/[.,#]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function splitLcrName(name) {
+  const [last, rest] = String(name || '').split(',');
+  return { last: (last || '').trim(), first: ((rest || '').trim().split(/\s+/)[0] || '') };
+}
+
+// LCR's own style: "Last, First & Spouse" ("& Spouse Last" when it differs).
+function lcrHouseholdName(people) {
+  const primary = people.find(p => /primary/i.test(p.position)) || people[0];
+  const spouse  = people.find(p => p !== primary && /spouse/i.test(p.position));
+  const a = splitLcrName(primary.name);
+  if (!a.first) return primary.name;
+  if (!spouse) return `${a.last}, ${a.first}`;
+  const b = splitLcrName(spouse.name);
+  return b.last && b.last !== a.last ? `${a.last}, ${a.first} & ${b.first} ${b.last}` : `${a.last}, ${a.first} & ${b.first}`;
+}
+
+// Group the report's people into households by address, and work out for each
+// person and household whether the ward records already have them.
+function buildMoveInPlan(people) {
+  const rank = p => /primary/i.test(p.position) ? 0 : /spouse/i.test(p.position) ? 1 : 2;
+  const byKey = new Map();
+  people.forEach(p => {
+    const k = addrKey(p.address) || 'name:' + normNameKey(p.name);
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k).push(p);
+  });
+  return [...byKey.entries()].map(([key, ppl]) => {
+    ppl.sort((a, b) => rank(a) - rank(b));
+    const rows = ppl.map(p => ({ ...p, member: S.members.find(m => normNameKey(m.name) === normNameKey(p.name)) || null }));
+    const linkedHH = rows.map(r => r.member && hhById(r.member.householdId)).find(Boolean);
+    const household = linkedHH || (key.startsWith('name:') ? null : S.households.find(h => addrKey(h.address) === key)) || null;
+    const entry = household ? groupList('movein').find(e => e.householdId === household.id) || null : null;
+    rows.forEach(r => {
+      r.onList = !!entry && (entry.people || []).some(x =>
+        (r.member && x.memberId === r.member.id) || normNameKey(x.name) === normNameKey(r.name));
+    });
+    return { key, people: rows, household, entry, hhName: household ? household.name : lcrHouseholdName(rows),
+             include: !(entry && rows.every(r => r.onList)) };
+  });
+}
+
+function renderMoveInReview(parsed, reported) {
+  const plan = _moveInPlan || [];
+  const warn = reported !== null && reported !== parsed
+    ? `<div class="alert" style="background:#fff8e1;color:#856404;border:1px solid #ffe8a1">The report says ${reported} people but ${parsed} were read — check the list below against the PDF before adding.</div>` : '';
+  const rows = plan.map((item, i) => {
+    const hh = item.household;
+    const hhBadge = hh ? '<span class="badge badge-green">Existing household</span>' : '<span class="badge badge-blue">New household</span>';
+    const addr = hh?.address || normalizeAddress(item.people[0].address || '');
+    const geo = hh?.lat ? 'already geocoded' : !addr ? 'no address' : isUngeocodeable(addr) ? "can't be geocoded" : 'will be geocoded';
+    const listBadge = item.entry
+      ? (item.include ? '<span class="badge badge-yellow">On Move Ins — adds new people</span>' : '<span class="badge" style="background:#eee;color:#666">Already on Move Ins</span>')
+      : '';
+    const people = item.people.map(p => `<div style="font-size:0.82rem;margin:0.15rem 0">
+        ${esc(p.name)} <span style="color:#999">· ${esc(shortPosition(p.position))}${p.age ? ' · ' + p.age : ''}${p.moveInDate ? ' · moved in ' + esc(formatIsoDay(p.moveInDate)) : ''}</span>
+        ${p.member ? '<span class="badge badge-green" style="font-size:0.68rem">In Members</span>' : '<span class="badge badge-blue" style="font-size:0.68rem">New member</span>'}
+        ${p.onList ? '<span class="badge" style="background:#eee;color:#666;font-size:0.68rem">on list</span>' : ''}
+      </div>`).join('');
+    return `<tr>
+      <td style="vertical-align:top"><input type="checkbox" ${item.include ? 'checked' : ''} onchange="_moveInPlan[${i}].include=this.checked;updateMoveInApplyBtn()"></td>
+      <td style="vertical-align:top"><strong>${esc(item.hhName)}</strong> ${hhBadge} ${listBadge}
+        <div style="font-size:0.78rem;color:#888;margin-top:0.2rem">${esc(addr || '—')} · ${geo}</div></td>
+      <td style="vertical-align:top">${people}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('movein-review').innerHTML = `
+    <div style="margin-top:1rem">
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.4rem">Found ${parsed} ${parsed === 1 ? 'person' : 'people'} in ${plan.length} household${plan.length === 1 ? '' : 's'}</div>
+      ${warn}
+      <div style="font-size:0.8rem;color:#888;margin-bottom:0.5rem">Ticked households are added to Members and Households where they're missing, put on Move Ins, and geocoded. Nothing already in the records is overwritten — blanks like phone or age are filled in.</div>
+      <div style="overflow-x:auto"><table><thead><tr><th></th><th style="width:45%">Household</th><th>People</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem">
+        <button class="btn btn-secondary" onclick="cancelMoveInImport()">Cancel</button>
+        <button class="btn btn-primary" id="movein-apply-btn" onclick="applyMoveInPlan()">Add</button>
+      </div>
+    </div>`;
+  updateMoveInApplyBtn();
+}
+
+function updateMoveInApplyBtn() {
+  const btn = document.getElementById('movein-apply-btn');
+  if (!btn) return;
+  const n = (_moveInPlan || []).filter(i => i.include).length;
+  btn.disabled = !n;
+  btn.textContent = n ? `Add ${n} household${n === 1 ? '' : 's'}` : 'Nothing selected';
+}
+
+function cancelMoveInImport() {
+  _moveInPlan = null;
+  document.getElementById('movein-review').innerHTML = '';
+  document.getElementById('movein-status').textContent = '';
+}
+
+async function applyMoveInPlan() {
+  const items = (_moveInPlan || []).filter(i => i.include);
+  if (!items.length) return;
+  const statusEl = document.getElementById('movein-status');
+  const who = _currentUserName || _currentUserEmail || 'Unknown';
+  const c = { members: 0, filled: 0, households: 0, entries: 0, extended: 0 };
+  const touched = [];
+
+  items.forEach(item => {
+    const primary = item.people[0];
+    let hh = item.household ? hhById(item.household.id) : null;
+    if (!hh) {
+      hh = { id: uid(), name: item.hhName, members: [], head: primary.name,
+             address: normalizeAddress(primary.address || ''),
+             phone: (item.people.find(p => p.phone) || {}).phone || '', email: '', notes: [] };
+      S.households.push(hh);
+      c.households++;
+    } else if (!hh.address && primary.address) {
+      hh.address = normalizeAddress(primary.address);
+    }
+    if (!Array.isArray(hh.members)) hh.members = [];
+    touched.push(hh);
+
+    const people = item.people.map(p => {
+      let m = p.member ? S.members.find(x => x.id === p.member.id) : null;
+      if (!m) {
+        m = { id: uid(), name: p.name, gender: p.gender, age: p.age, phone: p.phone,
+              isBrother: isMale(p.gender), householdId: hh.id, notes: [], moveInDate: p.moveInDate };
+        S.members.push(m);
+        c.members++;
+      } else {
+        let filled = false;
+        if (!m.householdId) { m.householdId = hh.id; filled = true; }
+        if (!m.phone && p.phone) { m.phone = p.phone; filled = true; }
+        if (!m.age && p.age) { m.age = p.age; filled = true; }
+        if (!m.gender && p.gender) { m.gender = p.gender; filled = true; }
+        if (!m.moveInDate && p.moveInDate) m.moveInDate = p.moveInDate;
+        if (filled) c.filled++;
+      }
+      if (!hh.members.some(n => normNameKey(n) === normNameKey(m.name))) hh.members.push(m.name);
+      return { memberId: m.id, name: m.name, position: p.position, age: p.age, moveInDate: p.moveInDate };
+    });
+
+    const dates = people.map(p => p.moveInDate).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    const note = item.people.map(p => p.addressNote).find(Boolean) || '';
+    let entry = groupList('movein').find(e => e.householdId === hh.id);
+    if (!entry) {
+      entry = { id: uid(), householdId: hh.id, memberId: null, name: hh.name, people,
+                moveInDate: dates[0] || '', addressNote: note, status: 'new', statusBy: '', statusDate: '',
+                goals: [], notes: [], nextSteps: [], hiddenLinks: [],
+                addedBy: who, addedDate: new Date().toISOString(), source: 'Members Moved In report' };
+      groupList('movein').push(entry);
+      c.entries++;
+    } else {
+      const before = entry.people.length;
+      people.forEach(p => { if (!entry.people.some(x => x.memberId === p.memberId)) entry.people.push(p); });
+      if (!entry.addressNote && note) entry.addressNote = note;
+      if (entry.people.length > before) c.extended++;
+    }
+  });
+
+  _moveInPlan = null;
+  document.getElementById('movein-review').innerHTML = '';
+  await dbUpsertMembers(S.members);
+  refreshBadge(); renderMoves();
+
+  const summary = [`${c.entries} household${c.entries === 1 ? '' : 's'} added to Move Ins`];
+  if (c.extended) summary.push(`${c.extended} existing entr${c.extended === 1 ? 'y' : 'ies'} extended`);
+  summary.push(`${c.members} new member${c.members === 1 ? '' : 's'}`, `${c.households} new household${c.households === 1 ? '' : 's'}`);
+  if (c.filled) summary.push(`${c.filled} existing member${c.filled === 1 ? '' : 's'} filled in`);
+
+  const toGeo = [...new Set(touched)].filter(h => h.address && !h.lat && !isUngeocodeable(h.address));
+  const failed = [];
+  for (let i = 0; i < toGeo.length; i++) {
+    statusEl.style.color = '#555';
+    statusEl.textContent = `✓ ${summary.join(' · ')}. Geocoding ${i + 1} of ${toGeo.length}…`;
+    const coords = await geocodeAddress(toGeo[i].address);
+    if (coords) { toGeo[i].lat = coords.lat; toGeo[i].lng = coords.lng; } else failed.push(toGeo[i].name);
+  }
+  if (toGeo.length) { await dbUpsertHouseholds(S.households); renderMoves(); }
+  const unplaceable = [...new Set(touched)].filter(h => h.address && !h.lat && isUngeocodeable(h.address)).map(h => h.name);
+  const problems = failed.concat(unplaceable);
+  statusEl.style.color = '#155724';
+  statusEl.innerHTML = `✓ ${esc(summary.join(' · '))}.` +
+    (toGeo.length ? ` ${toGeo.length - failed.length} of ${toGeo.length} new address${toGeo.length === 1 ? '' : 'es'} geocoded.` : '') +
+    (problems.length ? `<div style="color:#856404;margin-top:0.25rem">Couldn't geocode: ${esc(problems.join('; '))} — fix the address from the Households tab (Edit).</div>` : '');
 }
 
 // ── Household Address Edit ────────────────────────────────────
@@ -3602,13 +4238,13 @@ function deleteHousehold(id) {
 
     <div id="group-add-member-wrap">
       <div class="form-group">
-        <label>Search members</label>
+        <label id="group-add-search-label">Search members</label>
         <input type="text" id="group-add-search" placeholder="Type to filter…" oninput="renderGroupAddSelect()">
       </div>
       <div class="form-group">
-        <label>Member</label>
+        <label id="group-add-member-label">Member</label>
         <select id="group-add-member" size="8" style="width:100%"></select>
-        <div style="font-size:0.77rem;color:#888;margin-top:0.25rem">People already in this group aren't listed.</div>
+        <div id="group-add-member-hint" style="font-size:0.77rem;color:#888;margin-top:0.25rem">People already in this group aren't listed.</div>
       </div>
     </div>
 
@@ -3648,9 +4284,14 @@ function deleteHousehold(id) {
         <label id="note-label">Note</label>
         <textarea id="note-text" rows="3" placeholder="Write a note or comment…" style="width:100%;padding:0.45rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem;resize:vertical;font-family:inherit"></textarea>
       </div>
+      <div class="form-group" id="note-tags-wrap" style="display:none">
+        <label>Tag people on this step</label>
+        <div id="note-tags" style="display:flex;flex-wrap:wrap;gap:0.3rem 0.9rem;max-height:120px;overflow-y:auto"></div>
+        <div style="font-size:0.75rem;color:#888;margin-top:0.25rem">Anyone with access appears here once they've signed in since this feature was added.</div>
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div id="note-error" style="font-size:0.82rem;color:#dc3545"></div>
-        <button class="btn btn-primary btn-sm" onclick="addNote()">Add Note</button>
+        <button class="btn btn-primary btn-sm" id="note-add-btn" onclick="addNote()">Add Note</button>
       </div>
     </div>
     <div class="modal-footer">

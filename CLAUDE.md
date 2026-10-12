@@ -138,6 +138,49 @@ household, and *any* note anywhere whose text mentions their name.
   a text/date fallback for any note predating note ids.
 - Only the **Notes** thread aggregates. Goals stay purely the council's own.
 
+### New Member Move In/Move Outs — Move Ins
+A tab, visible to both roles, for following households that move into the ward until their
+ministering is in place. (Move Outs is planned but not built yet.)
+
+- **Storage**: `S.groups.movein` — a fourth `GROUPS` entry flagged `tab: 'moves'` (so
+  `renderCouncil()` skips it and `renderMoves()` draws it) and `byHousehold: true`. Living in
+  `S.groups` means it saves, exports, imports and clears exactly like the council groups.
+- **One entry per household**, not per person: `{ id, householdId, name, people: [{ memberId,
+  name, position, age, moveInDate }], moveInDate, addressNote, status, statusBy, statusDate,
+  notes, nextSteps, hiddenLinks, addedBy, addedDate, source }`. `groupEntryName()` follows
+  `householdId` so a household rename shows through.
+- **Status**: `MOVEIN_STATUSES` — new / contacted / pool (ministering pool decided) / assigned
+  (ministering assignments done). Stamped with who set it and when.
+- **Notes** behave like a council group's: `groupLinkedNotes()` hands household entries to
+  `moveInLinkedNotes()`, which pulls in notes for every person in the entry plus the household.
+- **Next Steps** is a third thread on the shared notes modal (`_notesCtx.field = 'nextSteps'`).
+  Each step can carry `tags: [{ uid, name }]`. The nav button and a banner count households
+  whose *latest* step tags the current user and aren't at "assigned" yet.
+- **Who can be tagged — `S.users`**: a names-only `{ uid, name }` list stored in the shared
+  document, because `firestore.rules` only lets admins read `profiles/`. Every user adds
+  themselves on sign-in (`registerSelfInDirectory()`), and an admin opening the Admin tab
+  rebuilds it from the approved profiles (`syncUserDirectory()`), which also drops denied users.
+  Deliberately no emails in it. A user who hasn't signed in since this shipped isn't taggable
+  until they do (or an admin opens the Admin tab).
+
+**Importing the LCR "Members Moved In" report (PDF)**:
+- pdf.js 3.11.174 is loaded lazily from cdnjs, with jsDelivr as a fallback (`PDFJS_SOURCES`),
+  only when someone imports. The PDF is parsed in the browser and never uploaded.
+- `parseMoveInReport()` finds the columns from each page's header row ("Name", "Age", "Move In
+  Date", "Household Position", "Gender", "Street Address", "Phone Number") and assigns each text
+  run to the last column starting left of it. A line with Name plus Age/Move In Date starts a
+  person; address-only lines are the wrapped street/unit/city lines. It stops at "Count:" and
+  reports that count, so a mismatch is shown as a warning. A line ahead of the street number
+  (a community or building name) is split off into `addressNote` so the address still geocodes.
+  Positions seen in LCR's report: Primary Household Contact, Spouse, Household Member.
+- `buildMoveInPlan()` groups people into households by address (`addrKey()`), matches people
+  to Members by `normNameKey()`, and households first via a matched member's household, then
+  by address. New households are named LCR-style ("Last, First & Spouse").
+- The review lets you untick households; applying adds missing members/households, only
+  *fills blanks* on existing records (never overwrites), adds or extends the Move Ins entry,
+  then geocodes any touched household without coordinates through the existing
+  `geocodeAddress()` (rate-limited Nominatim).
+
 ### Roles: two ways the tool is used
 The app serves two audiences, controlled by a `role` field on the profile and applied in
 `applyAccessVisibility()` / `hasFullAccess()`:
