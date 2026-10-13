@@ -37,6 +37,7 @@
 <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-messaging-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f7fa;color:#333;min-height:100vh}
@@ -179,6 +180,7 @@ tr:hover td{background:#fafbfc}
 
 <!-- NOTIFICATIONS TAB -->
 <div id="tab-notifications" class="tab-content">
+  <div id="notif-live"></div>
   <div id="notif-badge-perm"></div>
   <div class="card">
     <div class="flex-between">
@@ -1106,6 +1108,10 @@ async function resolveAuthState() {
   registerSelfInDirectory();
   updateMovesNavBadge();
   updateNotifBadges();
+  listenForPushInApp();
+  refreshPushToken();
+  // Tapping a phone notification opens the app at #notifications.
+  if (location.hash === '#notifications') showTab('notifications');
 
   document.getElementById('auth-loading').style.display = 'none';
   document.getElementById('app-shell').style.display = 'block';
@@ -4663,7 +4669,7 @@ function renderNotifications() {
       <div style="font-size:0.74rem;color:#999;margin-top:0.25rem">${esc(it.n.author || '')}${it.n.date ? ' · ' + formatNoteDate(it.n.date) : ''}</div>
     </div>`;
   }).join('') : '<div class="empty-state" style="padding:1.5rem"><p>Nothing yet. When someone tags you on a note, goal or next step, it shows up here.</p></div>';
-  renderBadgePermission();
+  renderPushCard();
 }
 
 function openNotification(i) {
@@ -4686,7 +4692,7 @@ async function markNotificationsSeen() {
 
 // iPhone/iPad only draw the icon count once notifications are allowed, even
 // though nothing is sent yet; offered only where it can make a difference.
-function renderBadgePermission() {
+function renderBadgeOnlyPrompt() {
   const el = document.getElementById('notif-badge-perm');
   if (!el) return;
   const installed = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -4695,10 +4701,119 @@ function renderBadgePermission() {
       <span>Show your unread count on the app icon?</span>
       <button class="btn btn-primary btn-sm" onclick="requestBadgePermission()">Allow</button></div>` : '';
 }
+// ── Phone notifications (push) ────────────────────────────────
+// Turned on per device from the Notifications tab. The device's Firebase Cloud
+// Messaging token is stored on the user's own profile (profiles/{uid}.fcmTokens,
+// allowed by the existing self-update rule); the notifyTagged Cloud Function
+// reads it when that user is newly tagged. Paste the public key from Firebase
+// console → Project settings → Cloud Messaging → Web Push certificates into
+// VAPID_PUBLIC_KEY to switch this on; while it's empty the feature stays hidden.
+const VAPID_PUBLIC_KEY = 'BHN8SFmUhfVkKxank-8E6MJCXwK_Bz_gPsK14Sr43Ct9wvKiR5JQf4kNlJE3erPgyszK22jaQczCRj2QcsdJuDE';
+const PUSH_TOKEN_KEY = 'ministering-push-token';
+
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) { /* private mode */ } }
+function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+function isInstalled() { return window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true; }
+function pushAvailable() {
+  try {
+    return !!VAPID_PUBLIC_KEY && 'serviceWorker' in navigator && 'PushManager' in window &&
+           typeof Notification !== 'undefined' && !!firebase.messaging && firebase.messaging.isSupported();
+  } catch (e) { return false; }
+}
+function pushOnHere() { return pushAvailable() && Notification.permission === 'granted' && !!lsGet(PUSH_TOKEN_KEY); }
+
+async function pushToken() {
+  const reg = await navigator.serviceWorker.ready;
+  return firebase.messaging().getToken({ vapidKey: VAPID_PUBLIC_KEY, serviceWorkerRegistration: reg });
+}
+
+async function enablePush() {
+  const status = document.getElementById('push-status');
+  try {
+    if (await Notification.requestPermission() !== 'granted') { renderPushCard(); return; }
+    status.textContent = 'Turning on…';
+    const token = await pushToken();
+    await db.collection('profiles').doc(_currentUserId).update({ fcmTokens: firebase.firestore.FieldValue.arrayUnion(token) });
+    lsSet(PUSH_TOKEN_KEY, token);
+    updateNotifBadges();
+  } catch (e) {
+    console.error('Enabling notifications failed:', e);
+    status.textContent = 'Could not turn on notifications: ' + (e?.message || 'unknown error');
+    return;
+  }
+  renderPushCard();
+}
+
+async function disablePush() {
+  const token = lsGet(PUSH_TOKEN_KEY);
+  try {
+    if (token) await db.collection('profiles').doc(_currentUserId).update({ fcmTokens: firebase.firestore.FieldValue.arrayRemove(token) });
+    await firebase.messaging().deleteToken();
+  } catch (e) { console.warn('Turning off notifications:', e?.message); }
+  lsSet(PUSH_TOKEN_KEY, null);
+  renderPushCard();
+}
+
+// Tokens can change; keep the profile's copy current each time the app opens.
+async function refreshPushToken() {
+  if (!pushOnHere()) return;
+  try {
+    const old = lsGet(PUSH_TOKEN_KEY), token = await pushToken();
+    if (token && token !== old) {
+      const ref = db.collection('profiles').doc(_currentUserId);
+      await ref.update({ fcmTokens: firebase.firestore.FieldValue.arrayUnion(token) });
+      if (old) await ref.update({ fcmTokens: firebase.firestore.FieldValue.arrayRemove(old) });
+      lsSet(PUSH_TOKEN_KEY, token);
+    }
+  } catch (e) { console.warn('Refreshing notification token:', e?.message); }
+}
+
+// While the app is open, a tag arrives here instead of as a phone notification.
+function listenForPushInApp() {
+  if (!pushAvailable()) return;
+  try {
+    firebase.messaging().onMessage(payload => {
+      const d = payload.data || {};
+      const el = document.getElementById('notif-live');
+      if (el) el.innerHTML = `<div class="alert" style="background:#fff8e1;color:#856404;border:1px solid #ffe8a1;display:flex;justify-content:space-between;align-items:center;gap:0.75rem">
+          <span>${esc(d.body || 'You were just tagged.')}</span>
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('notif-live').innerHTML='';refreshFromCloud().then(()=>showTab('notifications'))">Show me</button></div>`;
+      const n = document.getElementById('notif-count');
+      if (n && d.unread) { n.textContent = d.unread; }
+    });
+  } catch (e) { /* unsupported */ }
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.type === 'open-notifications') refreshFromCloud().then(() => showTab('notifications'));
+  });
+}
+
+function renderPushCard() {
+  const el = document.getElementById('notif-badge-perm');
+  if (!el) return;
+  if (!VAPID_PUBLIC_KEY) return renderBadgeOnlyPrompt();
+  const box = (msg, btn) => `<div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap">
+      <span>${msg}<span id="push-status" style="display:block;font-size:0.8rem;margin-top:0.2rem"></span></span>${btn || ''}</div>`;
+  if (isIOS() && !isInstalled()) {
+    el.innerHTML = box('To get notifications on iPhone or iPad, add this app to your Home Screen (Share → Add to Home Screen) and open it from there.');
+  } else if (!pushAvailable()) {
+    el.innerHTML = '';
+  } else if (Notification.permission === 'denied') {
+    el.innerHTML = box('Notifications are blocked for this app. Allow them in your device or browser settings to get alerts when you\'re tagged.');
+  } else if (pushOnHere()) {
+    el.innerHTML = box('📱 Notifications are on for this device.', '<button class="btn btn-secondary btn-sm" onclick="disablePush()">Turn off</button>');
+  } else {
+    el.innerHTML = box('Get a notification on this device when someone tags you.', '<button class="btn btn-primary btn-sm" onclick="enablePush()">Turn on</button>');
+  }
+}
+
 
 async function requestBadgePermission() {
   try { await Notification.requestPermission(); } catch (e) { /* user dismissed */ }
-  renderBadgePermission();
+  renderPushCard();
   updateNotifBadges();
 }
 
