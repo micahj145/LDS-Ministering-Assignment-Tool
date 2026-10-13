@@ -908,15 +908,18 @@ const VERIFY_CONTINUE_URL = 'https://micahj145.github.io/LDS-Ministering-Assignm
 // back to a plain send; any other error — including Firebase's own
 // too-many-requests throttle — is passed on, so one tap is one request.
 async function sendVerification(user) {
+  // Recorded before sending, so a failed attempt (e.g. throttled) still counts
+  // and opening the app again doesn't immediately retry and prolong the throttle.
+  lsSet('verify-sent-' + user.uid, String(Date.now()));
   try { await user.sendEmailVerification({ url: VERIFY_CONTINUE_URL }); }
   catch (e) {
     if (e?.code === 'auth/unauthorized-continue-uri' || e?.code === 'auth/invalid-continue-uri') await user.sendEmailVerification();
     else throw e;
   }
-  lsSet('verify-sent-' + user.uid, String(Date.now()));
 }
 
-const VERIFY_RESEND_GAP_MS = 60 * 1000;
+const VERIFY_RESEND_GAP_MS = 60 * 1000;          // Resend button
+const VERIFY_AUTO_GAP_MS = 24 * 3600 * 1000;      // automatic send on opening the screen
 function verifySentAt(uid) { return Number(lsGet('verify-sent-' + uid)) || 0; }
 
 // Accounts created before verification existed were never sent an email, so
@@ -926,7 +929,7 @@ function showVerifyEmailScreen(user) {
   document.getElementById('auth-loading').style.display = 'none';
   document.getElementById('pending-title').textContent = 'Check Your Email';
   const st0 = document.getElementById('verify-status');
-  if (!verifySentAt(user.uid) && !_signingUp) {
+  if (Date.now() - verifySentAt(user.uid) > VERIFY_AUTO_GAP_MS && !_signingUp) {
     sendVerification(user).then(() => { st0.style.color = '#155724'; st0.textContent = 'Verification email sent.'; })
       .catch(e => { st0.style.color = '#dc3545'; st0.textContent = verifyErrorText(e); });
   }
