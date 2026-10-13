@@ -1335,7 +1335,7 @@ async function resolveAuthState() {
   updateMovesNavBadge();
   updateNotifBadges();
   listenForPushInApp();
-  refreshPushToken();
+  refreshPushToken(profile);
   updateAdminPendingCount();
   // Tapping a phone notification opens the app at #notifications, or #admin
   // for an access request (showTab() sends a non-admin back to Import).
@@ -4989,17 +4989,21 @@ async function disablePush() {
   renderPushCard();
 }
 
-// Tokens can change; keep the profile's copy current each time the app opens.
-async function refreshPushToken() {
+// Each time the app opens on a device with notifications on, make sure the
+// profile actually holds this device's current token. Two ways it can be
+// missing even though the device still thinks it's on: FCM rotated the token,
+// or the profile was deleted and recreated (an admin's Remove, then "Request
+// access again") — which drops fcmTokens while the device keeps its local flag.
+async function refreshPushToken(profile) {
   if (!pushOnHere()) return;
   try {
     const old = lsGet(PUSH_TOKEN_KEY), token = await pushToken();
-    if (token && token !== old) {
-      const ref = db.collection('profiles').doc(_currentUserId);
-      await ref.update({ fcmTokens: firebase.firestore.FieldValue.arrayUnion(token) });
-      if (old) await ref.update({ fcmTokens: firebase.firestore.FieldValue.arrayRemove(old) });
-      lsSet(PUSH_TOKEN_KEY, token);
-    }
+    if (!token) return;
+    const have = Array.isArray(profile?.fcmTokens) ? profile.fcmTokens : [];
+    const ref = db.collection('profiles').doc(_currentUserId);
+    if (!have.includes(token)) await ref.update({ fcmTokens: firebase.firestore.FieldValue.arrayUnion(token) });
+    if (old && old !== token && have.includes(old)) await ref.update({ fcmTokens: firebase.firestore.FieldValue.arrayRemove(old) });
+    if (token !== old) lsSet(PUSH_TOKEN_KEY, token);
   } catch (e) { console.warn('Refreshing notification token:', e?.message); }
 }
 
