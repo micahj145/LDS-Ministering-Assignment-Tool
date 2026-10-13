@@ -3,6 +3,10 @@
 /*.json
 # …except the web-app manifest, which is code, not data.
 !/manifest.json
+!/firebase.json
 /*.csv
 errors.txt
 supabase/seed.sql
+# Cloud Functions dependencies and CLI logs
+node_modules/
+firebase-debug*.log

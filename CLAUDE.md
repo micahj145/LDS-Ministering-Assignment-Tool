@@ -244,9 +244,40 @@ ministering is in place, and for removing people who have moved out.
   (`updateNotifBadges()`): iPhone/iPad Home Screen apps (only once notifications are allowed;
   the tab offers an Allow button, but only when running installed) and installed Chrome/Edge
   apps on Windows/Mac. Android has no badge API; it only dots icons for real notifications.
-- No live listener (by design), so new tags appear on load or ↻ Refresh, and the icon count
-  is as of the last time the app was open. Real push (Stage 2) needs a sender: Blaze + Cloud
-  Function, or possibly Apps Script + FCM (unbuilt).
+- No live listener (by design), so the in-app list updates on load or ↻ Refresh. Phone
+  notifications (below) cover the "something new happened" part.
+
+### Phone notifications (push) — Blaze + Cloud Function
+Set-up steps are in `NOTIFICATIONS_SETUP.md` (Blaze upgrade, budget alert, Web Push key,
+Firebase CLI, deploy).
+- **Server**: `functions/index.js` → `notifyTagged`, a 2nd-gen `onDocumentWritten` trigger on
+  `wardData/shared` (region `us-central1`, max 2 instances). `functions/tags.js` (pure, unit
+  tested in `tags.test.js`) diffs before/after for new (note, person) tag pairs — keyed by
+  note id — skipping self-tags; groups them per person; reads `profiles/{uid}` (approved only,
+  `fcmTokens`); sends one data-only FCM message per person with `{ title, body, unread, link }`;
+  removes tokens FCM reports as dead. **The body names only the tagger**, never members or note
+  text. The Admin SDK bypasses rules; the function never writes `wardData`, so no trigger loop.
+  `forEachNote()` there must stay in step with `allTaggedNotes()` in the app.
+- **Client**: `VAPID_PUBLIC_KEY` (public, from Project settings → Cloud Messaging) gates the
+  feature; empty = hidden. The Notifications tab card (`renderPushCard()`) handles: iPhone not
+  installed (explains Add to Home Screen), unsupported, blocked, on, off. **Turn on** requests
+  permission, gets a token with `getToken({ vapidKey, serviceWorkerRegistration })` — the
+  registration of our own `sw.js`, because FCM's default `/firebase-messaging-sw.js` would be
+  looked for at the domain root, outside this GitHub Pages project path — and adds it to
+  `profiles/{uid}.fcmTokens` (allowed by the self-update rule). The token is also kept in
+  localStorage only to know "on for this device"; `refreshPushToken()` swaps it if FCM rotates it.
+- **sw.js** imports the 12.18.0 compat app + messaging SDKs (keep the version in step with the
+  page) and shows the notification in `onBackgroundMessage`, sets the icon badge from `unread`,
+  and on tap focuses an open window (postMessage → refresh + Notifications tab) or opens
+  `…#notifications`. When the app is open and visible, FCM delivers to the page instead
+  (`onMessage` → "You were tagged — Show me" banner). Still caches nothing.
+- Firebase files at the repo root: `firebase.json` (functions codebase) and `.firebaserc`
+  (default project). `.gitignore` re-includes `firebase.json` past the `/*.json` rule and
+  ignores `node_modules/`.
+- Verified in headless Chromium with the real FCM service-worker SDK: a push delivered while the
+  app was closed showed the notification with the right text, icon and link. The function was
+  run against fake Firestore/Messaging (one message per person, dead-token clean-up, nothing on
+  re-saves). Not yet run against the live project.
 
 ### Installable app (PWA)
 - `manifest.json` (start_url `./ministering_tool.html`, standalone), `icons/` (192, 512,
@@ -317,5 +348,7 @@ Notes for anyone changing this:
   loose files in the project root, sort by actual file mtime, not filename — export filenames are
   date-stamped by day, not by exact time, so same-day exports need mtime to disambiguate.
 - Only `ministering_tool.html`, `index.html`, `firestore.rules`, `FIREBASE_SETUP.md`, this
-  file, and the PWA files (`manifest.json`, `sw.js`, `icons/`) should ever be staged/committed — the project root otherwise accumulates loose data export
+  file, the PWA files (`manifest.json`, `sw.js`, `icons/`), `NOTIFICATIONS_SETUP.md`, and the
+  push files (`firebase.json`, `.firebaserc`, `functions/` minus `node_modules`) should ever be
+  staged/committed — the project root otherwise accumulates loose data export
   files that must stay untracked.
