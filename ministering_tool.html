@@ -113,7 +113,16 @@ tr:hover td{background:#fafbfc}
 .link-bar.linked{background:#d4edda;color:#155724}
 .link-bar.partial{background:#fff3cd;color:#856404}
 .link-bar.none{background:#f8d7da;color:#721c24}
-@media(max-width:640px){.two-col{grid-template-columns:1fr}nav button{padding:0.75rem 0.75rem;font-size:0.82rem}.container{padding:1rem}}
+@media(max-width:640px){.two-col{grid-template-columns:1fr}nav button{padding:0.75rem 0.75rem;font-size:0.82rem}.container{padding:1rem}
+  /* Phones: the header's email + Refresh + Sign Out used to be wider than the
+     screen, which widened the whole page and cut pop-up windows off on the right. */
+  header{padding:0.75rem 1rem;flex-wrap:wrap;gap:0.5rem}
+  header h1{font-size:1.15rem}
+  #user-menu{width:100%;flex-wrap:wrap;gap:0.5rem !important}
+  #user-email{flex:1 1 100%;font-size:0.78rem;opacity:0.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #refresh-status{min-width:0 !important;margin-right:auto;text-align:left !important}
+  nav{padding:0 0.5rem}
+  .modal{width:94%;padding:1.25rem}}
 @media print{nav,header p,button{display:none}.container{padding:0}.card{box-shadow:none;border:1px solid #ddd}}
 </style>
 </head>
@@ -173,7 +182,7 @@ tr:hover td{background:#fafbfc}
   <button id="nav-propose-btn" onclick="showTab('propose')">Proposed Assignments</button>
   <button id="nav-council-btn" onclick="showTab('council')">Ward Council Collaboration</button>
   <button id="nav-moves-btn" onclick="showTab('moves')">New Member Move In/Move Outs <span id="moves-mine"></span></button>
-  <button id="nav-admin-btn" onclick="showTab('admin')" style="display:none">Admin</button>
+  <button id="nav-admin-btn" onclick="showTab('admin')" style="display:none">Admin <span id="admin-pending-count"></span></button>
 </nav>
 
 <div class="container">
@@ -797,6 +806,7 @@ async function refreshFromCloud() {
     refreshBadge();
     updateMovesNavBadge();
     updateNotifBadges();
+    updateAdminPendingCount();
     showTab(currentTabName());
     setRefreshStatus('✓ Updated', '#7ee2a8');
   } catch (error) {
@@ -935,6 +945,7 @@ async function renderAdminPanel() {
       </div></div>`;
   };
   const pending = list.filter(p => p.status === 'pending');
+  setAdminPendingCount(pending.length);
   document.getElementById('admin-pending-list').innerHTML = pending.length ? pending.map(row).join('') : '<div class="empty-state">No pending requests.</div>';
   document.getElementById('admin-all-list').innerHTML = list.filter(p => p.status !== 'pending').map(row).join('');
 
@@ -947,6 +958,23 @@ async function renderAdminPanel() {
   }
   loadAuditLog();
 }
+// Pending sign-ups, counted on the Admin tab button so a waiting request is
+// visible without opening the tab (and without phone notifications on). Only
+// admins can list profiles, so this does nothing for anyone else.
+function setAdminPendingCount(n) {
+  const el = document.getElementById('admin-pending-count');
+  if (!el) return;
+  el.textContent = n || '';
+  el.style.cssText = n ? 'background:#dc3545;color:#fff;border-radius:10px;padding:0.15rem 0.5rem;font-size:0.75rem;margin-left:4px' : '';
+}
+async function updateAdminPendingCount() {
+  if (!_currentUserIsAdmin) { setAdminPendingCount(0); return; }
+  try {
+    const snap = await db.collection('profiles').where('status', '==', 'pending').get();
+    setAdminPendingCount(snap.size);
+  } catch (e) { console.warn('Could not count pending requests:', e?.message); }
+}
+
 async function setUserRole(id, role) {
   if (!_currentUserIsAdmin) { alert('Only an admin can change roles.'); renderAdminPanel(); return; }
   const p = _adminProfiles.find(x => x.id === id) || {};
@@ -1148,8 +1176,11 @@ async function resolveAuthState() {
   updateNotifBadges();
   listenForPushInApp();
   refreshPushToken();
-  // Tapping a phone notification opens the app at #notifications.
+  updateAdminPendingCount();
+  // Tapping a phone notification opens the app at #notifications, or #admin
+  // for an access request (showTab() sends a non-admin back to Import).
   if (location.hash === '#notifications') showTab('notifications');
+  if (location.hash === '#admin') showTab('admin');
 
   document.getElementById('auth-loading').style.display = 'none';
   document.getElementById('app-shell').style.display = 'block';
@@ -4826,6 +4857,7 @@ function listenForPushInApp() {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', e => {
     if (e.data?.type === 'open-notifications') refreshFromCloud().then(() => showTab('notifications'));
+    if (e.data?.type === 'open-tab') refreshFromCloud().then(() => showTab(e.data.tab === 'admin' ? 'admin' : 'notifications'));
   });
 }
 

@@ -1,6 +1,7 @@
 # Phone notifications — one-time setup
 
-This turns on real phone notifications for tags ("Jane tagged you on a next step"). The app
+This turns on real phone notifications for tags ("Jane tagged you on a next step"), and tells
+admins when someone signs up and is waiting for approval. The app
 code is already in the repo; what's left has to be done by you, signed in to the Google
 account that owns the Firebase project `pb1-ward-council-planning`.
 
@@ -87,7 +88,8 @@ firebase deploy --only functions
 - If it asks about a **cleanup policy** for container images, answer **yes**. If it didn't ask,
   run `firebase functions:artifacts:setpolicy` once (keeps only the last day's images, so
   storage stays inside the free 500 MB).
-- Success ends with `Deploy complete!` and lists `notifyTagged(us-central1)`.
+- Success ends with `Deploy complete!` and lists `notifyTagged(us-central1)` and
+  `notifyAccessRequest(us-central1)`.
 
 ## 6. Publish the app changes
 
@@ -112,5 +114,7 @@ git push
 
 - Each person turns notifications on **per device** from the Notifications tab, and can turn
   them off there too.
-- The function only needs redeploying (`firebase deploy --only functions`) if `functions/`
+- The functions only need redeploying (`firebase deploy --only functions`) when `functions/`
   changes. App changes still go out with a normal `git push`.
+- Admins get "New access request: <name>." on any device where they've turned notifications on;
+  tapping it opens the Admin tab. The Admin tab button also shows how many requests are waiting.

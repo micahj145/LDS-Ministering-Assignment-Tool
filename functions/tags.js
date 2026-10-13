@@ -65,4 +65,11 @@ function messageFor(tags) {
     : `You were tagged ${tags.length} times.`;
 }
 
-module.exports = { forEachNote, noteKey, newTags, unreadCount, messageFor };
+// Text for an admin when someone signs up. The requester's own name is fine to
+// show — it's a person asking for access, not member data.
+function accessRequestMessage(profile) {
+  const name = [profile && profile.firstName, profile && profile.lastName].filter(Boolean).join(' ').trim();
+  return name ? `New access request: ${name}.` : 'New access request.';
+}
+
+module.exports = { forEachNote, noteKey, newTags, unreadCount, messageFor, accessRequestMessage };

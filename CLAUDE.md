@@ -250,6 +250,15 @@ ministering is in place, and for removing people who have moved out.
 ### Phone notifications (push) — Blaze + Cloud Function
 Set-up steps are in `NOTIFICATIONS_SETUP.md` (Blaze upgrade, budget alert, Web Push key,
 Firebase CLI, deploy).
+- **Access requests**: `notifyAccessRequest` (`onDocumentCreated` on `profiles/{uid}`) runs on
+  each sign-up; if the new profile is `pending` it sends every *approved admin's* devices "New
+  access request: <name>." (the requester's own name — not member data) linking to `#admin`.
+  The bootstrap admin signs up already approved, so that sends nothing. In the app, the Admin
+  button shows a red count of pending requests (`updateAdminPendingCount()`, a
+  `status == 'pending'` query only admins may run); `#admin` on load, or a tap on the
+  notification while the app is open (`open-tab` message from sw.js), opens the Admin tab.
+  Both functions share `sendToProfile()` (send + dead-token clean-up) and set a notification
+  `tag` so a tag alert and an access request don't replace each other.
 - **Server**: `functions/index.js` → `notifyTagged`, a 2nd-gen `onDocumentWritten` trigger on
   `wardData/shared` (region `us-central1`, max 2 instances). `functions/tags.js` (pure, unit
   tested in `tags.test.js`) diffs before/after for new (note, person) tag pairs — keyed by

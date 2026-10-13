@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { newTags, unreadCount, messageFor } = require('./tags');
+const { newTags, unreadCount, messageFor, accessRequestMessage } = require('./tags');
 
 const J = { uid: 'u2', name: 'Jane' }, M = { uid: 'u1', name: 'Micah' };
 const note = (id, author, authorId, tags, date = '2026-10-12T10:00:00Z', text = 'x') => ({ id, author, authorId, tags, date, text });
@@ -50,4 +50,9 @@ test('message text names only the tagger, never members', () => {
   assert.strictEqual(messageFor([{ author: 'Jane', kind: 'next step' }]), 'Jane tagged you on a next step.');
   assert.strictEqual(messageFor([{ author: 'Jane', kind: 'note' }, { author: 'Jane', kind: 'goal' }]), 'Jane tagged you 2 times.');
   assert.strictEqual(messageFor([{ author: 'Jane', kind: 'note' }, { author: 'Ann', kind: 'goal' }]), 'You were tagged 2 times.');
+});
+
+test('access request text uses the requester name, or stays generic', () => {
+  assert.strictEqual(accessRequestMessage({ firstName: 'Jane', lastName: 'Doe' }), 'New access request: Jane Doe.');
+  assert.strictEqual(accessRequestMessage({}), 'New access request.');
 });
