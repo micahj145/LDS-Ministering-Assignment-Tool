@@ -351,6 +351,13 @@ The app serves two audiences, controlled by a `role` field on the profile and ap
   requires `request.auth.token.email_verified == true` for `wardData/shared` — that, not the
   screen, is the real gate. The app copies `emailVerified: true` onto the profile once verified,
   only so the Admin list can show it (self-written, so informational, not trusted).
+- **`micahj145.github.io` must be in Firebase → Authentication → Settings → Authorized
+  domains.** Verification emails carry a continue URL back to the app, and Firebase refuses to
+  send one (`UNAUTHORIZED_DOMAIN`, surfaced by the SDK as `auth/unauthorized-continue-uri`)
+  when that URL's domain isn't listed. Password sign-in works without the listing, which is why
+  this went unnoticed at first; the code's fallback then retried without the URL, doubling
+  requests until Firebase throttled them (`auth/too-many-requests`). Each attempt is now
+  recorded before sending and auto-sends happen at most daily per device.
 - **`isAdmin`** is separate and orthogonal: it gates the Admin tab, the Data Management card and
   Load Session File. **Admins always get full access regardless of role**, so the bootstrap admin
   can't demote themselves out of the tab where roles are set.

@@ -124,6 +124,9 @@ git push
 The app asks everyone to confirm their email before showing ward data. The real enforcement is
 in `firestore.rules`, which has to be published by hand:
 
+0. Firebase console → **Authentication** → **Settings** → **Authorized domains**: make sure
+   `micahj145.github.io` is listed (add it if not). Without it Firebase won't send verification
+   emails at all.
 1. Push the app first and confirm it works — you'll be asked to verify your own email the first
    time you open it (check spam if the email doesn't arrive).
 2. Firebase console → **Firestore Database** → **Rules**.
