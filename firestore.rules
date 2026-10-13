@@ -33,6 +33,11 @@ service cloud.firestore {
     }
 
     function isApproved() { return isSignedIn() && myProfile().status == 'approved'; }
+
+    // The sign-in account's email has been confirmed through the link Firebase
+    // emails at sign-up. Required for the ward data, so an approved account
+    // can't be used from an address nobody controls.
+    function emailVerified() { return request.auth.token.email_verified == true; }
     function isAdmin()    { return isSignedIn() && myProfile().isAdmin == true; }
 
     // Keep this in sync with ADMIN_EMAIL in ministering_tool.html.
@@ -73,7 +78,7 @@ service cloud.firestore {
     // Postgres RLS policies used, just collapsed to one document instead
     // of per-row access on five tables.
     match /wardData/shared {
-      allow read, write: if isApproved();
+      allow read, write: if isApproved() && emailVerified();
     }
   }
 }

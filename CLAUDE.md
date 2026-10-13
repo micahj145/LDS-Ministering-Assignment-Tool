@@ -247,6 +247,30 @@ ministering is in place, and for removing people who have moved out.
 - No live listener (by design), so the in-app list updates on load or ↻ Refresh. Phone
   notifications (below) cover the "something new happened" part.
 
+### Following households
+- Anyone can **🔔 Follow** a household from the Households tab or a Move Ins row. The list is
+  `profiles/{uid}.followHouseholds` (own profile; self-update rule allows it).
+- **`notifyFollowers`** (Cloud Function, same `wardData/shared` trigger as tags) runs
+  `householdChanges(before, after)` from `functions/follow.js` — pure and unit-tested — which
+  reports, per household: notes on the household, its members, companionships serving it, and
+  its council-list / Move Ins entries; pool, address and phone changes; members added, linked,
+  unlinked or removed; assigned / unassigned / companionship removed; Move In status; added to
+  or removed from a list; household removed. Each item is `{ hhId, text, link }`; text names the
+  household/member and who acted but **never note text**.
+- Followers are found with `array-contains-any` (30 ids per query). The editor is skipped via
+  `updatedByUid`, which `runSync()` now writes beside `updatedBy`. Items are prepended to the
+  follower's `profiles/{uid}.feed` (cap 100); a push ("Ana Reyes made 2 updates to households
+  you follow.") goes at most every 3 minutes per person (`lastFollowPushAt`) — the feed always
+  updates. Push `unread` and the app's unread count both include feed items newer than
+  `notifSeenAt`.
+- App: `applyFollowState()` / `reloadMyFollowState()` (on sign-in and ↻ Refresh) hold
+  `_myFollows` and `_myFeed`; the Notifications tab's **Households you follow** card lists the
+  followed households (✕ to unfollow) and the feed. `goToLink()` handles the links:
+  `#open=type,id[,groupKey,field]` opens that notes thread (switching to its tab),
+  `#tab=name` switches tab; also used when the app is opened with such a hash.
+- Keep `householdChanges()` in step with where the app stores things, the same way
+  `forEachNote()` must match `allTaggedNotes()`.
+
 ### Phone notifications (push) — Blaze + Cloud Function
 Set-up steps are in `NOTIFICATIONS_SETUP.md` (Blaze upgrade, budget alert, Web Push key,
 Firebase CLI, deploy).
@@ -313,6 +337,20 @@ The app serves two audiences, controlled by a `role` field on the profile and ap
   profile at sign-in, outside the `_signingUp` window during sign-up). To let them sign up again
   with the same email, delete the account in Firebase console → Authentication → Users. Their
   notes and tags stay; `syncUserDirectory()` drops them from the tag list.
+- **Coming back after Remove**: the email stays registered (the Auth account isn't deleted),
+  so sign-up says "already has an account". A removed person *signs in* and gets **Request
+  access again** (`reRequestAccess()`), which recreates their profile as `pending` with exactly
+  the six sign-up fields the create rule allows; admins are notified as for a new sign-up.
+  Denied = blocked (profile kept), Removed = cleared (may ask again). The sign-in form has
+  **Forgot password?** (`fbAuth.sendPasswordResetEmail`, same message whether or not the email
+  exists), and sign-up turns `auth/email-already-in-use` into an explanation.
+- **Email verification**: sign-up sends Firebase's verification email (`sendVerification()`,
+  continue URL back to the app). Anyone with a pending or approved profile whose
+  `user.emailVerified` is false sees **Check Your Email** (resend / "I've verified — continue",
+  which reloads the user and forces a token refresh) instead of the app. `firestore.rules`
+  requires `request.auth.token.email_verified == true` for `wardData/shared` — that, not the
+  screen, is the real gate. The app copies `emailVerified: true` onto the profile once verified,
+  only so the Admin list can show it (self-written, so informational, not trusted).
 - **`isAdmin`** is separate and orthogonal: it gates the Admin tab, the Data Management card and
   Load Session File. **Admins always get full access regardless of role**, so the bootstrap admin
   can't demote themselves out of the tab where roles are set.

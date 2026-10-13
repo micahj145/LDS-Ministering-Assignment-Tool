@@ -154,6 +154,9 @@ tr:hover td{background:#fafbfc}
     <div class="form-group"><label>Password</label><input type="password" id="auth-password" autocomplete="current-password"></div>
     <div id="auth-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em;margin-bottom:0.5rem"></div>
     <button class="btn btn-primary" id="auth-submit-btn" onclick="handleAuthSubmit()" style="width:100%">Sign In</button>
+    <div id="auth-forgot-wrap" style="text-align:center;margin-top:0.6rem">
+      <button onclick="sendPasswordReset()" style="background:none;border:none;color:#1a3a5c;text-decoration:underline;cursor:pointer;font-size:0.82rem">Forgot password?</button>
+    </div>
     <div style="text-align:center;margin-top:0.9rem;font-size:0.85rem">
       <span id="auth-toggle-label">Need an account?</span>
       <button onclick="toggleAuthMode()" id="auth-toggle-btn"
@@ -166,6 +169,17 @@ tr:hover td{background:#fafbfc}
   <div class="card" style="text-align:center">
     <h2 id="pending-title">Awaiting Approval</h2>
     <p id="pending-message" style="font-size:0.9rem;color:#666;margin-bottom:1rem"></p>
+    <div id="verify-wrap" style="display:none;margin-bottom:1rem">
+      <div id="verify-status" style="font-size:0.82rem;min-height:1.2em;margin-bottom:0.5rem"></div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:0.5rem" onclick="checkEmailVerified()">I've verified — continue</button>
+      <button class="btn btn-secondary btn-sm" onclick="resendVerification()">Resend the link</button>
+    </div>
+    <div id="rerequest-wrap" style="display:none;text-align:left;margin-bottom:1rem">
+      <div class="form-group"><label>First Name</label><input type="text" id="rerequest-first" autocomplete="given-name"></div>
+      <div class="form-group"><label>Last Name</label><input type="text" id="rerequest-last" autocomplete="family-name"></div>
+      <div id="rerequest-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em;margin-bottom:0.4rem"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="reRequestAccess()">Request access again</button>
+    </div>
     <button class="btn btn-secondary" onclick="signOut()">Sign Out</button>
   </div>
 </div>
@@ -199,6 +213,16 @@ tr:hover td{background:#fafbfc}
     <p style="font-size:0.82rem;color:#888;margin:0.3rem 0 0.9rem">Notes, goals and next steps anywhere in the app that tag you, newest first.
       New ones arrive when the page loads or you press ↻ Refresh.</p>
     <div id="notif-list"></div>
+  </div>
+  <div class="card">
+    <div class="flex-between">
+      <h2 style="margin:0">Households you follow</h2>
+      <span id="follow-summary" style="font-size:0.82rem;color:#888"></span>
+    </div>
+    <p style="font-size:0.82rem;color:#888;margin:0.3rem 0 0.7rem">Tap <strong>🔔 Follow</strong> on a household (Households tab or Move Ins) to hear about
+      new notes and changes for anyone in it: pool, address, assignments, Move In status and more. Your own changes aren't listed.</p>
+    <div id="follow-chips" style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:0.8rem"></div>
+    <div id="follow-feed"></div>
   </div>
 </div>
 
@@ -728,6 +752,7 @@ async function runSync() {
     }));
     payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
     payload.updatedBy = who;
+    payload.updatedByUid = _currentUserId || null;   // lets notifyFollowers skip your own edits
     await WARD_DOC.set(payload);
     S.activityLog = log;
     _lastSyncOk = true;
@@ -803,6 +828,7 @@ async function refreshFromCloud() {
   setRefreshStatus('', '');
   try {
     await loadAllData();
+    await reloadMyFollowState();
     refreshBadge();
     updateMovesNavBadge();
     updateNotifBadges();
@@ -846,10 +872,97 @@ function toggleAuthMode() {
   document.getElementById('auth-toggle-label').textContent = _authMode === 'signin' ? 'Need an account?' : 'Already have an account?';
   document.getElementById('auth-toggle-btn').textContent = _authMode === 'signin' ? 'Sign Up' : 'Sign In';
   document.getElementById('auth-name-fields').style.display = _authMode === 'signup' ? 'block' : 'none';
+  document.getElementById('auth-forgot-wrap').style.display = _authMode === 'signin' ? '' : 'none';
   document.getElementById('auth-error').textContent = '';
 }
 
+// Firebase sends the reset email itself (from the project's own address); no
+// server code or Blaze needed. Deliberately says the same thing whether or not
+// the email has an account, so the form can't be used to check who's signed up.
+async function sendPasswordReset() {
+  const email = document.getElementById('auth-email').value.trim();
+  const errEl = document.getElementById('auth-error');
+  if (!email) { errEl.style.color = '#dc3545'; errEl.textContent = 'Enter your email above first, then tap Forgot password.'; return; }
+  try { await fbAuth.sendPasswordResetEmail(email); } catch (e) {
+    if (e?.code === 'auth/invalid-email') { errEl.style.color = '#dc3545'; errEl.textContent = 'That email address doesn\'t look right.'; return; }
+  }
+  errEl.style.color = '#155724';
+  errEl.textContent = 'If that email has an account, a password-reset link is on its way. Check your inbox (and spam).';
+}
+
 let _signingUp = false;
+
+// A removed person (no profile, but their sign-in account still exists) can
+// ask again: this recreates their profile as 'pending' with exactly the fields
+// a sign-up writes, which is all firestore.rules allows for a self-created
+// profile. It shows up in the admin's pending list (and notifies admins).
+// A *denied* person keeps their profile, so they can't do this — Deny is the
+// "blocked" state, Remove is "cleared".
+// ── Email verification ────────────────────────────────────────
+// Firebase sends the email and hosts the page the link opens; continueUrl
+// brings people back to the app afterwards (github.io is already an
+// authorized domain, since sign-in works there).
+const VERIFY_CONTINUE_URL = 'https://micahj145.github.io/LDS-Ministering-Assignment-Tool/ministering_tool.html';
+
+async function sendVerification(user) {
+  try { await user.sendEmailVerification({ url: VERIFY_CONTINUE_URL }); }
+  catch (e) { await user.sendEmailVerification(); }   // e.g. testing from another domain
+}
+
+function showVerifyEmailScreen(user) {
+  document.getElementById('auth-loading').style.display = 'none';
+  document.getElementById('pending-title').textContent = 'Check Your Email';
+  document.getElementById('pending-message').textContent =
+    `We sent a link to ${user.email}. Open it to confirm this is your email address, then come back and continue. ` +
+    `It can take a few minutes, and may land in spam.`;
+  document.getElementById('rerequest-wrap').style.display = 'none';
+  document.getElementById('verify-wrap').style.display = 'block';
+  document.getElementById('verify-status').textContent = '';
+  document.getElementById('pending-screen').style.display = 'block';
+}
+
+async function checkEmailVerified() {
+  const user = fbAuth.currentUser;
+  const st = document.getElementById('verify-status');
+  if (!user) return;
+  try {
+    await user.reload();
+    if (!fbAuth.currentUser.emailVerified) {
+      st.style.color = '#856404';
+      st.textContent = "Not verified yet — open the link in the email first. Didn't get it? Resend below.";
+      return;
+    }
+    await fbAuth.currentUser.getIdToken(true);   // so the rules see email_verified straight away
+  } catch (e) { st.style.color = '#dc3545'; st.textContent = 'Could not check: ' + (e?.message || 'unknown error'); return; }
+  await resolveAuthState();
+}
+
+async function resendVerification() {
+  const user = fbAuth.currentUser;
+  const st = document.getElementById('verify-status');
+  if (!user) return;
+  try { await sendVerification(user); st.style.color = '#155724'; st.textContent = 'Sent. Check your inbox (and spam).'; }
+  catch (e) {
+    st.style.color = '#dc3545';
+    st.textContent = e?.code === 'auth/too-many-requests' ? 'Too many tries — wait a few minutes and try again.' : 'Could not send: ' + (e?.message || 'unknown error');
+  }
+}
+
+async function reRequestAccess() {
+  const user = fbAuth.currentUser;
+  const firstName = document.getElementById('rerequest-first').value.trim();
+  const lastName = document.getElementById('rerequest-last').value.trim();
+  const errEl = document.getElementById('rerequest-error');
+  if (!user) return;
+  if (!firstName || !lastName) { errEl.textContent = 'First and last name are required.'; return; }
+  try {
+    await db.collection('profiles').doc(user.uid).set({
+      email: user.email, firstName, lastName, status: 'pending', isAdmin: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (e) { errEl.textContent = 'Could not send the request: ' + (e?.message || 'unknown error'); return; }
+  await resolveAuthState();
+}
 
 async function handleAuthSubmit() {
   const email = document.getElementById('auth-email').value.trim();
@@ -877,10 +990,13 @@ async function handleAuthSubmit() {
         isAdmin: isBootstrapAdmin,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
+      sendVerification(cred.user).catch(e => console.warn('Verification email:', e?.message));
     }
   } catch (error) {
     _signingUp = false;
-    errEl.textContent = error.message;
+    errEl.textContent = error?.code === 'auth/email-already-in-use'
+      ? 'That email already has an account. Use Sign In instead. If your access was removed, you can request it again after signing in, and "Forgot password?" will help if you don\'t remember the password.'
+      : error.message;
     return;
   }
 
@@ -933,7 +1049,7 @@ async function renderAdminPanel() {
     return `
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f0f0f0;padding:0.5rem 0;gap:0.6rem">
       <div><div style="font-weight:500">${name ? esc(name) + ' — ' : ''}${esc(p.email)}${isSelf ? ' <span style="font-weight:400;color:#888">(you)</span>' : ''}</div>
-      <div style="font-size:0.78rem;color:#888">${p.status} · ${isEq ? 'EQ presidency' : 'ward council'}${p.isAdmin ? ' · admin' : ''}</div></div>
+      <div style="font-size:0.78rem;color:#888">${p.status} · ${isEq ? 'EQ presidency' : 'ward council'}${p.isAdmin ? ' · admin' : ''} · ${p.emailVerified ? '<span style="color:#155724">email verified</span>' : '<span style="color:#856404">email not verified yet</span>'}</div></div>
       <div style="display:flex;gap:0.4rem;align-items:center;flex-shrink:0">
         <select style="font-size:0.8rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px" onchange="setUserRole('${p.id}', this.value)" title="What this person can see">
           <option value="council" ${isEq ? '' : 'selected'}>Ward Council</option>
@@ -1026,11 +1142,10 @@ async function setUserStatus(id, status) {
 
 // Removing is only offered for someone already denied, so it always takes two
 // deliberate steps. It deletes profiles/{uid} (firestore.rules: admins may
-// delete profiles). Their Firebase sign-in account is left in place — the
-// browser can't delete another user's account — so they stay locked out and
-// see an "access removed" screen; deleting that account by hand in the
-// Firebase console is what would let them sign up again with the same email.
-// Notes they wrote, and tags naming them, are left as they are.
+// delete profiles). Their Firebase sign-in account stays (the browser can't
+// delete another user's account), so the email stays registered: they sign in
+// with it and can ask for access again (reRequestAccess). Denied = blocked;
+// Removed = cleared. Notes they wrote, and tags naming them, are left as they are.
 async function removeUserProfile(id) {
   if (!_currentUserIsAdmin) { alert('Only an admin can remove users.'); return; }
   if (id === _currentUserId) { alert('You cannot remove your own account.'); return; }
@@ -1038,10 +1153,9 @@ async function removeUserProfile(id) {
   if (p.status !== 'denied') { alert('Deny this person first, then remove them.'); return; }
   const who = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'this user';
   if (!confirm(`Remove ${who} permanently?\n\n` +
-      `Their profile is deleted and they disappear from this list. They stay locked out.\n` +
-      `Notes they wrote stay where they are.\n\n` +
-      `To let them sign up again with the same email later, also delete their sign-in account in ` +
-      `Firebase console → Authentication → Users.`)) return;
+      `Their profile is deleted and they disappear from this list. Notes they wrote stay where they are.\n\n` +
+      `They can sign in later and ask for access again, which brings them back to your pending ` +
+      `list. To keep someone out for good, leave them Denied instead of removing them.`)) return;
   try {
     await db.collection('profiles').doc(id).delete();
   } catch (error) { alert('Failed to remove: ' + error.message); return; }
@@ -1142,6 +1256,20 @@ async function resolveAuthState() {
     profile = doc.exists ? doc.data() : null;
   } catch (e) { profileError = true; }
 
+  // Email verification comes first for anyone with a live profile (pending or
+  // approved): until they click the link Firebase emailed them, they get the
+  // "Check your email" screen instead of the app. firestore.rules enforces the
+  // same thing for the ward data (request.auth.token.email_verified).
+  if (profile && profile.status !== 'denied' && !user.emailVerified) {
+    showVerifyEmailScreen(user);
+    return;
+  }
+  // Recorded on the profile only so the admin can see it when approving; the
+  // real check is the token claim in firestore.rules.
+  if (profile && user.emailVerified && profile.emailVerified !== true) {
+    db.collection('profiles').doc(user.uid).update({ emailVerified: true }).catch(() => {});
+  }
+
   if (!profile || profile.status !== 'approved') {
     // No profile normally means an admin removed it. The one exception is the
     // moment during sign-up before the new profile is written, which
@@ -1152,10 +1280,12 @@ async function resolveAuthState() {
       profileError ? "Couldn't Check Access" : removed ? 'Access Removed' : profile?.status === 'denied' ? 'Access Denied' : 'Awaiting Approval';
     document.getElementById('pending-message').textContent =
       profileError ? 'Your access could not be checked — you may be offline. Reload to try again.'
-      : removed ? 'This account no longer has access to the ward tool. Contact the site admin if you think this is a mistake.'
+      : removed ? 'This account no longer has access to the ward tool. If you should have access, ask for it again below and the site admin will be notified.'
       : profile?.status === 'denied'
       ? 'The site admin has denied access for this account.'
       : 'Your account has been created and is waiting for the site admin to approve access. Check back later.';
+    document.getElementById('rerequest-wrap').style.display = removed ? 'block' : 'none';
+    document.getElementById('verify-wrap').style.display = 'none';
     document.getElementById('pending-screen').style.display = 'block';
     return;
   }
@@ -1166,6 +1296,7 @@ async function resolveAuthState() {
   _currentUserIsAdmin = profile.isAdmin === true;
   _currentUserRole = profile.role === 'eq' ? 'eq' : 'council';
   _notifSeenAt = Date.parse(profile.notifSeenAt) || 0;
+  applyFollowState(profile);
   applyAccessVisibility();
   // A council member landing on a tab they can't use (e.g. the page was left
   // on Proposed before their role changed) gets sent back to Import.
@@ -1181,6 +1312,7 @@ async function resolveAuthState() {
   // for an access request (showTab() sends a non-admin back to Import).
   if (location.hash === '#notifications') showTab('notifications');
   if (location.hash === '#admin') showTab('admin');
+  if (/^#(open|tab)=/.test(location.hash)) goToLink(location.hash);
 
   document.getElementById('auth-loading').style.display = 'none';
   document.getElementById('app-shell').style.display = 'block';
@@ -2078,6 +2210,7 @@ function renderHouseholds() {
         <button class="btn btn-secondary btn-sm" onclick="openNotesModal('household','${hh.id}')">${(hh.notes?.length||0) ? `Notes (${hh.notes.length})` : 'Notes'}</button>
       </td>
       <td style="white-space:nowrap">
+        ${followButtonHTML(hh.id)}
         <button class="btn btn-danger btn-sm" onclick="deleteHousehold('${hh.id}')">Delete</button>
       </td>
     </tr>`;
@@ -3903,7 +4036,8 @@ function renderMoves() {
       </td>
       <td style="white-space:nowrap;vertical-align:top">
         ${hh && moveInEntryClusters(e).length > 1 ? `<button class="btn btn-secondary btn-sm" style="margin-bottom:0.3rem" onclick="splitMoveInEntry('${e.id}')" title="People here share no surname — split them into separate households at the same address">Split…</button><br>` : ''}
-        <button class="btn btn-danger btn-sm" onclick="removeGroupEntry('movein','${e.id}')">Remove</button></td>
+        ${hh ? followButtonHTML(hh.id) + '<br>' : ''}
+        <button class="btn btn-danger btn-sm" style="margin-top:0.3rem" onclick="removeGroupEntry('movein','${e.id}')">Remove</button></td>
     </tr>`;
   }).join('');
 
@@ -4699,7 +4833,8 @@ function isUnread(item) {
 }
 
 function unreadCount() {
-  return _currentUserId ? allTaggedNotes(_currentUserId).filter(isUnread).length : 0;
+  if (!_currentUserId) return 0;
+  return allTaggedNotes(_currentUserId).filter(isUnread).length + _myFeed.filter(feedIsUnread).length;
 }
 
 // Nav count, plus the count on the installed app's icon where the platform
@@ -4739,6 +4874,7 @@ function renderNotifications() {
     </div>`;
   }).join('') : '<div class="empty-state" style="padding:1.5rem"><p>Nothing yet. When someone tags you on a note, goal or next step, it shows up here.</p></div>';
   renderPushCard();
+  renderFollowSection();
 }
 
 function openNotification(i) {
@@ -4751,7 +4887,7 @@ function openNotification(i) {
 async function markNotificationsSeen() {
   if (!_currentUserId) return;
   const now = Date.now();
-  if (!allTaggedNotes(_currentUserId).some(isUnread)) { _notifSeenAt = Math.max(_notifSeenAt, now); return; }
+  if (!allTaggedNotes(_currentUserId).some(isUnread) && !_myFeed.some(feedIsUnread)) { _notifSeenAt = Math.max(_notifSeenAt, now); return; }
   _notifSeenAt = now;
   updateNotifBadges();
   try {
@@ -4885,6 +5021,84 @@ async function requestBadgePermission() {
   try { await Notification.requestPermission(); } catch (e) { /* user dismissed */ }
   renderPushCard();
   updateNotifBadges();
+}
+
+// ── Following households ──────────────────────────────────────
+// Each person keeps their own list of followed household ids on their profile
+// (profiles/{uid}.followHouseholds — the self-update rule allows it, and no
+// one else's list is visible). The notifyFollowers Cloud Function compares each
+// save of the ward document with the previous one, works out what changed for
+// each household (functions/follow.js), and writes the items to each
+// follower's profile as `feed` (newest first, capped), with a push alert at
+// most every few minutes. The app only reads `feed`. Links are app hashes:
+// #open=type,id[,groupKey,field] opens a thread; #tab=name opens a tab.
+let _myFollows = new Set();
+let _myFeed = [];
+
+function applyFollowState(profile) {
+  _myFollows = new Set(Array.isArray(profile?.followHouseholds) ? profile.followHouseholds : []);
+  _myFeed = Array.isArray(profile?.feed) ? profile.feed : [];
+}
+
+async function reloadMyFollowState() {
+  if (!_currentUserId) return;
+  try { const d = await db.collection('profiles').doc(_currentUserId).get(); if (d.exists) applyFollowState(d.data()); }
+  catch (e) { console.warn('Could not refresh followed households:', e?.message); }
+}
+
+function feedIsUnread(f) { return (Date.parse(f.ts) || 0) > _notifSeenAt; }
+
+function followButtonHTML(hhId) {
+  const on = _myFollows.has(hhId);
+  return `<button class="btn btn-secondary btn-sm" style="${on ? 'background:#d4edda;color:#155724' : ''}" onclick="toggleFollow('${hhId}')"
+    title="${on ? 'Stop getting updates about this household' : 'Get updates when anything changes for this household'}">${on ? '✓ Following' : '🔔 Follow'}</button>`;
+}
+
+async function toggleFollow(hhId) {
+  if (!_currentUserId) return;
+  const on = _myFollows.has(hhId);
+  const FV = firebase.firestore.FieldValue;
+  try {
+    await db.collection('profiles').doc(_currentUserId).update({ followHouseholds: on ? FV.arrayRemove(hhId) : FV.arrayUnion(hhId) });
+  } catch (e) { alert('Could not update: ' + (e?.message || 'unknown error')); return; }
+  on ? _myFollows.delete(hhId) : _myFollows.add(hhId);
+  renderHouseholds(); renderMoves();
+  if (currentTabName() === 'notifications') renderFollowSection();
+}
+
+function renderFollowSection() {
+  const chips = document.getElementById('follow-chips');
+  const feedEl = document.getElementById('follow-feed');
+  if (!chips || !feedEl) return;
+  const followed = [..._myFollows].map(id => ({ id, hh: hhById(id) })).sort((a, b) => (a.hh?.name || '').localeCompare(b.hh?.name || ''));
+  chips.innerHTML = followed.length ? followed.map(f => `<span class="badge badge-blue" style="display:inline-flex;align-items:center;gap:0.3rem">
+      ${esc(f.hh ? f.hh.name : 'Household no longer listed')}
+      <button style="background:none;border:none;cursor:pointer;color:#0c5460;padding:0;font-size:0.8rem" title="Unfollow" onclick="toggleFollow('${f.id}')">✕</button></span>`).join('')
+    : '<span style="font-size:0.82rem;color:#aaa">You aren\'t following any households yet.</span>';
+  const unread = _myFeed.filter(feedIsUnread).length;
+  document.getElementById('follow-summary').textContent = _myFeed.length ? `${unread ? unread + ' new · ' : ''}${_myFeed.length} recent` : '';
+  feedEl.innerHTML = _myFeed.length ? _myFeed.map((f, i) => {
+    const isNew = feedIsUnread(f);
+    return `<div style="border:1px solid ${isNew ? '#f5c2c7' : '#e0e6ed'};background:${isNew ? '#fff5f5' : '#fff'};border-radius:8px;padding:0.55rem 0.8rem;margin-bottom:0.45rem;display:flex;justify-content:space-between;gap:0.6rem;align-items:flex-start">
+      <div><div style="font-size:0.86rem;color:#333">${isNew ? '<span class="badge badge-red" style="font-size:0.68rem;margin-right:0.3rem">New</span>' : ''}${esc(f.text)}</div>
+        <div style="font-size:0.74rem;color:#999;margin-top:0.15rem">${esc(f.by || '')}${f.ts ? ' · ' + formatNoteDate(f.ts) : ''}</div></div>
+      ${f.link ? `<button class="btn btn-secondary btn-sm" onclick="goToLink(_myFeed[${i}].link)">Open</button>` : ''}</div>`;
+  }).join('') : (followed.length ? '<div style="font-size:0.82rem;color:#aaa">No updates yet.</div>' : '');
+}
+
+// Opens the place a link points to. Thread links open the notes window
+// (it works from any tab); tab links switch tabs — showTab() already keeps
+// people out of tabs their role can't use.
+function goToLink(hash) {
+  const m = String(hash || '').match(/^#?(open|tab)=(.*)$/);
+  if (!m) return;
+  if (m[1] === 'tab') { showTab(decodeURIComponent(m[2])); return; }
+  const [type, id, groupKey, field] = m[2].split(',').map(decodeURIComponent);
+  const tabFor = { household: 'households', member: 'members', current: 'current', proposed: 'propose',
+                   group: groupKey === 'movein' ? 'moves' : 'council' }[type];
+  if (tabFor) showTab(tabFor);
+  if (!getNotesTarget({ type, id, groupKey })) { alert('That item is no longer in the tool — it may have been removed.'); return; }
+  openNotesModal(type, id, groupKey, field);
 }
 
 // ── Installable app (PWA) ─────────────────────────────────────
