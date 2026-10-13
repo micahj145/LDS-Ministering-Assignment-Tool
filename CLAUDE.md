@@ -138,7 +138,7 @@ household, and *any* note anywhere whose text mentions their name.
   a text/date fallback for any note predating note ids.
 - Only the **Notes** thread aggregates. Goals stay purely the council's own.
 
-### New Member Move In/Move Outs — Move Ins
+### New Member Move Ins / Move Outs — Move Ins
 A tab, visible to both roles, for following households that move into the ward until their
 ministering is in place, and for removing people who have moved out.
 

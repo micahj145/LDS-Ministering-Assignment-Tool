@@ -195,7 +195,7 @@ tr:hover td{background:#fafbfc}
   <button id="nav-current-btn" onclick="showTab('current')">Current Assignments</button>
   <button id="nav-propose-btn" onclick="showTab('propose')">Proposed Assignments</button>
   <button id="nav-council-btn" onclick="showTab('council')">Ward Council Collaboration</button>
-  <button id="nav-moves-btn" onclick="showTab('moves')">New Member Move In/Move Outs <span id="moves-mine"></span></button>
+  <button id="nav-moves-btn" onclick="showTab('moves')">New Member Move Ins / Move Outs <span id="moves-mine"></span></button>
   <button id="nav-admin-btn" onclick="showTab('admin')" style="display:none">Admin <span id="admin-pending-count"></span></button>
 </nav>
 
@@ -668,7 +668,7 @@ const GROUPS = [
     blurb: 'Members returning to activity.' },
   { key: 'mission',   label: 'Ward Mission',      fromMembers: false,
     blurb: 'People the missionaries are working with — type any name, they need not be in the ward list.' },
-  // Lives on the New Member Move In/Move Outs tab rather than Ward Council
+  // Lives on the New Member Move Ins / Move Outs tab rather than Ward Council
   // Collaboration (`tab`), with one entry per household (`byHousehold`). See
   // the Move Ins section further down.
   { key: 'movein',    label: 'Move Ins',          fromMembers: true, byHousehold: true, tab: 'moves',
