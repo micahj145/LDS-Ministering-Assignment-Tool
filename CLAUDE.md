@@ -297,6 +297,13 @@ The app serves two audiences, controlled by a `role` field on the profile and ap
   ministering companionships current.
 - **anything else — ward council member.** Import, Members, Households, and Ward Council
   Collaboration. No ministering assignment tabs.
+- **Removing users**: the Admin tab offers **Remove** only for someone already **denied**
+  (two deliberate steps; never yourself). `removeUserProfile()` deletes `profiles/{uid}`, which
+  `firestore.rules` already allows admins to do. Their Firebase Auth account can't be deleted
+  from the browser, so it stays: they remain locked out and see "Access Removed" (a missing
+  profile at sign-in, outside the `_signingUp` window during sign-up). To let them sign up again
+  with the same email, delete the account in Firebase console → Authentication → Users. Their
+  notes and tags stay; `syncUserDirectory()` drops them from the tag list.
 - **`isAdmin`** is separate and orthogonal: it gates the Admin tab, the Data Management card and
   Load Session File. **Admins always get full access regardless of role**, so the bootstrap admin
   can't demote themselves out of the tab where roles are set.

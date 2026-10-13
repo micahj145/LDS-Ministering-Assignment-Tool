@@ -839,6 +839,8 @@ function toggleAuthMode() {
   document.getElementById('auth-error').textContent = '';
 }
 
+let _signingUp = false;
+
 async function handleAuthSubmit() {
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
@@ -856,6 +858,7 @@ async function handleAuthSubmit() {
     if (_authMode === 'signin') {
       await fbAuth.signInWithEmailAndPassword(email, password);
     } else {
+      _signingUp = true;
       const cred = await fbAuth.createUserWithEmailAndPassword(email, password);
       const isBootstrapAdmin = email.toLowerCase() === ADMIN_EMAIL;
       await db.collection('profiles').doc(cred.user.uid).set({
@@ -866,10 +869,12 @@ async function handleAuthSubmit() {
       });
     }
   } catch (error) {
+    _signingUp = false;
     errEl.textContent = error.message;
     return;
   }
 
+  _signingUp = false;
   await resolveAuthState();
 }
 
@@ -926,6 +931,7 @@ async function renderAdminPanel() {
         </select>
         ${p.status !== 'approved' ? `<button class="btn btn-primary btn-sm" onclick="setUserStatus('${p.id}','approved')">Approve</button>` : ''}
         ${p.status !== 'denied' && !isSelf ? `<button class="btn btn-danger btn-sm" onclick="setUserStatus('${p.id}','denied')">Deny</button>` : ''}
+        ${p.status === 'denied' && !isSelf ? `<button class="btn btn-secondary btn-sm" onclick="removeUserProfile('${p.id}')" title="Delete this person's profile so they no longer appear here">Remove</button>` : ''}
       </div></div>`;
   };
   const pending = list.filter(p => p.status === 'pending');
@@ -987,6 +993,30 @@ async function setUserStatus(id, status) {
   try {
     await db.collection('profiles').doc(id).update({ status });
   } catch (error) { alert('Failed to update: ' + error.message); return; }
+  renderAdminPanel();
+}
+
+// Removing is only offered for someone already denied, so it always takes two
+// deliberate steps. It deletes profiles/{uid} (firestore.rules: admins may
+// delete profiles). Their Firebase sign-in account is left in place — the
+// browser can't delete another user's account — so they stay locked out and
+// see an "access removed" screen; deleting that account by hand in the
+// Firebase console is what would let them sign up again with the same email.
+// Notes they wrote, and tags naming them, are left as they are.
+async function removeUserProfile(id) {
+  if (!_currentUserIsAdmin) { alert('Only an admin can remove users.'); return; }
+  if (id === _currentUserId) { alert('You cannot remove your own account.'); return; }
+  const p = _adminProfiles.find(x => x.id === id) || {};
+  if (p.status !== 'denied') { alert('Deny this person first, then remove them.'); return; }
+  const who = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'this user';
+  if (!confirm(`Remove ${who} permanently?\n\n` +
+      `Their profile is deleted and they disappear from this list. They stay locked out.\n` +
+      `Notes they wrote stay where they are.\n\n` +
+      `To let them sign up again with the same email later, also delete their sign-in account in ` +
+      `Firebase console → Authentication → Users.`)) return;
+  try {
+    await db.collection('profiles').doc(id).delete();
+  } catch (error) { alert('Failed to remove: ' + error.message); return; }
   renderAdminPanel();
 }
 
@@ -1078,16 +1108,24 @@ async function resolveAuthState() {
   document.getElementById('user-menu').style.display = 'flex';
   document.getElementById('user-email').textContent = user.email;
 
-  let profile = null;
+  let profile = null, profileError = false;
   try {
     const doc = await db.collection('profiles').doc(user.uid).get();
     profile = doc.exists ? doc.data() : null;
-  } catch (e) { /* falls through to the pending/denied screen below */ }
+  } catch (e) { profileError = true; }
 
   if (!profile || profile.status !== 'approved') {
+    // No profile normally means an admin removed it. The one exception is the
+    // moment during sign-up before the new profile is written, which
+    // handleAuthSubmit() covers with _signingUp (it re-checks once it's saved).
+    const removed = !profile && !profileError && !_signingUp;
     document.getElementById('auth-loading').style.display = 'none';
-    document.getElementById('pending-title').textContent = profile?.status === 'denied' ? 'Access Denied' : 'Awaiting Approval';
-    document.getElementById('pending-message').textContent = profile?.status === 'denied'
+    document.getElementById('pending-title').textContent =
+      profileError ? "Couldn't Check Access" : removed ? 'Access Removed' : profile?.status === 'denied' ? 'Access Denied' : 'Awaiting Approval';
+    document.getElementById('pending-message').textContent =
+      profileError ? 'Your access could not be checked — you may be offline. Reload to try again.'
+      : removed ? 'This account no longer has access to the ward tool. Contact the site admin if you think this is a mistake.'
+      : profile?.status === 'denied'
       ? 'The site admin has denied access for this account.'
       : 'Your account has been created and is waiting for the site admin to approve access. Check back later.';
     document.getElementById('pending-screen').style.display = 'block';
