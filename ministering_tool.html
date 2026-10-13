@@ -904,20 +904,37 @@ let _signingUp = false;
 // authorized domain, since sign-in works there).
 const VERIFY_CONTINUE_URL = 'https://micahj145.github.io/LDS-Ministering-Assignment-Tool/ministering_tool.html';
 
+// Only an unauthorized continue URL (e.g. testing from another domain) falls
+// back to a plain send; any other error — including Firebase's own
+// too-many-requests throttle — is passed on, so one tap is one request.
 async function sendVerification(user) {
   try { await user.sendEmailVerification({ url: VERIFY_CONTINUE_URL }); }
-  catch (e) { await user.sendEmailVerification(); }   // e.g. testing from another domain
+  catch (e) {
+    if (e?.code === 'auth/unauthorized-continue-uri' || e?.code === 'auth/invalid-continue-uri') await user.sendEmailVerification();
+    else throw e;
+  }
+  lsSet('verify-sent-' + user.uid, String(Date.now()));
 }
 
+const VERIFY_RESEND_GAP_MS = 60 * 1000;
+function verifySentAt(uid) { return Number(lsGet('verify-sent-' + uid)) || 0; }
+
+// Accounts created before verification existed were never sent an email, so
+// the first time this screen appears on a device it sends one itself; after
+// that only Resend does (with a cooldown, to stay clear of Firebase's throttle).
 function showVerifyEmailScreen(user) {
   document.getElementById('auth-loading').style.display = 'none';
   document.getElementById('pending-title').textContent = 'Check Your Email';
+  const st0 = document.getElementById('verify-status');
+  if (!verifySentAt(user.uid) && !_signingUp) {
+    sendVerification(user).then(() => { st0.style.color = '#155724'; st0.textContent = 'Verification email sent.'; })
+      .catch(e => { st0.style.color = '#dc3545'; st0.textContent = verifyErrorText(e); });
+  }
   document.getElementById('pending-message').textContent =
-    `We sent a link to ${user.email}. Open it to confirm this is your email address, then come back and continue. ` +
-    `It can take a few minutes, and may land in spam.`;
+    `We're sending a link to ${user.email}. Open it to confirm this is your email address, then come back and continue. ` +
+    `It usually arrives within a few minutes from noreply@pb1-ward-council-planning.firebaseapp.com — check spam and other inbox tabs.`;
   document.getElementById('rerequest-wrap').style.display = 'none';
   document.getElementById('verify-wrap').style.display = 'block';
-  document.getElementById('verify-status').textContent = '';
   document.getElementById('pending-screen').style.display = 'block';
 }
 
@@ -937,15 +954,24 @@ async function checkEmailVerified() {
   await resolveAuthState();
 }
 
+function verifyErrorText(e) {
+  return e?.code === 'auth/too-many-requests'
+    ? 'Firebase is limiting emails to this account for a few minutes because of several requests close together. Wait a bit, then tap Resend once.'
+    : 'Could not send: ' + (e?.message || 'unknown error');
+}
+
 async function resendVerification() {
   const user = fbAuth.currentUser;
   const st = document.getElementById('verify-status');
   if (!user) return;
-  try { await sendVerification(user); st.style.color = '#155724'; st.textContent = 'Sent. Check your inbox (and spam).'; }
-  catch (e) {
-    st.style.color = '#dc3545';
-    st.textContent = e?.code === 'auth/too-many-requests' ? 'Too many tries — wait a few minutes and try again.' : 'Could not send: ' + (e?.message || 'unknown error');
+  const wait = VERIFY_RESEND_GAP_MS - (Date.now() - verifySentAt(user.uid));
+  if (wait > 0) {
+    st.style.color = '#856404';
+    st.textContent = `A link was sent ${Math.round((VERIFY_RESEND_GAP_MS - wait) / 1000)}s ago — give it a minute or two to arrive before resending (try again in ${Math.ceil(wait / 1000)}s).`;
+    return;
   }
+  try { await sendVerification(user); st.style.color = '#155724'; st.textContent = 'Sent. Check your inbox, spam, and other inbox tabs.'; }
+  catch (e) { st.style.color = '#dc3545'; st.textContent = verifyErrorText(e); }
 }
 
 async function reRequestAccess() {
