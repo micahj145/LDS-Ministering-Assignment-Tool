@@ -505,6 +505,24 @@ tr:hover td{background:#fafbfc}
     <strong>Goals</strong> and <strong>Notes</strong> against each name — both are dated and signed, so the
     council can see at a glance who is being looked after and what has been done. Tap <strong>🔔 Follow</strong> to hear about updates.
   </div>
+  <div class="card">
+    <div class="flex-between">
+      <h2 style="margin:0">LCR New Members Report</h2>
+      <div>
+        <input type="file" id="cpnew-file" accept=".pdf,application/pdf" style="display:none" onchange="handleCovenantNewPdf(this.files[0])">
+        <a class="btn btn-secondary lcr-fetch" data-report="new" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('cpnew-file').click()">Import</button>
+      </div>
+    </div>
+    <p style="font-size:0.82rem;color:#888;margin:0.4rem 0 0">Tap <strong>Fetch/Print/Download</strong> to open the New Members page of LCR's Covenant Path Progress
+      (sign in if asked). LCR has no export or download button for this page, so you have to print the web page itself to a PDF from your
+      browser: on a computer, use the browser's Print (Ctrl+P) and choose <i>Save as PDF</i> as the printer; on Android Chrome, ⋮ → Share → Print →
+      <i>Save as PDF</i>. Then tap <strong>Import</strong> and pick that file.
+      Everyone on it is matched to Members and you choose who to add to <strong>New Members</strong>; how long each person has been a member is
+      shown with their entry. The PDF is read in your browser and isn't uploaded.</p>
+    <div id="cpnew-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+    <div id="cpnew-review"></div>
+  </div>
   <div id="council-groups"></div>
 </div>
 
@@ -3609,7 +3627,7 @@ function renderCouncil() {
       const goals = (e.goals || []).length, notes = mergedNotes.length;
       const added = e.addedBy ? `Added by ${esc(e.addedBy)}${e.addedDate ? ' · ' + formatNoteDate(e.addedDate) : ''}` : '';
       return `<tr>
-        <td style="vertical-align:top"><strong>${esc(groupEntryName(e))}</strong>${added ? `<div style="font-size:0.74rem;color:#aaa;margin-top:0.15rem">${added}</div>` : ''}</td>
+        <td style="vertical-align:top"><strong>${esc(groupEntryName(e))}</strong>${lcrSnapshotHTML(e)}${added ? `<div style="font-size:0.74rem;color:#aaa;margin-top:0.15rem">${added}</div>` : ''}</td>
         <td style="vertical-align:top">
           <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','${g.key}','goals')">${goals ? `Goals (${goals})` : 'Goals'}</button>
           ${latestCommentHTML((e.goals || []).map(n => ({ n, source: null })))}
@@ -5217,6 +5235,224 @@ function goToLink(hash) {
   openNotesModal(type, id, groupKey, field);
 }
 
+// ── Covenant Path Progress: LCR New Members page (printed to PDF) ─────────
+// LCR has no export for this page, so people print the web page itself to PDF
+// (laptop Chrome or Android Chrome both work). It isn't a table: each person is
+// a card whose name sits on the line just above "Member for …". Only the name
+// and that "member for" length are used; attendance and friends counts on the
+// cards are deliberately ignored (LCR already shows those). Everything else on
+// the page (menus, tabs, the week labels) is ignored too. Names come as "First Middle Last"
+// while Members holds "Last, First Middle", so they're matched by tokens:
+// the member's surname must end the report name (a Jr/Sr/II/III suffix aside)
+// and their first given name must appear in it.
+let _cpNewPlan = null;
+
+function pdfTextLines(pages) {
+  const out = [];
+  pages.forEach(items => {
+    const rows = [];
+    items.filter(it => it.str && it.str.trim()).forEach(it => {
+      let r = rows.find(r => Math.abs(r.y - it.y) < 2.5);
+      if (!r) rows.push(r = { y: it.y, items: [] });
+      r.items.push(it);
+    });
+    rows.sort((a, b) => b.y - a.y).forEach(r =>
+      // Glue runs that touch (a phone print can split "é" off its word) and
+      // put a space only where there's a visible gap.
+      out.push(r.items.sort((a, b) => a.x - b.x).reduce((acc, it, k, arr) => {
+        const prev = arr[k - 1];
+        const gap = prev && prev.w ? it.x - (prev.x + prev.w) : 99;
+        return acc + (k && gap > 1 ? ' ' : '') + it.str;
+      }, '').normalize('NFC').replace(/\s+/g, ' ').trim()));
+  });
+  return out.filter(Boolean);
+}
+
+function parseCovenantNewPage(pages) {
+  const lines = pdfTextLines(pages);
+  const starts = [];
+  lines.forEach((l, i) => { if (/^Member for\b/i.test(l) && i > 0) starts.push(i); });
+  return starts.map(i => ({
+    name: lines[i - 1],
+    memberFor: lines[i].replace(/^Member for\s*/i, '').trim(),
+  })).filter(p => p.name && !/^(View Details|New Members|Returning|People Being Taught)$/i.test(p.name));
+}
+
+function nameTokens(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z\s,'-]/g, ' ').replace(/[,'-]/g, ' ').split(/\s+/).filter(Boolean);
+}
+const NAME_SUFFIX = new Set(['jr', 'sr', 'ii', 'iii', 'iv']);
+
+function matchReportName(reportName) {
+  const toks = nameTokens(reportName);
+  const core = toks.filter((t, i) => !(i === toks.length - 1 && NAME_SUFFIX.has(t)));
+  const exact = [], loose = [];
+  S.members.forEach(m => {
+    const [last, rest] = String(m.name || '').split(',');
+    const lt = nameTokens(last).filter(t => !NAME_SUFFIX.has(t)), ft = nameTokens(rest).filter(t => !NAME_SUFFIX.has(t));
+    if (!lt.length || !ft.length) return;
+    const endsWithLast = lt.every((t, i) => core[core.length - lt.length + i] === t);
+    const firstIn = core.slice(0, core.length - lt.length).includes(ft[0]);
+    if (endsWithLast && firstIn) exact.push(m);
+    else if (lt.every(t => toks.includes(t)) && ft.some(t => toks.includes(t))) loose.push(m);
+  });
+  if (exact.length) return { level: exact.length === 1 ? 'match' : 'several', candidates: exact };
+  if (loose.length) return { level: 'possible', candidates: loose };
+  return { level: 'none', candidates: [] };
+}
+
+function covenantNewEntryFor(member, reportName) {
+  const list = groupList('new');
+  return (member && list.find(e => e.memberId === member.id)) ||
+    list.find(e => !e.memberId && normNameKey(e.name) === normNameKey(reportName)) || null;
+}
+
+async function handleCovenantNewPdf(file) {
+  const statusEl = document.getElementById('cpnew-status');
+  document.getElementById('cpnew-file').value = '';
+  if (!file) return;
+  statusEl.style.color = '#555';
+  statusEl.textContent = `Reading ${file.name}…`;
+  document.getElementById('cpnew-review').innerHTML = '';
+  try {
+    const lib = await loadPdfJs();
+    const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    const pages = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const tc = await (await doc.getPage(i)).getTextContent();
+      pages.push(tc.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width || 0 })));
+    }
+    const people = parseCovenantNewPage(pages);
+    if (!people.length) {
+      statusEl.style.color = '#dc3545';
+      statusEl.textContent = `No one found in ${file.name}. Is it LCR's Covenant Path Progress page, on the New Members tab, printed to PDF?`;
+      return;
+    }
+    const seenIds = new Set(), seenNames = new Set();
+    const rows = people.map(p => {
+      const mt = matchReportName(p.name);
+      const member = mt.candidates[0] || null;
+      const entry = covenantNewEntryFor(member, p.name);
+      if (entry) { seenIds.add(entry.id); }
+      seenNames.add(normNameKey(p.name));
+      return { person: p, ...mt, member, entry, include: !entry && (mt.level === 'match' || mt.level === 'several') };
+    });
+    // On the list already but not in this report: past LCR's window, moved, or a
+    // name the report spells differently. Never removed unless ticked.
+    const gone = groupList('new').filter(e => !seenIds.has(e.id)).map(e => ({ entry: e, remove: false }));
+    _cpNewPlan = { rows, gone };
+    statusEl.textContent = '';
+    renderCovenantNewReview();
+  } catch (err) {
+    console.error('New Members import failed:', err);
+    statusEl.style.color = '#dc3545';
+    statusEl.textContent = 'Could not read that PDF: ' + (err?.message || 'unknown error');
+  }
+}
+
+function setCovenantNewMember(i, id) {
+  const r = _cpNewPlan.rows[i];
+  r.member = S.members.find(m => m.id === id) || null;
+  r.entry = covenantNewEntryFor(r.member, r.person.name);
+  if (r.entry) r.include = false;
+  renderCovenantNewReview();
+}
+
+function renderCovenantNewReview() {
+  const plan = _cpNewPlan; if (!plan) return;
+  const badge = {
+    match:    '<span class="badge badge-green">Matched in Members</span>',
+    several:  '<span class="badge badge-yellow">More than one member has this name — pick below</span>',
+    possible: '<span class="badge badge-yellow">Possible match — check the name</span>',
+    none:     '<span class="badge" style="background:#eee;color:#666">Not in Members yet</span>',
+  };
+  const stats = p => p.memberFor ? `member for ${esc(p.memberFor)}` : '';
+  const rows = plan.rows.map((r, i) => {
+    const pick = r.candidates.length > 1 || r.level === 'possible'
+      ? `<select style="font-size:0.8rem;margin-top:0.25rem" onchange="setCovenantNewMember(${i}, this.value)">
+          ${r.level === 'possible' ? `<option value="" ${r.member ? '' : 'selected'}>Not this person — add the name as written</option>` : ''}
+          ${r.candidates.map(c => `<option value="${c.id}" ${r.member && c.id === r.member.id ? 'selected' : ''}>${esc(c.name)}${c.age ? ' · ' + c.age : ''}</option>`).join('')}</select>` : '';
+    const where = r.entry ? '<div style="font-size:0.78rem;color:#155724">Already on New Members — “member for” will be updated</div>'
+      : r.member ? `<div style="font-size:0.84rem"><strong>${esc(r.member.name)}</strong></div>`
+      : '<div style="font-size:0.78rem;color:#888">Would be added by name, not linked to Members</div>';
+    return `<tr>
+      <td style="vertical-align:top">${r.entry ? '' : `<input type="checkbox" ${r.include ? 'checked' : ''} onchange="_cpNewPlan.rows[${i}].include=this.checked;updateCovenantNewBtn()">`}</td>
+      <td style="vertical-align:top"><strong>${esc(r.person.name)}</strong><div style="font-size:0.78rem;color:#888">${stats(r.person)}</div></td>
+      <td style="vertical-align:top">${r.entry ? '' : badge[r.level]}${where}${r.entry ? '' : pick}</td>
+    </tr>`;
+  }).join('');
+  const gone = plan.gone.map((g, i) => `<label style="display:flex;gap:0.5rem;align-items:flex-start;font-weight:400;margin:0.3rem 0;font-size:0.85rem;cursor:pointer">
+      <input type="checkbox" style="width:auto;margin-top:0.2rem" ${g.remove ? 'checked' : ''} onchange="_cpNewPlan.gone[${i}].remove=this.checked;updateCovenantNewBtn()">
+      <span>Remove <strong>${esc(groupEntryName(g.entry))}</strong> from New Members${(g.entry.goals || []).length + (g.entry.notes || []).length ? ` <span style="font-size:0.76rem;color:#856404">· its goals and notes go with it</span>` : ''}</span></label>`).join('');
+  document.getElementById('cpnew-review').innerHTML = `
+    <div style="margin-top:1rem">
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.4rem">Found ${plan.rows.length} ${plan.rows.length === 1 ? 'person' : 'people'} on the page</div>
+      <div style="font-size:0.8rem;color:#888;margin-bottom:0.5rem">Ticked people are added to New Members. Matches are ticked to start with; check anything yellow, and people not in Members yet, before ticking them.</div>
+      <div style="overflow-x:auto"><table><thead><tr><th></th><th style="width:40%">On the LCR page</th><th>In the ward records</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${gone ? `<div style="margin-top:0.8rem"><div style="font-size:0.85rem;font-weight:600">On New Members but not on this page</div>
+        <div style="font-size:0.78rem;color:#888">LCR drops people after two years as members, or when they move. Nothing is removed unless you tick it.</div>${gone}</div>` : ''}
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem">
+        <button class="btn btn-secondary" onclick="cancelCovenantNewImport()">Cancel</button>
+        <button class="btn btn-primary" id="cpnew-apply-btn" onclick="applyCovenantNewPlan()">Save</button>
+      </div>
+    </div>`;
+  updateCovenantNewBtn();
+}
+
+function updateCovenantNewBtn() {
+  const btn = document.getElementById('cpnew-apply-btn');
+  if (!btn || !_cpNewPlan) return;
+  const add = _cpNewPlan.rows.filter(r => r.include && !r.entry).length;
+  const upd = _cpNewPlan.rows.filter(r => r.entry).length;
+  const rem = _cpNewPlan.gone.filter(g => g.remove).length;
+  const parts = [add && `add ${add}`, upd && `update ${upd}`, rem && `remove ${rem}`].filter(Boolean);
+  btn.disabled = !parts.length;
+  btn.textContent = parts.length ? parts.join(', ').replace(/^./, c => c.toUpperCase()) : 'Nothing to save';
+}
+
+function cancelCovenantNewImport() {
+  _cpNewPlan = null;
+  document.getElementById('cpnew-review').innerHTML = '';
+  document.getElementById('cpnew-status').textContent = '';
+}
+
+function applyCovenantNewPlan() {
+  const plan = _cpNewPlan; if (!plan) return;
+  const removing = plan.gone.filter(g => g.remove);
+  if (removing.length && !confirm(`Remove ${removing.length} ${removing.length === 1 ? 'person' : 'people'} from New Members? Their goals and notes on this list are deleted.\n\n` +
+      removing.map(g => '  • ' + groupEntryName(g.entry)).join('\n'))) return;
+  const who = _currentUserName || _currentUserEmail || 'Unknown';
+  const now = new Date().toISOString();
+  const snap = p => ({ memberFor: p.memberFor || '', asOf: now });
+  let added = 0, updated = 0;
+  plan.rows.forEach(r => {
+    if (r.entry) { r.entry.lcr = snap(r.person); updated++; return; }
+    if (!r.include) return;
+    const dupe = covenantNewEntryFor(r.member, r.person.name);     // ticked twice in one report
+    if (dupe) { dupe.lcr = snap(r.person); return; }
+    groupList('new').push({ id: uid(), memberId: r.member ? r.member.id : null, name: r.member ? r.member.name : r.person.name,
+      goals: [], notes: [], addedBy: who, addedDate: now, source: 'LCR New Members', lcr: snap(r.person) });
+    added++;
+  });
+  const ids = new Set(removing.map(g => g.entry.id));
+  if (ids.size) S.groups.new = groupList('new').filter(e => !ids.has(e.id));
+  _cpNewPlan = null;
+  document.getElementById('cpnew-review').innerHTML = '';
+  dbUpsertGroups();
+  renderGroupViews();
+  const statusEl = document.getElementById('cpnew-status');
+  statusEl.style.color = '#155724';
+  statusEl.textContent = '✓ ' + [added && `Added ${added}`, updated && `updated ${updated}`, ids.size && `removed ${ids.size}`]
+    .filter(Boolean).join(', ').replace(/^./, c => c.toUpperCase()) + '.';
+}
+
+function lcrSnapshotHTML(e) {
+  const l = e && e.lcr; if (!l) return '';
+  return l.memberFor ? `<div style="font-size:0.76rem;color:#666;margin-top:0.15rem" title="From LCR's Covenant Path Progress page">Member for ${esc(l.memberFor)}
+    <span style="color:#aaa">· LCR ${esc(formatNoteDate(l.asOf))}</span></div>` : '';
+}
+
 // ── LCR report links ("Fetch/Print/Download") ─────────────────────
 // Opens the report in LCR in a new browser tab (LCR asks the person to sign in
 // if needed). They download / save it as PDF there, come back, and use
@@ -5226,6 +5462,7 @@ function goToLink(hash) {
 const LCR_REPORT_URLS = {
   in:  'https://lcr.churchofjesuschrist.org/mlt/report/members-moved-in?lang=eng',
   out: 'https://lcr.churchofjesuschrist.org/mlt/report/members-moved-out?lang=eng',
+  new: 'https://lcr.churchofjesuschrist.org/one-work/progress-record?lang=eng&tab=recentConverts',   // Covenant Path Progress → New Members
 };
 function wireLcrFetchButtons() {
   document.querySelectorAll('a.lcr-fetch').forEach(a => {

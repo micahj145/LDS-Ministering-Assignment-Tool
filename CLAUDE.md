@@ -175,6 +175,20 @@ an empty URL renders the link disabled). The user signs in to LCR, saves the rep
 then taps **Import** (the file picker). The app can't read LCR directly — it's a separate
 signed-in site.
 
+**Covenant Path Progress → New Members from LCR (printed web page)**: LCR's progress-record page
+(`LCR_REPORT_URLS.new`, `one-work/progress-record?tab=recentConverts`) has no export, so users print
+the page to PDF (laptop Chrome and Android Chrome both tested — same text, same order). It's cards,
+not a table: `pdfTextLines()` rebuilds lines from pdf.js runs (grouped by y; runs that touch are glued,
+so a phone print's split "é" rejoins; NFC-normalised), and `parseCovenantNewPage()` takes the line
+above each "Member for …" as the name, plus the "member for" length. The cards' sacrament-attendance
+and friends counts are deliberately NOT read or stored (Micah: LCR already shows them). `matchReportName()` matches "First Middle Last [Jr]" against
+Members' "Last, First": surname tokens must end the name (suffixes ignored on both sides) and the first
+given name must come before it → `match`/`several`; looser token overlap → `possible`; else `none`
+(can be added unlinked, by name). Review (`renderCovenantNewReview`): matches ticked; entries already
+on New Members just get `lcr` refreshed; entries not on the page are listed with an unticked Remove.
+Saved per entry: `lcr: { memberFor, asOf }`, shown under the name by
+`lcrSnapshotHTML()`. `lcr` changes don't notify followers (follow.js only diffs notes/status/adds/removes).
+
 **Importing the LCR "Members Moved In" report (PDF)**:
 - pdf.js 3.11.174 is loaded lazily from cdnjs, with jsDelivr as a fallback (`PDFJS_SOURCES`),
   only when someone imports. The PDF is parsed in the browser and never uploaded.
