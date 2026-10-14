@@ -175,19 +175,27 @@ an empty URL renders the link disabled). The user signs in to LCR, saves the rep
 then taps **Import** (the file picker). The app can't read LCR directly — it's a separate
 signed-in site.
 
-**Covenant Path Progress → New Members from LCR (printed web page)**: LCR's progress-record page
-(`LCR_REPORT_URLS.new`, `one-work/progress-record?tab=recentConverts`) has no export, so users print
-the page to PDF (laptop Chrome and Android Chrome both tested — same text, same order). It's cards,
-not a table: `pdfTextLines()` rebuilds lines from pdf.js runs (grouped by y; runs that touch are glued,
-so a phone print's split "é" rejoins; NFC-normalised), and `parseCovenantNewPage()` takes the line
-above each "Member for …" as the name, plus the "member for" length. The cards' sacrament-attendance
-and friends counts are deliberately NOT read or stored (Micah: LCR already shows them). `matchReportName()` matches "First Middle Last [Jr]" against
-Members' "Last, First": surname tokens must end the name (suffixes ignored on both sides) and the first
-given name must come before it → `match`/`several`; looser token overlap → `possible`; else `none`
-(can be added unlinked, by name). Review (`renderCovenantNewReview`): matches ticked; entries already
-on New Members just get `lcr` refreshed; entries not on the page are listed with an unticked Remove.
-Saved per entry: `lcr: { memberFor, asOf }`, shown under the name by
-`lcrSnapshotHTML()`. `lcr` changes don't notify followers (follow.js only diffs notes/status/adds/removes).
+**Covenant Path Progress → import from LCR (printed web pages)**: one "Import from LCR" card with
+Fetch/Print/Download + Import for each list (`CP_IMPORTS`: new, returning, mission). LCR's
+progress-record pages (`LCR_REPORT_URLS['cp-new' | 'cp-returning' | 'cp-mission']`; `tab=recentConverts` and
+`tab=returningMembers`, `tab=peopleBeingTaught`; an empty URL would render the button disabled) have no export, so
+users print the page to PDF (laptop and Android Chrome tested for New Members: same text, same order).
+- `pdfTextLines()` rebuilds lines from pdf.js runs (grouped by y; touching runs glued so a phone
+  print's split "é" rejoins; NFC).
+- `parseCovenantPage()`: a card ends at its first anchor line (`CP_CARD_ANCHOR`: "View Details" or
+  "Attended Sacrament Meeting" — some cards have no View Details). The name is the nearest
+  `looksLikeName()` line above it (no digits, ≤7 capitalised words/particles, not a page label),
+  within 4 lines and not before the previous card; the lines in between are the subtitle (`detail`,
+  e.g. "Member for 3 months"). Attendance/friends counts are deliberately NOT read or stored
+  (Micah: LCR already shows them). All three tabs use the same card layout (checked with real prints);
+  People Being Taught cards' subtitle is "First Taught - <date>".
+- New/Returning (`matchMembers`): `matchReportName()` matches "First Middle Last [Jr]" against
+  Members' "Last, First" (surname tokens end the name, suffixes ignored both sides; first given name
+  before it) → `match`/`several` ticked; looser overlap → `possible`; else `none` (addable unlinked).
+  People Being Taught: every name found ticked, added by name.
+- Review: entries already on the list get `lcr` refreshed; entries not on the page are listed with an
+  unticked Remove. Saved per entry: `lcr: { detail, asOf }` (older entries: `memberFor`), shown by
+  `lcrSnapshotHTML()`. `lcr` changes don't notify followers.
 
 **Importing the LCR "Members Moved In" report (PDF)**:
 - pdf.js 3.11.174 is loaded lazily from cdnjs, with jsDelivr as a fallback (`PDFJS_SOURCES`),
