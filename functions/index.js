@@ -23,7 +23,7 @@ initializeApp();
 
 const REGION = 'us-central1';
 const APP = 'https://micahj145.github.io/LDS-Ministering-Assignment-Tool/ministering_tool.html';
-const FEED_MAX = 100;                         // newest entries kept on each follower's profile
+const FEED_MAX = 500;                         // newest entries kept on each follower's profile
 const FOLLOW_PUSH_GAP_MS = 3 * 60 * 1000;     // at most one follow alert per person per 3 minutes
 const DEAD_TOKEN = new Set(['messaging/registration-token-not-registered', 'messaging/invalid-registration-token', 'messaging/invalid-argument']);
 
@@ -35,7 +35,7 @@ function totalUnread(doc, uid, p) {
   const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
   const seen = Date.parse(p.notifSeenAt) || 0;
   const feedNew = (Array.isArray(p.feed) ? p.feed : []).filter(f => (Date.parse(f.ts) || 0) > seen).length;
-  return unreadCount(doc, uid, p.notifSeenAt, name) + feedNew;
+  return unreadCount(doc, uid, p.notifSeenAt, name, p.clearedTags) + feedNew;
 }
 
 async function sendToProfile(ref, profile, data) {
@@ -106,14 +106,20 @@ exports.notifyFollowers = onDocumentWritten({ document: 'wardData/shared', regio
       .map(c => ({ ...c, by: updater, ts: now.toISOString() }));
     if (!events.length) continue;
 
-    const feed = events.concat(Array.isArray(p.feed) ? p.feed : []).slice(0, FEED_MAX);
-    const pushNow = now - (Date.parse(p.lastFollowPushAt) || 0) >= FOLLOW_PUSH_GAP_MS;
-    await doc.ref.update(pushNow ? { feed, lastFollowPushAt: now.toISOString() } : { feed });
+    // Re-read the profile inside a transaction so a "Clear" the person just
+    // made in the app isn't overwritten by the copy read for the query above.
+    const { fresh, feed, pushNow } = await db.runTransaction(async (tx) => {
+      const cur = (await tx.get(doc.ref)).data() || {};
+      const feed = events.concat(Array.isArray(cur.feed) ? cur.feed : []).slice(0, FEED_MAX);
+      const pushNow = now - (Date.parse(cur.lastFollowPushAt) || 0) >= FOLLOW_PUSH_GAP_MS;
+      tx.update(doc.ref, pushNow ? { feed, lastFollowPushAt: now.toISOString() } : { feed });
+      return { fresh: cur, feed, pushNow };
+    });
     if (!pushNow) { logger.info('notifyFollowers (feed only, throttled)', { uid, events: events.length }); continue; }
 
-    const r = await sendToProfile(doc.ref, { ...p, feed }, {
+    const r = await sendToProfile(doc.ref, { ...fresh, feed }, {
       title: 'Ministering', body: followMessage(updater, events.length), tag: 'ministering-follow',
-      unread: String(totalUnread(after, uid, { ...p, feed })), link: `${APP}#notifications`,
+      unread: String(totalUnread(after, uid, { ...fresh, feed })), link: `${APP}#notifications`,
     });
     logger.info('notifyFollowers', { uid, events: events.length, ...r });
   }

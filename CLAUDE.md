@@ -168,6 +168,13 @@ ministering is in place, and for removing people who have moved out.
   Deliberately no emails in it. A user who hasn't signed in since this shipped isn't taggable
   until they do (or an admin opens the Admin tab).
 
+**Fetch/Print/Download + Import buttons**: each report card has a **Fetch/Print/Download** link
+(`.lcr-fetch`, `data-report="in|out"`) that opens the LCR report page in a new tab, using
+`LCR_REPORT_URLS` (members-moved-in / members-moved-out under lcr.churchofjesuschrist.org/mlt/report;
+an empty URL renders the link disabled). The user signs in to LCR, saves the report as a PDF,
+then taps **Import** (the file picker). The app can't read LCR directly — it's a separate
+signed-in site.
+
 **Importing the LCR "Members Moved In" report (PDF)**:
 - pdf.js 3.11.174 is loaded lazily from cdnjs, with jsDelivr as a fallback (`PDFJS_SOURCES`),
   only when someone imports. The PDF is parsed in the browser and never uploaded.
@@ -237,6 +244,12 @@ ministering is in place, and for removing people who have moved out.
 - **Notifications tab** (`allTaggedNotes()`): every note anywhere that tags the signed-in user
   (members, households, current/proposed companionships, every `GROUPS` list and its goals,
   notes and next steps), newest first, each with an Open button into that thread.
+- **Clearing**: items stay until the user clears them. Tagged notes: ✕ per item or **Clear all**
+  adds `noteKey`s (`tagNoteKey()`, same format as `functions/tags.js` `noteKey`) to
+  `profiles/{uid}.clearedTags` — it hides them for that user only; the note itself is untouched.
+  `visibleTaggedNotes()` filters them out of the list, unread count and badge; keys for notes
+  that no longer exist are pruned on each save. The server's `unreadCount()` skips them too.
+  Feed: ✕ removes that entry (`arrayRemove`), **Clear all** sets `feed: []`.
 - **Unread** = dated after the user last opened the tab *and* not written by them
   (`authorId`, falling back to the author name for older notes). The last-opened time is
   `notifSeenAt` on the user's **own profile document**, not the shared ward doc. The existing
@@ -260,7 +273,8 @@ ministering is in place, and for removing people who have moved out.
   household/member and who acted but **never note text**.
 - Followers are found with `array-contains-any` (30 ids per query). The editor is skipped via
   `updatedByUid`, which `runSync()` now writes beside `updatedBy`. Items are prepended to the
-  follower's `profiles/{uid}.feed` (cap 100); a push ("Ana Reyes made 2 updates to households
+  follower's `profiles/{uid}.feed` (cap 500, `FEED_MAX`) inside a transaction that re-reads the
+  profile, so a Clear made in the app isn't overwritten; a push ("Ana Reyes made 2 updates to households
   you follow.") goes at most every 3 minutes per person (`lastFollowPushAt`) — the feed always
   updates. Push `unread` and the app's unread count both include feed items newer than
   `notifSeenAt`.

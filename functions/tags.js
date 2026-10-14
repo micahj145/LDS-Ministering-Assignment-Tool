@@ -43,11 +43,13 @@ function newTags(beforeDoc, afterDoc) {
 
 // Same definition of "unread" as the app: tagged, dated after the user last
 // opened Notifications, and not written by them.
-function unreadCount(doc, uid, seenAtIso, userName) {
+function unreadCount(doc, uid, seenAtIso, userName, cleared) {
   const seen = Date.parse(seenAtIso) || 0;
+  const hidden = new Set(cleared || []);       // notes the person cleared from their list
   let n = 0;
   forEachNote(doc, note => {
     if (!(note.tags || []).some(t => t.uid === uid)) return;
+    if (hidden.has(noteKey(note))) return;
     const mine = note.authorId ? note.authorId === uid : (userName && note.author === userName);
     if (!mine && (Date.parse(note.date) || 0) > seen) n++;
   });
