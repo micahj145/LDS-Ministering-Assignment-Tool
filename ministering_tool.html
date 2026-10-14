@@ -194,7 +194,7 @@ tr:hover td{background:#fafbfc}
   <button id="nav-brothers-btn" onclick="showTab('brothers')">Brothers <span id="brothers-count"></span></button>
   <button id="nav-current-btn" onclick="showTab('current')">Current Assignments</button>
   <button id="nav-propose-btn" onclick="showTab('propose')">Proposed Assignments</button>
-  <button id="nav-council-btn" onclick="showTab('council')">Ward Council Collaboration</button>
+  <button id="nav-council-btn" onclick="showTab('council')">Covenant Path Progress</button>
   <button id="nav-moves-btn" onclick="showTab('moves')">New Member Move Ins / Move Outs <span id="moves-mine"></span></button>
   <button id="nav-admin-btn" onclick="showTab('admin')" style="display:none">Admin <span id="admin-pending-count"></span></button>
 </nav>
@@ -216,11 +216,12 @@ tr:hover td{background:#fafbfc}
   </div>
   <div class="card">
     <div class="flex-between">
-      <h2 style="margin:0">Households you follow</h2>
+      <h2 style="margin:0">People and households you follow</h2>
       <span id="follow-summary" style="font-size:0.82rem;color:#888"></span>
     </div>
-    <p style="font-size:0.82rem;color:#888;margin:0.3rem 0 0.7rem">Tap <strong>🔔 Follow</strong> on a household (Households tab or Move Ins) to hear about
-      new notes and changes for anyone in it: pool, address, assignments, Move In status and more. Your own changes aren't listed.</p>
+    <p style="font-size:0.82rem;color:#888;margin:0.3rem 0 0.7rem">Tap <strong>🔔 Follow</strong> on a household (Households tab or Move Ins) or a person
+      (Covenant Path Progress) to hear about new notes and changes: pool, address, assignments, goals, Move In status and more. Following a
+      member follows their household. Your own changes aren't listed.</p>
     <div id="follow-chips" style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:0.8rem"></div>
     <div id="follow-feed"></div>
   </div>
@@ -494,12 +495,12 @@ tr:hover td{background:#fafbfc}
   </div>
 </div>
 
-<!-- WARD COUNCIL COLLABORATION TAB -->
+<!-- COVENANT PATH PROGRESS TAB (internally 'council') -->
 <div id="tab-council" class="tab-content">
   <div class="alert alert-info">
-    Shared watch-lists for the ward council. Everyone with access can add or remove people and post
+    Shared lists of people the ward council is helping along the covenant path. Everyone with access can add or remove people and post
     <strong>Goals</strong> and <strong>Notes</strong> against each name — both are dated and signed, so the
-    council can see at a glance who is being looked after and what has been done.
+    council can see at a glance who is being looked after and what has been done. Tap <strong>🔔 Follow</strong> to hear about updates.
   </div>
   <div id="council-groups"></div>
 </div>
@@ -659,17 +660,18 @@ const S = {
 // ── Ward Council groups ───────────────────────────────────────
 // Small watch-lists the ward council keeps together, each person carrying two
 // running comment threads: Goals and Notes. `fromMembers` groups pick people
-// out of the imported ward list; Ward Mission takes free-typed names, since
-// missionary contacts aren't in ward records.
+// out of the imported ward list; People Being Taught takes free-typed names,
+// since the people the missionaries teach usually aren't in ward records.
+// (Its key stays 'mission' — it was "Ward Mission" — so existing entries carry over.)
 const GROUPS = [
   { key: 'new',       label: 'New Members',       fromMembers: true,
     blurb: 'Recently arrived or newly baptized members the council is looking after.' },
   { key: 'returning', label: 'Returning Members', fromMembers: true,
     blurb: 'Members returning to activity.' },
-  { key: 'mission',   label: 'Ward Mission',      fromMembers: false,
-    blurb: 'People the missionaries are working with — type any name, they need not be in the ward list.' },
-  // Lives on the New Member Move Ins / Move Outs tab rather than Ward Council
-  // Collaboration (`tab`), with one entry per household (`byHousehold`). See
+  { key: 'mission',   label: 'People Being Taught', fromMembers: false,
+    blurb: 'People the missionaries are teaching — type any name, they need not be in the ward list.' },
+  // Lives on the New Member Move Ins / Move Outs tab rather than Covenant Path
+  // Progress (`tab`), with one entry per household (`byHousehold`). See
   // the Move Ins section further down.
   { key: 'movein',    label: 'Move Ins',          fromMembers: true, byHousehold: true, tab: 'moves',
     blurb: 'Households that have moved into the ward, until their ministering assignments are in place.' },
@@ -1126,7 +1128,7 @@ async function setUserRole(id, role) {
   const who = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'this user';
   const detail = role === 'eq'
     ? 'They will get the full tool, including Brothers and the Current and Proposed assignment tabs.'
-    : 'They will see Import, Members, Households and Ward Council Collaboration only — not the ministering assignment tabs.';
+    : 'They will see Import, Members, Households, Covenant Path Progress and Move Ins / Move Outs only — not the ministering assignment tabs.';
   // Cancelling re-renders so the dropdown snaps back to the stored value.
   if (!confirm(`Set ${who} to ${role === 'eq' ? 'EQ Presidency' : 'Ward Council'}?\n\n${detail}`)) { renderAdminPanel(); return; }
   try {
@@ -3442,7 +3444,7 @@ function refreshNotesSourceTab() {
 // Group entries now appear on two tabs (council groups and Move Ins).
 function renderGroupViews() { renderCouncil(); renderMoves(); }
 
-// ── Ward Council Collaboration ────────────────────────────────
+// ── Covenant Path Progress (Ward Council lists) ────────────────────────────────
 // Each group holds entries of:
 //   { id, memberId|null, name, goals: [], notes: [], addedBy, addedDate }
 // memberId links to the ward member list so a rename there follows through;
@@ -3611,7 +3613,8 @@ function renderCouncil() {
           <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','${g.key}','notes')">${notes ? `Notes (${notes})` : 'Notes'}</button>
           ${latestCommentHTML(mergedNotes)}
         </td>
-        <td style="white-space:nowrap;vertical-align:top"><button class="btn btn-danger btn-sm" onclick="removeGroupEntry('${g.key}','${e.id}')">Remove</button></td>
+        <td style="white-space:nowrap;vertical-align:top">${followButtonHTML(councilFollowKey(e))}<br>
+          <button class="btn btn-danger btn-sm" style="margin-top:0.3rem" onclick="removeGroupEntry('${g.key}','${e.id}')">Remove</button></td>
       </tr>`;
     }).join('');
 
@@ -5081,10 +5084,29 @@ async function reloadMyFollowState() {
 
 function feedIsUnread(f) { return (Date.parse(f.ts) || 0) > _notifSeenAt; }
 
-function followButtonHTML(hhId) {
-  const on = _myFollows.has(hhId);
-  return `<button class="btn btn-secondary btn-sm" style="${on ? 'background:#d4edda;color:#155724' : ''}" onclick="toggleFollow('${hhId}')"
-    title="${on ? 'Stop getting updates about this household' : 'Get updates when anything changes for this household'}">${on ? '✓ Following' : '🔔 Follow'}</button>`;
+// Follow keys are a household id, or `entry:<id>` for a Covenant Path Progress
+// entry with no household (People Being Taught, or a member not linked to one).
+// Both live in followHouseholds; functions/follow.js reports changes under the
+// same keys.
+function councilFollowKey(e) {
+  const m = e.memberId ? S.members.find(x => x.id === e.memberId) : null;
+  return m && hhById(m.householdId) ? m.householdId : `entry:${e.id}`;
+}
+
+function followKeyName(key) {
+  if (String(key).startsWith('entry:')) {
+    const id = key.slice(6);
+    for (const g of GROUPS) { const e = groupList(g.key).find(x => x.id === id); if (e) return `${groupEntryName(e)} (${g.label})`; }
+    return null;
+  }
+  return hhById(key)?.name || null;
+}
+
+function followButtonHTML(key) {
+  const on = _myFollows.has(key);
+  const what = String(key).startsWith('entry:') ? 'this person' : 'this household';
+  return `<button class="btn btn-secondary btn-sm" style="${on ? 'background:#d4edda;color:#155724' : ''}" onclick="toggleFollow('${key}')"
+    title="${on ? `Stop getting updates about ${what}` : `Get updates when anything changes for ${what}`}">${on ? '✓ Following' : '🔔 Follow'}</button>`;
 }
 
 async function toggleFollow(hhId) {
@@ -5095,7 +5117,7 @@ async function toggleFollow(hhId) {
     await db.collection('profiles').doc(_currentUserId).update({ followHouseholds: on ? FV.arrayRemove(hhId) : FV.arrayUnion(hhId) });
   } catch (e) { alert('Could not update: ' + (e?.message || 'unknown error')); return; }
   on ? _myFollows.delete(hhId) : _myFollows.add(hhId);
-  renderHouseholds(); renderMoves();
+  renderHouseholds(); renderMoves(); renderCouncil();
   if (currentTabName() === 'notifications') renderFollowSection();
 }
 
@@ -5103,11 +5125,11 @@ function renderFollowSection() {
   const chips = document.getElementById('follow-chips');
   const feedEl = document.getElementById('follow-feed');
   if (!chips || !feedEl) return;
-  const followed = [..._myFollows].map(id => ({ id, hh: hhById(id) })).sort((a, b) => (a.hh?.name || '').localeCompare(b.hh?.name || ''));
+  const followed = [..._myFollows].map(id => ({ id, name: followKeyName(id) })).sort((a, b) => (a.name || '~').localeCompare(b.name || '~'));
   chips.innerHTML = followed.length ? followed.map(f => `<span class="badge badge-blue" style="display:inline-flex;align-items:center;gap:0.3rem">
-      ${esc(f.hh ? f.hh.name : 'Household no longer listed')}
+      ${esc(f.name || 'No longer listed')}
       <button style="background:none;border:none;cursor:pointer;color:#0c5460;padding:0;font-size:0.8rem" title="Unfollow" onclick="toggleFollow('${f.id}')">✕</button></span>`).join('')
-    : '<span style="font-size:0.82rem;color:#aaa">You aren\'t following any households yet.</span>';
+    : '<span style="font-size:0.82rem;color:#aaa">You aren\'t following anyone yet.</span>';
   const unread = _myFeed.filter(feedIsUnread).length;
   document.getElementById('follow-summary').textContent = _myFeed.length ? `${unread ? unread + ' new · ' : ''}${_myFeed.length} recent` : '';
   feedEl.innerHTML = _myFeed.length ? _myFeed.map((f, i) => {

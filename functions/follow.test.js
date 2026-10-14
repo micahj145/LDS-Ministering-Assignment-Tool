@@ -81,3 +81,20 @@ test('push text names only the person who made the change', () => {
   assert.strictEqual(followMessage('Ana Reyes', 1), 'Ana Reyes updated a household you follow.');
   assert.strictEqual(followMessage('Ana Reyes', 3), 'Ana Reyes made 3 updates to households you follow.');
 });
+
+test('People Being Taught (no household) report under entry:<id>; labels use the new name', () => {
+  const a = base(); a.groups.mission = [{ id: 'p1', name: 'Jordan Lee', goals: [], notes: [] }];
+  const b = clone(a); b.groups.mission[0].goals.push(note('gl1'));
+  const ch = householdChanges(a, b);
+  assert.deepStrictEqual(ch.map(c => [c.hhId, c.text, c.link]),
+    [['entry:p1', 'Ana added a goal for Jordan Lee (People Being Taught)', '#open=group,p1,mission,goals']]);
+  const c = clone(b); c.groups.mission = [];
+  assert.deepStrictEqual(householdChanges(b, c).map(x => [x.hhId, x.text]), [['entry:p1', 'Jordan Lee was removed from People Being Taught']]);
+});
+
+test('a council entry for an unlinked member also reports under entry:<id>', () => {
+  const a = base(); a.members.push({ id: 'm9', name: 'Solo, Pat', notes: [] });
+  a.groups.returning = [{ id: 'r1', memberId: 'm9', name: 'Solo, Pat', goals: [], notes: [] }];
+  const b = clone(a); b.groups.returning[0].notes.push(note('nn'));
+  assert.deepStrictEqual(householdChanges(a, b).map(x => x.hhId), ['entry:r1']);
+});

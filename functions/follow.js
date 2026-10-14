@@ -5,8 +5,13 @@
 // companionships that serve it, and ward council / Move Ins entries for it or
 // its members. Each change becomes { hhId, text, link } where link is an app
 // hash (#open=… opens the right thread, #tab=… the right tab).
+//
+// `hhId` is really a *follow key*: a household id, or `entry:<id>` for a
+// Covenant Path Progress entry that has no household (People Being Taught, or
+// a member not linked to one) — the same keys the app stores in
+// profiles/{uid}.followHouseholds.
 
-const GROUP_LABEL = { new: 'New Members', returning: 'Returning Members', mission: 'Ward Mission', movein: 'Move Ins' };
+const GROUP_LABEL = { new: 'New Members', returning: 'Returning Members', mission: 'People Being Taught', movein: 'Move Ins' };
 const STATUS_LABEL = { new: 'New', contacted: 'Contacted', pool: 'Ministering pool decided', assigned: 'Ministering assignments done' };
 const KIND = { goals: 'goal', notes: 'note', nextSteps: 'next step' };
 
@@ -76,7 +81,7 @@ function householdChanges(beforeDoc, afterDoc) {
     const label = GROUP_LABEL[g], tab = g === 'movein' ? 'moves' : 'council';
     const eB = byId(gB[g]), eA = byId(gA[g]);
     eA.forEach((e, id) => {
-      const hh = entryHH(e); if (!hh) return;
+      const hh = entryHH(e) || `entry:${id}`;
       const name = e.householdId ? hhName(e.householdId) : (e.name || 'A member');
       const o = eB.get(id);
       if (!o) { add(hh, `${name} was added to ${label}`, `#tab=${tab}`); return; }
@@ -85,7 +90,7 @@ function householdChanges(beforeDoc, afterDoc) {
       ['goals', 'notes', 'nextSteps'].forEach(f => newNotes(o[f], e[f]).forEach(n =>
         add(hh, `${n.author || 'Someone'} added a ${KIND[f]} for ${name} (${label})`, `#open=group,${enc(id)},${g},${f}`)));
     });
-    eB.forEach((o, id) => { const hh = entryHH(o); if (hh && !eA.has(id)) add(hh, `${o.name || 'An entry'} was removed from ${label}`, `#tab=${tab}`); });
+    eB.forEach((o, id) => { if (!eA.has(id)) add(entryHH(o) || `entry:${id}`, `${o.name || 'An entry'} was removed from ${label}`, `#tab=${tab}`); });
   });
 
   return out;

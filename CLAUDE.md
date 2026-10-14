@@ -98,10 +98,11 @@ draft had TOTP 2FA — it was superseded by this simpler flow, not retained). Th
 email (`micahj145@gmail.com`) is hardcoded in both `ministering_tool.html` (`ADMIN_EMAIL`) and
 `firestore.rules` (`isBootstrapAdminEmail()`) — keep those two in sync if it's ever changed.
 
-### Ward Council Collaboration
+### Covenant Path Progress (formerly Ward Council Collaboration)
 A tab of shared watch-lists, visible to everyone with access (both roles) and editable by all of
 them — no admin gating. Three groups, defined in the `GROUPS` const: **New Members** and
-**Returning Members** pick people out of `S.members`; **Ward Mission** takes free-typed names,
+**Returning Members** pick people out of `S.members`; **People Being Taught** (key `mission`,
+formerly Ward Mission, so old entries carry over) takes free-typed names,
 since missionary contacts aren't in ward records. Each entry carries *two* independent comment
 threads, **Goals** and **Notes**, both dated and signed by author.
 
@@ -268,6 +269,11 @@ ministering is in place, and for removing people who have moved out.
   followed households (✕ to unfollow) and the feed. `goToLink()` handles the links:
   `#open=type,id[,groupKey,field]` opens that notes thread (switching to its tab),
   `#tab=name` switches tab; also used when the app is opened with such a hash.
+- **Following people on Covenant Path Progress**: each row has 🔔 Follow. The key is the
+  member's household id when they're linked to one (`councilFollowKey()`), so it's the same as
+  following that household; otherwise `entry:<entryId>` (People Being Taught, unlinked members).
+  `followHouseholds` holds both kinds; `householdChanges()` reports group changes under
+  `entry:<id>` when an entry has no household; `followKeyName()` names either kind for the chips.
 - Keep `householdChanges()` in step with where the app stores things, the same way
   `forEachNote()` must match `allTaggedNotes()`.
 
