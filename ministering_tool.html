@@ -99,6 +99,17 @@ tr:hover td{background:#fafbfc}
 .empty-state .icon{font-size:2.5rem;margin-bottom:0.75rem}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
+.modal-overlay.stacked{z-index:110}
+.msg-row{display:flex;justify-content:space-between;align-items:center;gap:0.6rem;padding:0.65rem 0.75rem;border:1px solid #e0e6ed;border-radius:8px;margin-bottom:0.5rem;cursor:pointer;background:#fff}
+.msg-row:hover{background:#f7f9fc}
+.msg-row.unread{border-color:#1a3a5c;background:#f3f7fc}
+.msg-bubble{max-width:80%;padding:0.5rem 0.75rem;border-radius:10px;margin:0.25rem 0;font-size:0.88rem;white-space:pre-wrap;word-wrap:break-word}
+.msg-bubble.mine{margin-left:auto;background:#1a3a5c;color:#fff}
+.msg-bubble.theirs{background:#eef2f7;color:#222}
+.msg-meta{font-size:0.72rem;color:#999;margin-top:0.15rem}
+.user-pick{display:flex;flex-wrap:wrap;gap:0.3rem 0.9rem;max-height:200px;overflow-y:auto}
+.user-pick label{display:flex;align-items:center;gap:0.35rem;font-weight:400;font-size:0.86rem;cursor:pointer}
+.user-pick input{width:auto}
 .modal{background:white;border-radius:12px;padding:1.75rem;width:90%;max-width:480px;max-height:85vh;overflow-y:auto}
 .modal h3{margin-bottom:1rem;color:#1a3a5c;font-size:1.1rem}
 .form-group{margin-bottom:0.9rem}
@@ -189,6 +200,7 @@ tr:hover td{background:#fafbfc}
 <nav>
   <button class="active" onclick="showTab('import')">Import</button>
   <button id="nav-notif-btn" onclick="showTab('notifications')">Notifications <span id="notif-count"></span></button>
+  <button id="nav-msg-btn" onclick="showTab('messages')">Messages <span id="msg-count"></span></button>
   <button onclick="showTab('members')">Members <span id="members-count"></span></button>
   <button onclick="showTab('households')">Households <span id="households-count"></span></button>
   <button id="nav-brothers-btn" onclick="showTab('brothers')">Brothers <span id="brothers-count"></span></button>
@@ -227,6 +239,29 @@ tr:hover td{background:#fafbfc}
       member follows their household. Your own changes aren't listed.</p>
     <div id="follow-chips" style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:0.8rem"></div>
     <div id="follow-feed"></div>
+  </div>
+</div>
+
+<!-- MESSAGES TAB -->
+<div id="tab-messages" class="tab-content">
+  <div class="alert alert-info">
+    <strong>Private.</strong> A conversation can only be read by the people in it, and a restricted note only by the people its author
+    picked — the database itself refuses everyone else, including other users of this tool. It isn't end-to-end encrypted: the site
+    admin could reach it through the Firebase console. Some matters (worthiness, abuse and the like) belong in person with the bishop,
+    not in writing here.
+  </div>
+  <div class="card">
+    <div id="msg-view"></div>
+  </div>
+  <div class="card">
+    <div class="flex-between">
+      <h2 style="margin:0">🔒 Restricted notes you can see</h2>
+      <span id="restricted-summary" style="font-size:0.82rem;color:#888"></span>
+    </div>
+    <p style="font-size:0.82rem;color:#888;margin:0.3rem 0 0.9rem">Notes on a household, member or Covenant Path Progress person that only
+      the people the author picked can see. Add one from that person's <strong>Notes</strong> window. Only the author can edit, change who
+      can see it, or delete it.</p>
+    <div id="restricted-list"></div>
   </div>
 </div>
 
@@ -1305,6 +1340,7 @@ async function resolveAuthState() {
   if (!user) {
     _currentUserId = null; _currentUserEmail = null; _currentUserName = null;
     _currentUserIsAdmin = false;
+    stopPrivateListeners();
     _currentUserRole = 'council';
     applyAccessVisibility();
     document.getElementById('auth-loading').style.display = 'none';
@@ -1363,12 +1399,14 @@ async function resolveAuthState() {
   _currentUserRole = profile.role === 'eq' ? 'eq' : 'council';
   _notifSeenAt = Date.parse(profile.notifSeenAt) || 0;
   applyFollowState(profile);
+  applyPrivateSeenState(profile);
   applyAccessVisibility();
   // A council member landing on a tab they can't use (e.g. the page was left
   // on Proposed before their role changed) gets sent back to Import.
   if (!hasFullAccess() && ['brothers','current','propose'].includes(currentTabName())) showTab('import');
   await loadAllData();
   registerSelfInDirectory();
+  startPrivateListeners();
   updateMovesNavBadge();
   updateNotifBadges();
   listenForPushInApp();
@@ -1417,7 +1455,7 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   // Order must match the nav buttons in the DOM — the active-button lookup
   // below is by index, so inserting a tab means inserting it here too.
-  const tabs = ['import','notifications','members','households','brothers','current','propose','council','moves','admin'];
+  const tabs = ['import','notifications','messages','members','households','brothers','current','propose','council','moves','admin'];
   document.querySelectorAll('nav button')[tabs.indexOf(name)].classList.add('active');
   if (name === 'members')    renderMembers();
   if (name === 'households') renderHouseholds();
@@ -1427,6 +1465,7 @@ function showTab(name) {
   if (name === 'council')    renderCouncil();
   if (name === 'moves')      renderMoves();
   if (name === 'notifications') { renderNotifications(); markNotificationsSeen(); }
+  if (name === 'messages')   { renderMessagesTab(); markRestrictedSeen(); }
   if (name === 'admin')      renderAdminPanel();
 }
 
@@ -3352,6 +3391,7 @@ function openNotesModal(type, id, groupKey, field) {
   document.getElementById('note-text').value = '';
   document.getElementById('note-error').textContent = '';
   renderNotesList();
+  renderRestrictedInModal();
   document.getElementById('notes-modal').classList.add('open');
 }
 
@@ -4915,7 +4955,8 @@ function updateNotifBadges() {
     el.style.cssText = n ? 'background:#dc3545;color:#fff;border-radius:10px;padding:0.15rem 0.5rem;font-size:0.75rem;margin-left:4px' : '';
   }
   try {
-    if ('setAppBadge' in navigator) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); }
+    const all = n + msgUnreadCount();
+    if ('setAppBadge' in navigator) { all ? navigator.setAppBadge(all) : navigator.clearAppBadge(); }
   } catch (e) { /* unsupported or not installed — the nav count still shows */ }
 }
 
@@ -5068,7 +5109,10 @@ function listenForPushInApp() {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', e => {
     if (e.data?.type === 'open-notifications') refreshFromCloud().then(() => showTab('notifications'));
-    if (e.data?.type === 'open-tab') refreshFromCloud().then(() => showTab(e.data.tab === 'admin' ? 'admin' : 'notifications'));
+    if (e.data?.type === 'open-tab') refreshFromCloud().then(() => {
+      const t = String(e.data.tab || '');
+      if (/^(tab|open)=/.test(t)) goToLink('#' + t); else showTab(t === 'admin' ? 'admin' : 'notifications');
+    });
   });
 }
 
@@ -5245,6 +5289,401 @@ function goToLink(hash) {
   if (tabFor) showTab(tabFor);
   if (!getNotesTarget({ type, id, groupKey })) { alert('That item is no longer in the tool — it may have been removed.'); return; }
   openNotesModal(type, id, groupKey, field);
+}
+
+// ── Messages (direct messages) and restricted notes ─────────────
+// Neither lives in the shared ward document: every approved user can read
+// that whole document, so anything private has to be stored where
+// firestore.rules can limit it to the people involved.
+//   threads/{id}            { participants, names, createdBy, createdAt, lastAt, lastBy, lastByName }
+//   threads/{id}/messages   { authorId, authorName, text, createdAt }
+//   privateNotes/{id}       { authorId, authorName, viewers, viewerNames, sharedAt, target, targetKey,
+//                             targetLabel, text, createdAt, updatedAt }
+// Both are read live (onSnapshot), so a reply shows up without ↻ Refresh.
+// Read state lives on the user's own profile: threadSeen.{threadId} and
+// restrictedSeenAt. Push notifications (functions/) name only the sender.
+let _threads = [], _restricted = [];
+let _threadsUnsub = null, _restrictedUnsub = null, _msgUnsub = null;
+let _openThreadId = null, _openMsgs = [];
+let _threadSeen = {}, _restrictedSeenAt = 0;
+let _msgPeopleMode = 'new';          // 'new' | 'add'
+
+function applyPrivateSeenState(profile) {
+  _threadSeen = (profile && typeof profile.threadSeen === 'object' && profile.threadSeen) || {};
+  _restrictedSeenAt = Date.parse(profile?.restrictedSeenAt) || 0;
+}
+
+function startPrivateListeners() {
+  stopPrivateListeners();
+  if (!_currentUserId) return;
+  const fail = what => e => console.warn(`Could not load ${what}:`, e?.message);
+  _threadsUnsub = db.collection('threads').where('participants', 'array-contains', _currentUserId).onSnapshot(snap => {
+    _threads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (_openThreadId && currentTabName() === 'messages' && !document.hidden) markThreadSeen(_openThreadId);
+    if (currentTabName() === 'messages') renderMessagesTab();
+    updateMsgBadge();
+  }, fail('messages'));
+  _restrictedUnsub = db.collection('privateNotes').where('viewers', 'array-contains', _currentUserId).onSnapshot(snap => {
+    _restricted = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (currentTabName() === 'messages') { renderRestrictedList(); markRestrictedSeen(); }
+    if (document.getElementById('notes-modal').classList.contains('open')) renderRestrictedInModal();
+    updateMsgBadge();
+  }, fail('restricted notes'));
+}
+
+function stopPrivateListeners() {
+  [_threadsUnsub, _restrictedUnsub, _msgUnsub].forEach(u => { try { u && u(); } catch (e) {} });
+  _threadsUnsub = _restrictedUnsub = _msgUnsub = null;
+  _threads = []; _restricted = []; _openThreadId = null; _openMsgs = [];
+}
+
+function usersByName() {
+  return [...(S.users || [])].filter(u => u && u.uid).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+}
+function userName(uid, fallbacks) {
+  return (S.users || []).find(u => u.uid === uid)?.name || (fallbacks && fallbacks[uid]) || 'Unknown';
+}
+
+function threadIsUnread(t) {
+  return !!t.lastBy && t.lastBy !== _currentUserId && (Date.parse(t.lastAt) || 0) > (Date.parse(_threadSeen[t.id]) || 0);
+}
+function restrictedIsUnread(n) {
+  return n.authorId !== _currentUserId && (Date.parse(n.sharedAt?.[_currentUserId] || n.createdAt) || 0) > _restrictedSeenAt;
+}
+function msgUnreadCount() {
+  if (!_currentUserId) return 0;
+  return _threads.filter(threadIsUnread).length + _restricted.filter(restrictedIsUnread).length;
+}
+function updateMsgBadge() {
+  const n = msgUnreadCount();
+  const el = document.getElementById('msg-count');
+  if (el) {
+    el.textContent = n || '';
+    el.style.cssText = n ? 'background:#dc3545;color:#fff;border-radius:10px;padding:0.15rem 0.5rem;font-size:0.75rem;margin-left:4px' : '';
+  }
+  updateNotifBadges();
+}
+
+async function markThreadSeen(id) {
+  const t = _threads.find(x => x.id === id);
+  if (!t || !threadIsUnread(t)) return;
+  const iso = t.lastAt || new Date().toISOString();
+  _threadSeen = { ..._threadSeen, [id]: iso };
+  updateMsgBadge();
+  try { await db.collection('profiles').doc(_currentUserId).update({ ['threadSeen.' + id]: iso }); }
+  catch (e) { console.warn('Could not save read state:', e?.message); }
+}
+
+async function markRestrictedSeen() {
+  if (!_currentUserId || !_restricted.some(restrictedIsUnread)) return;
+  // At least the newest share time, so a note from a phone whose clock runs
+  // a little ahead doesn't stay "new" after it's been seen.
+  _restrictedSeenAt = Math.max(Date.now(), ..._restricted.map(n => Date.parse(n.sharedAt?.[_currentUserId] || n.createdAt) || 0));
+  updateMsgBadge();
+  try { await db.collection('profiles').doc(_currentUserId).update({ restrictedSeenAt: new Date(_restrictedSeenAt).toISOString() }); }
+  catch (e) { console.warn('Could not save read state:', e?.message); }
+}
+
+function threadTitle(t) {
+  const others = (t.participants || []).filter(u => u !== _currentUserId).map(u => userName(u, t.names));
+  return others.length ? others.join(', ') : 'Just you';
+}
+
+// ── Messages tab ──
+function renderMessagesTab() {
+  if (_openThreadId && !_threads.some(t => t.id === _openThreadId)) closeThread();
+  if (_openThreadId) renderThreadView(); else renderThreadList();
+  renderRestrictedList();
+}
+
+function renderThreadList() {
+  const host = document.getElementById('msg-view');
+  if (!host) return;
+  const list = [..._threads].sort((a, b) => String(b.lastAt || b.createdAt || '').localeCompare(String(a.lastAt || a.createdAt || '')));
+  host.innerHTML = `
+    <div class="flex-between">
+      <h2 style="margin:0">Conversations</h2>
+      <button class="btn btn-primary btn-sm" onclick="openMsgPeople('new')">+ New conversation</button>
+    </div>
+    <p style="font-size:0.82rem;color:#888;margin:0.3rem 0 0.9rem">Direct messages with one or more people using this tool. You can delete
+      messages you sent; leaving a conversation removes it from your list.</p>
+    ${list.length ? list.map(t => `
+      <div class="msg-row ${threadIsUnread(t) ? 'unread' : ''}" onclick="openThread('${t.id}')">
+        <div style="min-width:0">
+          <div style="font-weight:600;color:#1a3a5c">${threadIsUnread(t) ? '● ' : ''}${esc(threadTitle(t))}</div>
+          <div style="font-size:0.76rem;color:#888">${t.lastAt ? `Last message from ${esc(t.lastBy === _currentUserId ? 'you' : (t.lastByName || userName(t.lastBy, t.names)))} · ${formatNoteDate(t.lastAt)}` : 'No messages yet'}</div>
+        </div>
+        <span style="color:#bbb">›</span>
+      </div>`).join('')
+    : '<div class="empty-state" style="padding:1.2rem"><p>No conversations yet.</p></div>'}`;
+}
+
+function openThread(id) {
+  if (_msgUnsub) { try { _msgUnsub(); } catch (e) {} }
+  _openThreadId = id; _openMsgs = [];
+  renderThreadView();
+  _msgUnsub = db.collection('threads').doc(id).collection('messages').orderBy('createdAt').onSnapshot(snap => {
+    _openMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (_openThreadId === id) renderThreadView();
+  }, e => console.warn('Could not load messages:', e?.message));
+  markThreadSeen(id);
+}
+
+function closeThread() {
+  if (_msgUnsub) { try { _msgUnsub(); } catch (e) {} }
+  _msgUnsub = null; _openThreadId = null; _openMsgs = [];
+  renderThreadList();
+}
+
+function renderThreadView() {
+  const host = document.getElementById('msg-view');
+  const t = _threads.find(x => x.id === _openThreadId);
+  if (!host || !t) return;
+  const draft = document.getElementById('msg-text')?.value || '';
+  host.innerHTML = `
+    <div class="flex-between" style="flex-wrap:wrap;gap:0.4rem">
+      <button class="btn btn-secondary btn-sm" onclick="closeThread()">← All conversations</button>
+      <span style="display:flex;gap:0.4rem">
+        <button class="btn btn-secondary btn-sm" onclick="openMsgPeople('add')">+ Add people</button>
+        <button class="btn btn-danger btn-sm" onclick="leaveThread()">Leave</button>
+      </span>
+    </div>
+    <h2 style="margin:0.2rem 0 0.1rem">${esc(threadTitle(t))}</h2>
+    <div style="font-size:0.76rem;color:#888;margin-bottom:0.6rem">With ${(t.participants || []).map(u => u === _currentUserId ? 'you' : esc(userName(u, t.names))).join(', ')}</div>
+    <div id="msg-scroll" style="max-height:55vh;overflow-y:auto;border:1px solid #e0e6ed;border-radius:8px;padding:0.6rem;background:#fcfdfe">
+      ${_openMsgs.length ? _openMsgs.map(m => {
+        const mine = m.authorId === _currentUserId;
+        return `<div style="display:flex;flex-direction:column;align-items:${mine ? 'flex-end' : 'flex-start'}">
+          <div class="msg-bubble ${mine ? 'mine' : 'theirs'}">${esc(m.text)}</div>
+          <div class="msg-meta">${mine ? 'You' : esc(m.authorName || userName(m.authorId))} · ${formatNoteDate(m.createdAt)}
+            ${mine ? ` · <a href="#" onclick="deleteMessage('${m.id}');return false" style="color:#c66">delete</a>` : ''}</div>
+        </div>`;
+      }).join('') : '<div style="color:#aaa;font-size:0.85rem;padding:0.4rem">No messages yet — say hello.</div>'}
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:0.6rem;align-items:flex-end">
+      <textarea id="msg-text" rows="2" placeholder="Write a message…" style="flex:1;padding:0.45rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem;resize:vertical;font-family:inherit"
+        onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){sendMessage();return false}"></textarea>
+      <button class="btn btn-primary" id="msg-send" onclick="sendMessage()">Send</button>
+    </div>
+    <div id="msg-error" style="font-size:0.82rem;color:#dc3545;min-height:1.1em;margin-top:0.25rem"></div>`;
+  const ta = document.getElementById('msg-text'); if (ta) ta.value = draft;
+  const sc = document.getElementById('msg-scroll'); if (sc) sc.scrollTop = sc.scrollHeight;
+}
+
+async function sendMessage() {
+  const ta = document.getElementById('msg-text');
+  const err = document.getElementById('msg-error');
+  const text = (ta?.value || '').trim();
+  if (!text || !_openThreadId) return;
+  if (text.length > 5000) { err.textContent = 'That message is too long (5,000 characters at most).'; return; }
+  const btn = document.getElementById('msg-send'); if (btn) btn.disabled = true;
+  const now = new Date().toISOString();
+  const tRef = db.collection('threads').doc(_openThreadId);
+  const batch = db.batch();
+  batch.set(tRef.collection('messages').doc(), { authorId: _currentUserId, authorName: _currentUserName || _currentUserEmail || 'Unknown', text, createdAt: now });
+  batch.update(tRef, { lastAt: now, lastBy: _currentUserId, lastByName: _currentUserName || '', ['names.' + _currentUserId]: _currentUserName || '' });
+  try {
+    await batch.commit();
+    ta.value = ''; err.textContent = '';
+    _threadSeen = { ..._threadSeen, [_openThreadId]: now };
+  } catch (e) {
+    err.textContent = 'Not sent: ' + (e?.message || 'unknown error');
+  } finally { if (btn) btn.disabled = false; }
+}
+
+async function deleteMessage(id) {
+  if (!_openThreadId || !confirm('Delete this message for everyone in the conversation?')) return;
+  try { await db.collection('threads').doc(_openThreadId).collection('messages').doc(id).delete(); }
+  catch (e) { alert('Could not delete: ' + (e?.message || 'unknown error')); }
+}
+
+async function leaveThread() {
+  const t = _threads.find(x => x.id === _openThreadId);
+  if (!t || !confirm(`Leave the conversation with ${threadTitle(t)}?\n\nIt disappears from your list. Messages you sent stay for the others unless you delete them first.`)) return;
+  try {
+    await db.collection('threads').doc(t.id).update({ participants: firebase.firestore.FieldValue.arrayRemove(_currentUserId) });
+    closeThread();
+  } catch (e) { alert('Could not leave: ' + (e?.message || 'unknown error')); }
+}
+
+// New conversation / add people
+let _msgPicked = new Set();
+function openMsgPeople(mode) {
+  _msgPeopleMode = mode;
+  _msgPicked = new Set();
+  const t = _threads.find(x => x.id === _openThreadId);
+  document.getElementById('msg-people-title').textContent = mode === 'add' ? 'Add people' : 'New conversation';
+  document.getElementById('msg-people-ok').textContent = mode === 'add' ? 'Add' : 'Start';
+  document.getElementById('msg-people-hint').textContent = mode === 'add'
+    ? 'People you add can read the whole conversation, including earlier messages.'
+    : 'Pick one person for a direct message, or several for a small group. Only people who have signed in to the tool are listed.';
+  document.getElementById('msg-people-search').value = '';
+  document.getElementById('msg-people-error').textContent = '';
+  renderMsgPeoplePick();
+  document.getElementById('msg-people-modal').classList.add('open');
+}
+
+function renderMsgPeoplePick() {
+  const q = norm(document.getElementById('msg-people-search').value);
+  const t = _msgPeopleMode === 'add' ? _threads.find(x => x.id === _openThreadId) : null;
+  const skip = new Set([_currentUserId, ...((t && t.participants) || [])]);
+  const users = usersByName().filter(u => !skip.has(u.uid) && (!q || norm(u.name).includes(q)));
+  document.getElementById('msg-people-pick').innerHTML = users.length ? users.map(u =>
+    `<label><input type="checkbox" ${_msgPicked.has(u.uid) ? 'checked' : ''} onchange="this.checked?_msgPicked.add('${u.uid}'):_msgPicked.delete('${u.uid}')"> ${esc(u.name)}</label>`).join('')
+    : '<span style="color:#aaa;font-size:0.85rem">No one to add.</span>';
+}
+
+async function confirmMsgPeople() {
+  const err = document.getElementById('msg-people-error');
+  const picked = [..._msgPicked];
+  if (!picked.length) { err.textContent = 'Pick at least one person.'; return; }
+  const names = {}; picked.forEach(u => { names[u] = userName(u); });
+  names[_currentUserId] = _currentUserName || '';
+  try {
+    if (_msgPeopleMode === 'add') {
+      const t = _threads.find(x => x.id === _openThreadId);
+      if (!t) return;
+      if ((t.participants || []).length + picked.length > 20) { err.textContent = 'A conversation can have at most 20 people.'; return; }
+      const upd = { participants: firebase.firestore.FieldValue.arrayUnion(...picked) };
+      picked.forEach(u => { upd['names.' + u] = names[u]; });
+      await db.collection('threads').doc(t.id).update(upd);
+      closeModal('msg-people-modal');
+      return;
+    }
+    // Reopen an existing conversation with exactly these people rather than starting a second one.
+    const want = [_currentUserId, ...picked].sort().join('|');
+    const same = _threads.find(t => [...(t.participants || [])].sort().join('|') === want);
+    if (same) { closeModal('msg-people-modal'); openThread(same.id); return; }
+    if (picked.length + 1 > 20) { err.textContent = 'A conversation can have at most 20 people.'; return; }
+    const now = new Date().toISOString();
+    const ref = db.collection('threads').doc();
+    await ref.set({ participants: [_currentUserId, ...picked], names, createdBy: _currentUserId, createdAt: now });
+    closeModal('msg-people-modal');
+    if (!_threads.some(t => t.id === ref.id)) _threads.push({ id: ref.id, participants: [_currentUserId, ...picked], names, createdBy: _currentUserId, createdAt: now });
+    openThread(ref.id);
+  } catch (e) {
+    err.textContent = 'Could not save: ' + (e?.message || 'unknown error');
+  }
+}
+
+// ── Restricted notes ──
+// Attached to the same things the Notes window opens on: a household, a
+// member, a companionship, or a group entry (Covenant Path Progress, Move Ins).
+function restrictedTargetKey(ctx) {
+  return ctx ? [ctx.type, ctx.id, ctx.type === 'group' ? ctx.groupKey : ''].join(':') : '';
+}
+function restrictedLink(n) {
+  const t = n.target || {};
+  return t.type === 'group' ? `#open=group,${encodeURIComponent(t.id)},${encodeURIComponent(t.groupKey || '')},notes`
+                            : `#open=${t.type},${encodeURIComponent(t.id)}`;
+}
+function restrictedNoteHTML(n, inModal) {
+  const mine = n.authorId === _currentUserId;
+  const who = (n.viewers || []).map(u => u === _currentUserId ? 'you' : esc(userName(u, n.viewerNames))).join(', ');
+  return `<div style="border:1px solid #f0d9a8;background:#fffbf2;border-radius:6px;padding:0.6rem 0.75rem;margin-bottom:0.55rem">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;margin-bottom:0.3rem">
+      <div style="font-size:0.78rem;color:#888">🔒 <strong style="color:#1a3a5c">${esc(mine ? 'You' : n.authorName || userName(n.authorId))}</strong>
+        &nbsp;·&nbsp; ${formatNoteDate(n.createdAt)}${n.updatedAt && n.updatedAt !== n.createdAt ? ' · edited' : ''}
+        ${inModal ? '' : `<div style="margin-top:0.1rem">About <strong>${esc(n.targetLabel || '')}</strong></div>`}</div>
+      <span style="white-space:nowrap">
+        ${inModal ? '' : `<button class="btn btn-secondary btn-sm" onclick="goToLink('${restrictedLink(n)}')">Open</button>`}
+        ${mine ? `<button class="btn btn-secondary btn-sm" onclick="openRestrictedModal('${n.id}')">Edit</button>
+          <button style="background:none;border:none;color:#bbb;cursor:pointer;font-size:0.85rem;padding:0.1rem 0.35rem" title="Delete" onclick="deleteRestrictedNote('${n.id}')">✕</button>` : ''}
+      </span>
+    </div>
+    <div style="font-size:0.87rem;color:#333;white-space:pre-wrap">${esc(n.text)}</div>
+    <div style="font-size:0.72rem;color:#a08850;margin-top:0.35rem">Visible to ${who}</div>
+  </div>`;
+}
+
+function renderRestrictedInModal() {
+  const host = document.getElementById('restricted-wrap');
+  if (!host) return;
+  if (!_notesCtx || notesField() !== 'notes') { host.innerHTML = ''; return; }
+  const key = restrictedTargetKey(_notesCtx);
+  const notes = _restricted.filter(n => n.targetKey === key).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  host.innerHTML = `<div style="margin-top:0.6rem">
+    <div class="flex-between" style="margin-bottom:0.4rem">
+      <div style="font-size:0.78rem;font-weight:600;color:#a08850;text-transform:uppercase;letter-spacing:0.05em">🔒 Restricted notes${notes.length ? ` (${notes.length})` : ''}</div>
+      <button class="btn btn-secondary btn-sm" onclick="openRestrictedModal(null)">+ Restricted note</button>
+    </div>
+    ${notes.map(n => restrictedNoteHTML(n, true)).join('') || '<div style="font-size:0.78rem;color:#aaa">Only people you pick can see a restricted note.</div>'}
+  </div>`;
+}
+
+function renderRestrictedList() {
+  const host = document.getElementById('restricted-list');
+  if (!host) return;
+  const list = [..._restricted].sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
+  const unread = list.filter(restrictedIsUnread).length;
+  document.getElementById('restricted-summary').textContent = list.length ? `${unread ? unread + ' new · ' : ''}${list.length} total` : '';
+  host.innerHTML = list.length ? list.map(n => restrictedNoteHTML(n, false)).join('')
+    : '<div class="empty-state" style="padding:1.2rem"><p>None yet.</p></div>';
+}
+
+let _restrictedEditId = null, _restrictedPicked = new Set();
+function openRestrictedModal(id) {
+  const n = id ? _restricted.find(x => x.id === id) : null;
+  if (id && (!n || n.authorId !== _currentUserId)) return;
+  if (!n && !_notesCtx) return;
+  _restrictedEditId = id;
+  _restrictedPicked = new Set(n ? (n.viewers || []).filter(u => u !== _currentUserId) : []);
+  let about = n ? n.targetLabel : '';
+  if (!n) {
+    const target = getNotesTarget(_notesCtx);
+    about = _notesCtx.type === 'group' ? groupEntryName(target)
+      : (_notesCtx.type === 'current' || _notesCtx.type === 'proposed') ? (target ? target.m1Name + (target.m2Name ? ' + ' + target.m2Name : '') : '')
+      : target?.name || '';
+  }
+  document.getElementById('restricted-modal-title').textContent = n ? '🔒 Edit restricted note' : '🔒 New restricted note';
+  document.getElementById('restricted-modal-about').textContent = about ? 'About ' + about : '';
+  document.getElementById('restricted-modal').dataset.about = about || '';
+  document.getElementById('restricted-text').value = n ? n.text : '';
+  document.getElementById('restricted-error').textContent = '';
+  document.getElementById('restricted-pick').innerHTML = usersByName().filter(u => u.uid !== _currentUserId).map(u =>
+    `<label><input type="checkbox" ${_restrictedPicked.has(u.uid) ? 'checked' : ''} onchange="this.checked?_restrictedPicked.add('${u.uid}'):_restrictedPicked.delete('${u.uid}')"> ${esc(u.name)}</label>`).join('')
+    || '<span style="color:#aaa;font-size:0.85rem">No one else has signed in yet.</span>';
+  document.getElementById('restricted-modal').classList.add('open');
+  document.getElementById('restricted-text').focus();
+}
+
+async function saveRestrictedNote() {
+  const err = document.getElementById('restricted-error');
+  const text = document.getElementById('restricted-text').value.trim();
+  if (!text) { err.textContent = 'Write the note first.'; return; }
+  if (text.length > 5000) { err.textContent = 'That note is too long (5,000 characters at most).'; return; }
+  const viewers = [_currentUserId, ..._restrictedPicked];
+  if (viewers.length < 2 && !confirm('No one else is ticked, so only you will be able to see this note. Save anyway?')) return;
+  const viewerNames = {}; viewers.forEach(u => { viewerNames[u] = u === _currentUserId ? (_currentUserName || '') : userName(u); });
+  const now = new Date().toISOString();
+  const btn = document.getElementById('restricted-save'); btn.disabled = true;
+  try {
+    if (_restrictedEditId) {
+      const n = _restricted.find(x => x.id === _restrictedEditId);
+      const sharedAt = { ...(n.sharedAt || {}) };
+      viewers.forEach(u => { if (!(n.viewers || []).includes(u)) sharedAt[u] = now; });
+      Object.keys(sharedAt).forEach(u => { if (!viewers.includes(u)) delete sharedAt[u]; });
+      await db.collection('privateNotes').doc(n.id).update({ text, viewers, viewerNames, sharedAt, updatedAt: now, authorId: _currentUserId });
+    } else {
+      const sharedAt = {}; viewers.forEach(u => { sharedAt[u] = now; });
+      await db.collection('privateNotes').add({
+        authorId: _currentUserId, authorName: _currentUserName || _currentUserEmail || 'Unknown',
+        viewers, viewerNames, sharedAt,
+        target: { type: _notesCtx.type, id: _notesCtx.id, groupKey: _notesCtx.type === 'group' ? (_notesCtx.groupKey || '') : '' },
+        targetKey: restrictedTargetKey(_notesCtx), targetLabel: document.getElementById('restricted-modal').dataset.about || '',
+        text, createdAt: now, updatedAt: now,
+      });
+    }
+    closeModal('restricted-modal');
+  } catch (e) {
+    err.textContent = 'Could not save: ' + (e?.message || 'unknown error');
+  } finally { btn.disabled = false; }
+}
+
+async function deleteRestrictedNote(id) {
+  if (!confirm('Delete this restricted note for everyone who can see it?')) return;
+  try { await db.collection('privateNotes').doc(id).delete(); }
+  catch (e) { alert('Could not delete: ' + (e?.message || 'unknown error')); }
 }
 
 // ── Covenant Path Progress: import from LCR's progress-record pages ─────────
@@ -5784,6 +6223,7 @@ function deleteHousehold(id) {
   <div class="modal" style="max-width:520px">
     <h3 id="notes-modal-title">Notes</h3>
     <div id="notes-list" style="max-height:280px;overflow-y:auto"></div>
+    <div id="restricted-wrap"></div>
     <div style="border-top:1px solid #e0e6ed;margin-top:0.75rem;padding-top:0.85rem">
       <div id="notes-add-heading" style="font-size:0.78rem;font-weight:600;color:#888;margin-bottom:0.65rem;text-transform:uppercase;letter-spacing:0.05em">Add a Note</div>
       <div class="form-group">
@@ -5810,6 +6250,42 @@ function deleteHousehold(id) {
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('notes-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- New conversation / add people -->
+<div class="modal-overlay" id="msg-people-modal">
+  <div class="modal">
+    <h3 id="msg-people-title">New conversation</h3>
+    <div class="form-group"><input type="text" id="msg-people-search" placeholder="Search names…" oninput="renderMsgPeoplePick()"></div>
+    <div id="msg-people-pick" class="user-pick"></div>
+    <div style="font-size:0.75rem;color:#888;margin-top:0.4rem" id="msg-people-hint"></div>
+    <div id="msg-people-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em;margin-top:0.3rem"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('msg-people-modal')">Cancel</button>
+      <button class="btn btn-primary" id="msg-people-ok" onclick="confirmMsgPeople()">Start</button>
+    </div>
+  </div>
+</div>
+
+<!-- Restricted note: add / edit -->
+<div class="modal-overlay stacked" id="restricted-modal">
+  <div class="modal">
+    <h3 id="restricted-modal-title">🔒 Restricted note</h3>
+    <div style="font-size:0.82rem;color:#888;margin:-0.5rem 0 0.8rem" id="restricted-modal-about"></div>
+    <div class="form-group">
+      <label>Note</label>
+      <textarea id="restricted-text" rows="4" style="width:100%;padding:0.45rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem;resize:vertical;font-family:inherit"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Who can see it <span style="font-weight:400;color:#888">(you always can)</span></label>
+      <div id="restricted-pick" class="user-pick"></div>
+    </div>
+    <div id="restricted-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('restricted-modal')">Cancel</button>
+      <button class="btn btn-primary" id="restricted-save" onclick="saveRestrictedNote()">Save</button>
     </div>
   </div>
 </div>

@@ -5,13 +5,17 @@
 // this in and Publish (or `firebase deploy --only firestore:rules` if
 // you're using the CLI).
 //
-// Model: two collections.
+// Model: four collections.
 //   - profiles/{uid}   one doc per user, gates access (mirrors the old
 //                       Supabase `profiles` table + admin-approval flow).
 //   - wardData/shared  ONE doc holding the entire ward dataset as JSON
 //                       (members/households/current/proposed/activityLog)
 //                       — the "single shared blob" design, replacing the
 //                       old per-table Postgres schema.
+//   - threads/{id} (+ messages)  direct messages, readable only by the
+//                       people in each conversation.
+//   - privateNotes/{id} restricted notes, readable only by the viewers the
+//                       author picked.
 //
 // There's no Cloud Functions trigger here (unlike the old Postgres
 // handle_new_user()) — the client creates its own profile doc right
@@ -79,6 +83,69 @@ service cloud.firestore {
     // of per-row access on five tables.
     match /wardData/shared {
       allow read, write: if isApproved() && emailVerified();
+    }
+
+    function canUse() { return isApproved() && emailVerified(); }
+
+    // ── Direct messages ──────────────────────────────────────────
+    // threads/{id}: { participants: [uid], names, createdBy, createdAt, lastAt, lastBy, lastByName }
+    // Only the people in a conversation can see it or its messages — this
+    // is the actual privacy, not just what the app chooses to show.
+    match /threads/{threadId} {
+      allow read: if canUse() && request.auth.uid in resource.data.participants;
+      allow create: if canUse()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants.size() >= 2
+        && request.resource.data.participants.size() <= 20;
+      // A participant may add people and may leave (remove only themselves);
+      // nobody can remove someone else or change who started it.
+      allow update: if canUse()
+        && request.auth.uid in resource.data.participants
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.participants.hasAll(resource.data.participants.removeAll([request.auth.uid]))
+        && request.resource.data.participants.size() <= 20;
+      allow delete: if false;
+
+      // messages: { authorId, authorName, text, createdAt }. Readable and
+      // writable only by current participants; you can delete only your own;
+      // nothing is ever edited.
+      match /messages/{msgId} {
+        function inThread() {
+          return request.auth.uid in get(/databases/$(database)/documents/threads/$(threadId)).data.participants;
+        }
+        allow read: if canUse() && inThread();
+        allow create: if canUse() && inThread()
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 5000;
+        allow delete: if canUse() && resource.data.authorId == request.auth.uid;
+        allow update: if false;
+      }
+    }
+
+    // ── Restricted notes ─────────────────────────────────────────
+    // privateNotes/{id}: { authorId, authorName, viewers: [uid], viewerNames,
+    //   sharedAt, target, targetKey, targetLabel, text, createdAt, updatedAt }
+    // Visible only to `viewers` (which always includes the author). Only the
+    // author can change the text or who can see it, or delete it.
+    match /privateNotes/{noteId} {
+      allow read: if canUse() && request.auth.uid in resource.data.viewers;
+      allow create: if canUse()
+        && request.resource.data.authorId == request.auth.uid
+        && request.auth.uid in request.resource.data.viewers
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 5000;
+      allow update: if canUse()
+        && resource.data.authorId == request.auth.uid
+        && request.resource.data.authorId == request.auth.uid
+        && request.auth.uid in request.resource.data.viewers
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 5000;
+      allow delete: if canUse() && resource.data.authorId == request.auth.uid;
     }
   }
 }

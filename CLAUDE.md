@@ -313,6 +313,34 @@ users print the page to PDF (laptop and Android Chrome tested for New Members: s
 - Keep `householdChanges()` in step with where the app stores things, the same way
   `forEachNote()` must match `allTaggedNotes()`.
 
+### Messages tab: direct messages and restricted notes
+Private material can't go in `wardData/shared` (every approved user can read that whole document),
+so both live in their own collections, locked down by `firestore.rules` — the database refuses
+non-members, not just the UI. Not end-to-end encrypted: the project owner can read them in the
+Firebase console (the tab says so). Read live with `onSnapshot` (`startPrivateListeners()` after
+sign-in, `stopPrivateListeners()` on sign-out).
+- **DMs**: `threads/{id}` `{ participants (2–20 uids), names, createdBy, createdAt, lastAt, lastBy,
+  lastByName }` + `threads/{id}/messages/{id}` `{ authorId, authorName, text (≤5000), createdAt }`.
+  Rules: only participants read; a participant may add people or remove only themselves (Leave);
+  messages are never edited, only deleted by their author; threads are never deleted. Sending is a
+  batch (message + thread `lastAt/lastBy`). Starting a conversation with exactly the same people
+  reopens the existing one. New members of a conversation see its history (the modal says so).
+- **Restricted notes**: `privateNotes/{id}` `{ authorId, authorName, viewers (incl. author),
+  viewerNames, sharedAt {uid: iso}, target {type,id,groupKey}, targetKey "type:id:groupKey",
+  targetLabel, text, createdAt, updatedAt }`. Added from the Notes window of a household, member,
+  companionship or group entry (shown only for the `notes` field, not goals/next steps); also listed
+  on the Messages tab with Open. Only the author edits text/viewers or deletes. `sharedAt[uid]` is
+  set when someone is added, so a later share counts as new for them.
+- **Unread** (Messages nav count, and added to the app-icon badge): threads with `lastAt` after
+  `profiles/{uid}.threadSeen.{threadId}` from someone else, plus restricted notes shared after
+  `restrictedSeenAt` (set to max(now, newest share) when the tab opens, to tolerate clock skew).
+- **Push** (`functions/private.js`, tested in `private.test.js`): `notifyMessage` (new message →
+  other participants) and `notifyRestrictedNote` (create/update → newly added viewers). Text is
+  only "New message from X." / "X shared a restricted note with you." — never content. Link
+  `#tab=messages`; the app's `open-tab` handler now routes `tab=`/`open=` hashes via `goToLink()`.
+  `badgeCount()` = Notifications unread + Messages unread, used by every push.
+- `firebase.json` now includes `firestore.rules`, so `firebase deploy --only firestore:rules` works.
+
 ### Phone notifications (push) — Blaze + Cloud Function
 Set-up steps are in `NOTIFICATIONS_SETUP.md` (Blaze upgrade, budget alert, Web Push key,
 Firebase CLI, deploy).

@@ -4,6 +4,8 @@
 //  notifyFollowers      every save of wardData/shared: tell people following a household what
 //                       changed for it (written to their profile's `feed`, plus a push).
 //  notifyAccessRequest  a new profiles/{uid} with status 'pending' (a sign-up): tell the admins.
+//  notifyMessage        a new direct message: tell the other people in the conversation.
+//  notifyRestrictedNote a restricted note created or shared with more people: tell the new viewers.
 //
 // Device tokens live on profiles/{uid}.fcmTokens, written by the app when someone
 // turns on phone notifications. The Admin SDK used here is not bound by
@@ -18,6 +20,7 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
 const { newTags, unreadCount, messageFor, accessRequestMessage } = require('./tags');
 const { householdChanges, followMessage } = require('./follow');
+const { dmMessage, restrictedMessage, newViewers, threadsUnread, restrictedUnread } = require('./private');
 
 initializeApp();
 
@@ -36,6 +39,27 @@ function totalUnread(doc, uid, p) {
   const seen = Date.parse(p.notifSeenAt) || 0;
   const feedNew = (Array.isArray(p.feed) ? p.feed : []).filter(f => (Date.parse(f.ts) || 0) > seen).length;
   return unreadCount(doc, uid, p.notifSeenAt, name, p.clearedTags) + feedNew;
+}
+
+// Unread direct messages and restricted notes (the Messages tab). Read with the
+// Admin SDK, which firestore.rules don't bind; only counts leave this function.
+async function privateUnread(db, uid, p) {
+  try {
+    const [t, n] = await Promise.all([
+      db.collection('threads').where('participants', 'array-contains', uid).get(),
+      db.collection('privateNotes').where('viewers', 'array-contains', uid).get(),
+    ]);
+    return threadsUnread(t.docs.map(d => ({ id: d.id, ...d.data() })), uid, p.threadSeen)
+         + restrictedUnread(n.docs.map(d => d.data()), uid, p.restrictedSeenAt);
+  } catch (e) {
+    logger.warn('privateUnread failed', { uid, error: e.message });
+    return 0;
+  }
+}
+
+// The number on the app icon: Notifications tab + Messages tab.
+async function badgeCount(db, ward, uid, p) {
+  return totalUnread(ward || {}, uid, p) + await privateUnread(db, uid, p);
 }
 
 async function sendToProfile(ref, profile, data) {
@@ -72,7 +96,7 @@ exports.notifyTagged = onDocumentWritten({ document: 'wardData/shared', region: 
     if (p.status !== 'approved') continue;
     const r = await sendToProfile(ref, p, {
       title: 'Ministering', body: messageFor(tags), tag: 'ministering-tagged',
-      unread: String(totalUnread(after, uid, p)), link: `${APP}#notifications`,
+      unread: String(await badgeCount(db, after, uid, p)), link: `${APP}#notifications`,
     });
     logger.info('notifyTagged', { uid, tags: tags.length, ...r });
   }
@@ -119,7 +143,7 @@ exports.notifyFollowers = onDocumentWritten({ document: 'wardData/shared', regio
 
     const r = await sendToProfile(doc.ref, { ...fresh, feed }, {
       title: 'Ministering', body: followMessage(updater, events.length), tag: 'ministering-follow',
-      unread: String(totalUnread(after, uid, { ...fresh, feed })), link: `${APP}#notifications`,
+      unread: String(await badgeCount(db, after, uid, { ...fresh, feed })), link: `${APP}#notifications`,
     });
     logger.info('notifyFollowers', { uid, events: events.length, ...r });
   }
@@ -139,4 +163,41 @@ exports.notifyAccessRequest = onDocumentCreated({ document: 'profiles/{uid}', re
     });
     logger.info('notifyAccessRequest', { admin: doc.id, requester: event.params.uid, ...r });
   }
+});
+
+// Shared by both private triggers: push to each profile, with the icon badge.
+async function notifyUids(db, uids, data, label) {
+  if (!uids.length) return;
+  const ward = (await db.doc('wardData/shared').get()).data() || {};
+  for (const uid of uids) {
+    const ref = db.collection('profiles').doc(uid);
+    const snap = await ref.get();
+    if (!snap.exists) continue;
+    const p = snap.data();
+    if (p.status !== 'approved') continue;
+    const r = await sendToProfile(ref, p, { ...data, unread: String(await badgeCount(db, ward, uid, p)) });
+    logger.info(label, { uid, ...r });
+  }
+}
+
+exports.notifyMessage = onDocumentCreated({ document: 'threads/{threadId}/messages/{msgId}', region: REGION, maxInstances: 2 }, async (event) => {
+  const m = event.data?.data();
+  if (!m) return;
+  const db = getFirestore();
+  const t = await db.collection('threads').doc(event.params.threadId).get();
+  if (!t.exists) return;
+  const to = (t.data().participants || []).filter(uid => uid && uid !== m.authorId);
+  await notifyUids(db, to, {
+    title: 'Ministering', body: dmMessage(m.authorName), tag: 'ministering-dm', link: `${APP}#tab=messages`,
+  }, 'notifyMessage');
+});
+
+exports.notifyRestrictedNote = onDocumentWritten({ document: 'privateNotes/{noteId}', region: REGION, maxInstances: 2 }, async (event) => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null;
+  const after = event.data?.after?.exists ? event.data.after.data() : null;
+  if (!after) return;
+  const db = getFirestore();
+  await notifyUids(db, newViewers(before, after), {
+    title: 'Ministering', body: restrictedMessage(after.authorName), tag: 'ministering-restricted', link: `${APP}#tab=messages`,
+  }, 'notifyRestrictedNote');
 });
