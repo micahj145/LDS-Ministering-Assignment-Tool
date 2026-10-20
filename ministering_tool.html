@@ -384,7 +384,6 @@ tr:hover td{background:#fafbfc}
     <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
       <button class="btn btn-secondary btn-sm" onclick="clearData('members')">Clear Members</button>
       <button class="btn btn-secondary btn-sm" onclick="clearData('households')">Clear Households</button>
-      <button class="btn btn-secondary btn-sm" onclick="clearData('assignments')">Clear Assignments</button>
       <button class="btn btn-danger btn-sm" onclick="clearData('all')">Clear All Data</button>
     </div>
     <div style="margin-top:0.6rem;font-size:0.82rem;color:#888">
@@ -1580,12 +1579,14 @@ let _currentUserRole = 'council';
 // itself, and none of it is a data boundary: any approved user can still read
 // the whole ward document. See CLAUDE.md.
 // Everyone can see every tab now (ministering included). Changing assignment
-// lists is by role: EQ presidency the brother lists, RS presidency the sister
-// lists, the admin both. This is a convenience in the app, not a security
-// boundary — firestore.rules lets any approved user write the ward document.
+// lists is by role only: EQ presidency the brother lists, RS presidency the
+// sister lists. Being admin adds neither (the admin manages access, and can
+// change their own role on the Admin tab if ever needed). This is a
+// convenience in the app, not a security boundary — firestore.rules lets any
+// approved user write the ward document.
 function hasFullAccess() { return true; }
-function canEditEQ() { return _currentUserIsAdmin || _currentUserRole === 'eq'; }
-function canEditRS() { return _currentUserIsAdmin || _currentUserRole === 'rs'; }
+function canEditEQ() { return _currentUserRole === 'eq'; }
+function canEditRS() { return _currentUserRole === 'rs'; }
 const LISTS = {
   current:    { min: 'eq', tab: 'current',   label: 'Current Ministering Brother Assignments' },
   proposed:   { min: 'eq', tab: 'propose',   label: 'Draft Ministering Brother Assignments' },
@@ -3601,7 +3602,11 @@ async function clearData(type) {
   // changed) or who calls this from the console. It is still a client-side
   // check: firestore.rules is the only real boundary, and today those rules
   // let any approved user write the shared document.
-  if (!_currentUserIsAdmin) { alert('Only an admin can clear ward data.'); return; }
+  // Clearing Current Ministering Brother Assignments is the EQ presidency's
+  // call (the tab's Clear All button); everything else here is admin-only.
+  if (type === 'assignments' ? !canEditEQ() : !_currentUserIsAdmin) {
+    alert(type === 'assignments' ? 'The EQ presidency clears the brother assignments.' : 'Only an admin can clear ward data.'); return;
+  }
   const labels = { all:'ALL data', members:'member data', households:'household data', assignments:'assignment data' };
   if (!confirm(`Clear the shared ${labels[type]} for everyone? This cannot be undone.`)) return;
   const tasks = [];
