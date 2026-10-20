@@ -341,6 +341,28 @@ sign-in, `stopPrivateListeners()` on sign-out).
   `badgeCount()` = Notifications unread + Messages unread, used by every push.
 - `firebase.json` now includes `firestore.rules`, so `firebase deploy --only firestore:rules` works.
 
+### Identifiers tab (markers beside names)
+Four LCR name reports (Members Without Callings, Part-Member Households, YSAs, Birthdays) imported
+with Fetch/Print/Download → Import (`LCR_REPORT_URLS['id-…']`; YSA comes from LCR's Organizations
+page, unitOrgTypeId=1183). Stored on the records in the shared ward doc: `member.ident = { noCalling, ysa,
+partMember, bday: 'MM-DD' }` (birth year never kept), `household.partMember`, and
+`S.identMeta[kind] = { at, by, count, households?, unmatched[] }` (now in the `runSync` payload and
+`loadAllData`). Each import **replaces** its marker for everyone. `parseIdentReport()` uses
+`identRecords()`: per page, the header row ("Name" / "Household") fixes the name column; each data
+row is a line with something in the next column; name pieces wrapped onto the lines above/below
+(YSA report) join the nearest row; the Birthday List's "Birthday" column gives "1 Jan" → 'MM-DD'.
+Match by exact normalised name, else a unique one-sided prefix (`identFind`). Part-member rows
+match household names (a member hit marks their household). No header → old line-prefix fallback.
+Checked against the real PDFs (Oct 2026): 412 / 51 / 68 / 517 rows, all well formed.
+Shown as coloured dots (`.idot`, grey/blue/amber/pink) with a hint on hover/tap (`identTip`):
+`identBadgesHTML(member)`, `identDotsHH(hh)` (its own part-member dot plus fainter dots for any
+member's markers, names in the hint), `identDotsByName()` for companionship ministers. On Members,
+Households, Brothers, Current/Proposed (cards, unassigned and Maybe lists, household picker),
+Covenant Path Progress and Move Ins; each of those tabs has a `.ident-legend-slot` filled by
+`renderIdentLegends()` (hidden until something has been imported). 🎂 = birthday within the next 14 days
+(`BDAY_WINDOW_DAYS`), computed at render time. Filters: Members `id-*`, Households `part-member`.
+follow.js doesn't diff `ident`, so imports don't notify followers.
+
 ### Unit Statistics tab (LCR report dashboards)
 Four LCR reports, printed to PDF and imported with the usual Fetch/Print/Download → Import buttons
 (`LCR_REPORT_URLS['st-us' | 'st-qr' | 'st-ki' | 'st-fh']`). Ward totals only, no names. Stored in

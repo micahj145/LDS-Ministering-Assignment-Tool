@@ -100,6 +100,18 @@ tr:hover td{background:#fafbfc}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal-overlay.stacked{z-index:110}
+.ident-b{display:inline-block;font-size:0.66rem;font-weight:600;padding:0.08rem 0.4rem;border-radius:8px;margin:0.15rem 0.2rem 0 0;white-space:nowrap;vertical-align:middle}
+.ident-b.nc{background:#eceff3;color:#4a5560}
+.ident-b.ysa{background:#dbeafe;color:#1e4f9a}
+.ident-b.pm{background:#fdecc8;color:#8a5a00}
+.ident-b.bd{background:#fde2ec;color:#9c1d4f}
+.idots{display:inline-flex;gap:3px;margin-left:5px;vertical-align:middle}
+.idot{display:inline-block;width:10px;height:10px;border-radius:50%;cursor:help;box-shadow:0 0 0 1px rgba(0,0,0,0.12) inset}
+.idot.nc{background:#8a95a1}.idot.ysa{background:#2f6fd6}.idot.pm{background:#e59f1a}.idot.bd{background:#e0457b}
+.idot.agg{opacity:0.55}
+.ident-legend{display:flex;flex-wrap:wrap;align-items:center;gap:0.3rem 0.9rem;font-size:0.76rem;color:#666;margin:-0.3rem 0 0.8rem}
+.ident-legend .idot{cursor:default;margin-right:0.25rem;vertical-align:-1px}
+#ident-tip{position:fixed;z-index:200;background:#1a3a5c;color:#fff;font-size:0.76rem;padding:0.35rem 0.55rem;border-radius:6px;max-width:260px;display:none;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.2)}
 .msg-row{display:flex;justify-content:space-between;align-items:center;gap:0.6rem;padding:0.65rem 0.75rem;border:1px solid #e0e6ed;border-radius:8px;margin-bottom:0.5rem;cursor:pointer;background:#fff}
 .msg-row:hover{background:#f7f9fc}
 .msg-row.unread{border-color:#1a3a5c;background:#f3f7fc}
@@ -208,6 +220,7 @@ tr:hover td{background:#fafbfc}
   <button id="nav-propose-btn" onclick="showTab('propose')">Proposed Assignments</button>
   <button id="nav-council-btn" onclick="showTab('council')">Covenant Path Progress</button>
   <button id="nav-moves-btn" onclick="showTab('moves')">New Member Move Ins / Move Outs <span id="moves-mine"></span></button>
+  <button id="nav-idents-btn" onclick="showTab('idents')">Identifiers</button>
   <button id="nav-stats-btn" onclick="showTab('stats')">Unit Statistics</button>
   <button id="nav-admin-btn" onclick="showTab('admin')" style="display:none">Admin <span id="admin-pending-count"></span></button>
 </nav>
@@ -380,6 +393,7 @@ tr:hover td{background:#fafbfc}
 
 <!-- MEMBERS TAB -->
 <div id="tab-members" class="tab-content">
+  <div class="ident-legend-slot"></div>
   <div id="members-stats" class="stats-row"></div>
   <div class="card">
     <div class="filter-bar">
@@ -388,6 +402,10 @@ tr:hover td{background:#fafbfc}
         <option value="">All Members</option>
         <option value="linked">Household Linked</option>
         <option value="unlinked">Not Linked</option>
+        <option value="id-noCalling">Without a calling</option>
+        <option value="id-ysa">YSA</option>
+        <option value="id-partMember">In a part-member household</option>
+        <option value="id-bday">Birthday in the next 2 weeks</option>
       </select>
       <button class="btn btn-primary btn-sm" onclick="openAddMemberModal()">+ Add Member</button>
     </div>
@@ -397,6 +415,7 @@ tr:hover td{background:#fafbfc}
 
 <!-- HOUSEHOLDS TAB -->
 <div id="tab-households" class="tab-content">
+  <div class="ident-legend-slot"></div>
   <div id="households-stats" class="stats-row"></div>
   <div class="card">
     <div class="filter-bar">
@@ -405,6 +424,7 @@ tr:hover td{background:#fafbfc}
         <option value="">All Households</option>
         <option value="in-pool">In Pool</option>
         <option value="maybe">Maybe</option>
+        <option value="part-member">Part-member household</option>
         <option value="out-pool">Out of Pool</option>
         <option value="has-addr">Has Address</option>
         <option value="no-addr">No Address</option>
@@ -418,6 +438,7 @@ tr:hover td{background:#fafbfc}
 
 <!-- BROTHERS TAB -->
 <div id="tab-brothers" class="tab-content">
+  <div class="ident-legend-slot"></div>
   <div id="brothers-stats" class="stats-row"></div>
   <div class="card">
     <div class="filter-bar">
@@ -438,6 +459,7 @@ tr:hover td{background:#fafbfc}
 
 <!-- CURRENT ASSIGNMENTS TAB -->
 <div id="tab-current" class="tab-content">
+  <div class="ident-legend-slot"></div>
   <div id="current-stats" class="stats-row"></div>
 
   <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
@@ -477,6 +499,7 @@ tr:hover td{background:#fafbfc}
 
 <!-- PROPOSE ASSIGNMENTS TAB -->
 <div id="tab-propose" class="tab-content">
+  <div class="ident-legend-slot"></div>
   <div id="propose-stats" class="stats-row"></div>
 
   <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
@@ -536,6 +559,7 @@ tr:hover td{background:#fafbfc}
 
 <!-- COVENANT PATH PROGRESS TAB (internally 'council') -->
 <div id="tab-council" class="tab-content">
+  <div class="ident-legend-slot"></div>
   <div class="alert alert-info">
     Shared lists of people the ward council is helping along the covenant path. Everyone with access can add or remove people and post
     <strong>Goals</strong> and <strong>Notes</strong> against each name — both are dated and signed, so the
@@ -576,6 +600,7 @@ tr:hover td{background:#fafbfc}
 
 <!-- NEW MEMBER MOVE IN/MOVE OUTS TAB -->
 <div id="tab-moves" class="tab-content">
+  <div class="ident-legend-slot"></div>
   <div class="alert alert-info">
     Households moving into the ward, from LCR's <strong>Members Moved In</strong> report. Importing the report adds anyone
     not already in Members or Households, geocodes new addresses, and puts each household on <strong>Move Ins</strong>
@@ -613,6 +638,51 @@ tr:hover td{background:#fafbfc}
     <div id="moveout-review"></div>
   </div>
   <div id="moveout-log"></div>
+</div>
+
+<!-- IDENTIFIERS TAB -->
+<div id="tab-idents" class="tab-content">
+  <div class="alert alert-info">Markers from LCR reports that show next to people's names across the tool, for awareness while you work with
+    them, as coloured dots: <span class="idot nc"></span> no calling, <span class="idot ysa"></span> YSA, <span class="idot pm"></span> part-member household,
+    <span class="idot bd"></span> birthday in the next two weeks. Tap or hover over a dot to see what it means. Same steps as the other LCR imports: tap
+    <strong>Fetch/Print/Download</strong>, print the LCR page to PDF, then tap that report's <strong>Import</strong>. Each import replaces that
+    marker: anyone no longer on the report loses it. Only a birthday's month and day are kept, never the year.</div>
+  <div class="card">
+    <h2 style="margin:0 0 0.6rem">Import from LCR</h2>
+    <div style="display:flex;gap:0.8rem;flex-wrap:wrap">
+      <div style="flex:1;min-width:170px">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Members Without Callings</div>
+        <input type="file" id="ident-file-noCalling" accept=".pdf,application/pdf" style="display:none" onchange="handleIdentPdf('noCalling', this.files[0])">
+        <a class="btn btn-secondary lcr-fetch" data-report="id-noCalling" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('ident-file-noCalling').click()">Import</button>
+        <div id="ident-last-noCalling" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
+      </div>
+      <div style="flex:1;min-width:170px">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Part-Member Households</div>
+        <input type="file" id="ident-file-partMember" accept=".pdf,application/pdf" style="display:none" onchange="handleIdentPdf('partMember', this.files[0])">
+        <a class="btn btn-secondary lcr-fetch" data-report="id-partMember" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('ident-file-partMember').click()">Import</button>
+        <div id="ident-last-partMember" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
+      </div>
+      <div style="flex:1;min-width:170px">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Young Single Adults</div>
+        <input type="file" id="ident-file-ysa" accept=".pdf,application/pdf" style="display:none" onchange="handleIdentPdf('ysa', this.files[0])">
+        <a class="btn btn-secondary lcr-fetch" data-report="id-ysa" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('ident-file-ysa').click()">Import</button>
+        <div id="ident-last-ysa" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
+      </div>
+      <div style="flex:1;min-width:170px">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Birthdays</div>
+        <input type="file" id="ident-file-bday" accept=".pdf,application/pdf" style="display:none" onchange="handleIdentPdf('bday', this.files[0])">
+        <a class="btn btn-secondary lcr-fetch" data-report="id-bday" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('ident-file-bday').click()">Import</button>
+        <div id="ident-last-bday" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
+      </div>
+    </div>
+    <div id="ident-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+    <div id="ident-review"></div>
+  </div>
+  <div id="ident-body"></div>
 </div>
 
 <!-- UNIT STATISTICS TAB -->
@@ -866,6 +936,7 @@ async function runSync() {
     const payload = JSON.parse(JSON.stringify({
       members: S.members, households: S.households, current: S.current, proposed: S.proposed,
       groups: normalizeGroups(S.groups), users: S.users || [], activityLog: log,
+      identMeta: S.identMeta || {},
     }));
     payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
     payload.updatedBy = who;
@@ -910,6 +981,7 @@ async function loadAllData() {
   S.activityLog = data.activityLog || [];
   S.groups      = normalizeGroups(data.groups);
   S.users       = Array.isArray(data.users) ? data.users : [];
+  S.identMeta   = data.identMeta && typeof data.identMeta === 'object' ? data.identMeta : {};
   pruneMoveOutLog();
   // Normalize addresses from older imports that may have embedded newlines or ZIP+4
   S.households.forEach(hh => { if (hh.address) hh.address = normalizeAddress(hh.address); });
@@ -1500,7 +1572,7 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   // Order must match the nav buttons in the DOM — the active-button lookup
   // below is by index, so inserting a tab means inserting it here too.
-  const tabs = ['import','notifications','messages','members','households','brothers','current','propose','council','moves','stats','admin'];
+  const tabs = ['import','notifications','messages','members','households','brothers','current','propose','council','moves','idents','stats','admin'];
   document.querySelectorAll('nav button')[tabs.indexOf(name)].classList.add('active');
   if (name === 'members')    renderMembers();
   if (name === 'households') renderHouseholds();
@@ -1511,6 +1583,8 @@ function showTab(name) {
   if (name === 'moves')      renderMoves();
   if (name === 'notifications') { renderNotifications(); markNotificationsSeen(); }
   if (name === 'messages')   { renderMessagesTab(); markRestrictedSeen(); }
+  if (name === 'idents')     renderIdentsTab();
+  renderIdentLegends();
   if (name === 'stats')      renderStatsTab();
   if (name === 'admin')      renderAdminPanel();
 }
@@ -2144,6 +2218,7 @@ function renderMembers() {
     }
     if (lf === 'linked'   && !m.householdId) return false;
     if (lf === 'unlinked' &&  m.householdId) return false;
+    if (lf.startsWith('id-') && !memberHasIdent(m, lf.slice(3))) return false;
     return true;
   }).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -2170,7 +2245,7 @@ function renderMembers() {
   filtered.forEach(m => {
     const hh = memberHousehold(m);
     t += `<tr>
-      <td><strong>${esc(m.name)}</strong></td>
+      <td><strong>${esc(m.name)}</strong>${identBadgesHTML(m)}</td>
       <td>${esc(m.gender)}</td>
       <td>${m.age || ''}</td>
       <td>${esc(m.phone)}</td>
@@ -2305,6 +2380,7 @@ function renderHouseholds() {
     if (af === 'has-addr'  && !hh.address)              return false;
     if (af === 'no-addr'   &&  hh.address)           return false;
     if (af === 'geocoded'  && !hh.lat)               return false;
+    if (af === 'part-member' && !hh.partMember)       return false;
     return true;
   }).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -2344,7 +2420,7 @@ function renderHouseholds() {
                     : poolState === 'maybe' ? `<span class="badge badge-yellow" style="cursor:pointer" title="Maybe — click to remove from pool" onclick="toggleHHPool('${hh.id}')">Maybe</span>`
                     :                         `<span class="badge badge-red"    style="cursor:pointer" title="Out — click to add to pool"        onclick="toggleHHPool('${hh.id}')">Out</span>`;
     t += `<tr>
-      <td><strong>${esc(hh.name)}</strong></td>
+      <td><strong>${esc(hh.name)}</strong>${identDotsHH(hh)}</td>
       <td style="font-size:0.82rem;max-width:180px;white-space:normal">${esc(memberList) || '<span style="color:#aaa">—</span>'}</td>
       <td style="font-size:0.82rem">${esc(hh.head||'')}</td>
       <td style="font-size:0.82rem">
@@ -2419,7 +2495,7 @@ function renderBrothers() {
                      : bPoolState === 'maybe' ? `<span class="badge badge-yellow" style="cursor:pointer" title="Maybe — click to remove from pool" onclick="toggleBrotherPool('${b.id}')">Maybe</span>`
                      :                          `<span class="badge badge-red"    style="cursor:pointer" title="Out — click to add to pool"        onclick="toggleBrotherPool('${b.id}')">Out</span>`;
     t += `<tr>
-      <td><strong>${esc(b.name)}</strong></td>
+      <td><strong>${esc(b.name)}</strong>${identBadgesHTML(b)}</td>
       ${showHH ? `<td>${hh ? esc(hh.name) : '<span style="color:#aaa">—</span>'}</td>` : ''}
       <td>${esc(b.phone)}</td>
       <td>${bPoolBadge}</td>
@@ -2478,7 +2554,7 @@ function renderCurrent() {
         unassigned.map(b => {
           const hh = memberHousehold(b);
           return `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
-            ${esc(b.name)}${hh?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.name)})</span>`:''}
+            ${esc(b.name)}${identBadgesHTML(b)}${hh?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.name)})</span>`:''}
           </li>`;
         }).join('') + '</ul>';
     }
@@ -2496,7 +2572,7 @@ function renderCurrent() {
         '<ul style="list-style:none;padding:0">' +
         unassignedHH.map(hh =>
           `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
-            ${esc(hh.name)}${hh.address?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.address)})</span>`:''}
+            ${esc(hh.name)}${identDotsHH(hh)}${hh.address?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.address)})</span>`:''}
           </li>`
         ).join('') + '</ul>';
     }
@@ -2505,15 +2581,15 @@ function renderCurrent() {
 
 function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed', idx, total) {
   const ministers = m2
-    ? `${esc(m1)} <span style="color:#aaa">+</span> ${esc(m2)}`
-    : `${esc(m1)} <span class="badge badge-blue">Solo</span>`;
+    ? `${esc(m1)}${identDotsByName(m1)} <span style="color:#aaa">+</span> ${esc(m2)}${identDotsByName(m2)}`
+    : `${esc(m1)}${identDotsByName(m1)} <span class="badge badge-blue">Solo</span>`;
 
   // Resolve household display names
   const resolveHH = ref => S.households.find(x => x.id === ref || norm(x.name) === norm(ref));
   const tags = hhList.map(h => {
     const obj = resolveHH(h);
     const label = obj ? obj.name : h;
-    return `<span class="household-tag">${esc(label)}</span>`;
+    return `<span class="household-tag">${esc(label)}${identDotsHH(obj)}</span>`;
   }).join('') || '<span style="color:#aaa;font-size:0.82rem">No households</span>';
 
   const notesArr = id ? (S[listKey].find(x => x.id === id)?.notes || []) : [];
@@ -2634,7 +2710,7 @@ function renderProposed() {
       unassigned.map(b => {
         const hh = memberHousehold(b);
         return `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
-          ${esc(b.name)}${hh?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.name)})</span>`:''}
+          ${esc(b.name)}${identBadgesHTML(b)}${hh?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.name)})</span>`:''}
         </li>`;
       }).join('') + '</ul>';
   }
@@ -2651,7 +2727,7 @@ function renderProposed() {
         '<ul style="list-style:none;padding:0">' +
         unassignedHH.map(hh =>
           `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
-            ${esc(hh.name)}${hh.address?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.address)})</span>`:''}
+            ${esc(hh.name)}${identDotsHH(hh)}${hh.address?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.address)})</span>`:''}
           </li>`
         ).join('') + '</ul>';
     }
@@ -2670,7 +2746,7 @@ function renderProposed() {
         mbList.map(b => {
           const hh = memberHousehold(b);
           return `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
-            ${esc(b.name)}${hh?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.name)})</span>`:''}
+            ${esc(b.name)}${identBadgesHTML(b)}${hh?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.name)})</span>`:''}
           </li>`;
         }).join('') + '</ul>';
     }
@@ -2688,7 +2764,7 @@ function renderProposed() {
         '<ul style="list-style:none;padding:0">' +
         mhList.map(hh =>
           `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">
-            ${esc(hh.name)}${hh.address?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.address)})</span>`:''}
+            ${esc(hh.name)}${identDotsHH(hh)}${hh.address?` <span style="color:#aaa;font-size:0.78rem">(${esc(hh.address)})</span>`:''}
           </li>`
         ).join('') + '</ul>';
     }
@@ -2830,10 +2906,14 @@ function renderHHList(prefix, query) {
       if (entry) entry.isSelected = cb.checked;
     });
     lbl.appendChild(cb);
-    let text = hh.name;
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = hh.name;
+    nameSpan.insertAdjacentHTML('beforeend', identDotsHH(hh));
+    let text = '';
     if (hh.address) text += ` — ${hh.address}`;
     if (dist != null) text += `  (${dist.toFixed(1)} mi)`;
-    lbl.appendChild(document.createTextNode(text));
+    nameSpan.appendChild(document.createTextNode(text));
+    lbl.appendChild(nameSpan);
     container.appendChild(lbl);
   });
 }
@@ -3725,7 +3805,7 @@ function renderCouncil() {
       const goals = (e.goals || []).length, notes = mergedNotes.length;
       const added = e.addedBy ? `Added by ${esc(e.addedBy)}${e.addedDate ? ' · ' + formatNoteDate(e.addedDate) : ''}` : '';
       return `<tr>
-        <td style="vertical-align:top"><strong>${esc(groupEntryName(e))}</strong>${lcrSnapshotHTML(e)}${added ? `<div style="font-size:0.74rem;color:#aaa;margin-top:0.15rem">${added}</div>` : ''}</td>
+        <td style="vertical-align:top"><strong>${esc(groupEntryName(e))}</strong>${e.memberId ? identBadgesHTML(S.members.find(m => m.id === e.memberId)) : ''}${lcrSnapshotHTML(e)}${added ? `<div style="font-size:0.74rem;color:#aaa;margin-top:0.15rem">${added}</div>` : ''}</td>
         <td style="vertical-align:top">
           <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','${g.key}','goals')">${goals ? `Goals (${goals})` : 'Goals'}</button>
           ${latestCommentHTML((e.goals || []).map(n => ({ n, source: null })))}
@@ -4146,7 +4226,7 @@ function renderMoves() {
   const rows = list.map(e => {
     const hh = hhById(e.householdId);
     const people = (e.people || []).map(p => `<div style="font-size:0.8rem;color:#555">${esc(moveInPersonName(p))}
-        <span style="color:#999">· ${esc(shortPosition(p.position))}${p.age ? ' · ' + p.age : ''}</span></div>`).join('');
+        <span style="color:#999">· ${esc(shortPosition(p.position))}${p.age ? ' · ' + p.age : ''}</span>${p.memberId ? identBadgesHTML(S.members.find(m => m.id === p.memberId)) : ''}</div>`).join('');
     const addr = hh?.address || '';
     const geo = !addr ? '' : hh?.lat
       ? '<span class="badge badge-green" style="font-size:0.68rem">📍 geocoded</span>'
@@ -4171,7 +4251,7 @@ function renderMoves() {
     const merged = groupMergedNotes(e);
     return `<tr>
       <td style="vertical-align:top">
-        <strong>${esc(groupEntryName(e))}</strong>
+        <strong>${esc(groupEntryName(e))}</strong>${identDotsHH(hhById(e.householdId))}
         ${people}
         ${e.moveInDate ? `<div style="font-size:0.76rem;color:#888;margin-top:0.2rem">Moved in ${esc(formatIsoDay(e.moveInDate))}</div>` : ''}
         ${addr ? `<div style="font-size:0.76rem;color:#888">${esc(addr)} ${geo}</div>` : ''}
@@ -6640,6 +6720,338 @@ async function applyStatsPlan() {
   }
 }
 
+// ── Identifiers tab ───────────────────────────────────────────
+// Markers imported from LCR reports and shown beside names everywhere the
+// tool lists people (Members, Households, Brothers, Covenant Path Progress,
+// Move Ins). Stored on the records themselves, in the shared ward document:
+//   member.ident = { noCalling: true, ysa: true, partMember: true, bday: 'MM-DD' }
+//   household.partMember = true
+//   S.identMeta[kind] = { at, by, count, unmatched: [names] }   (last import of each)
+// Each import REPLACES its marker for everyone (the report is the ward as it
+// is now). Birthdays keep only month and day — never the year.
+// Reading: LCR lists people as "Last, First Middle", like the member import,
+// so a line belongs to a member when it starts with their name. Household
+// reports may start with the household name instead.
+const IDENT_KINDS = {
+  noCalling:  { label: 'Members Without Callings', short: 'No calling', title: /without\s+(a\s+)?calling/i },
+  partMember: { label: 'Part-Member Households',  short: 'Part-member', title: /part[\s-]?member/i },
+  ysa:        { label: 'Young Single Adults',      short: 'YSA', title: /young single adult|\bYSA\b/i },
+  bday:       { label: 'Birthdays',                short: 'Birthday', title: /birthday/i },
+};
+const IDENT_BADGE = {
+  noCalling:  t => `<span class="ident-b nc" title="${esc(t || 'On LCR’s Members Without Callings report')}">No calling</span>`,
+  ysa:        t => `<span class="ident-b ysa" title="${esc(t || 'Young single adult (LCR)')}">YSA</span>`,
+  partMember: t => `<span class="ident-b pm" title="${esc(t || 'In a part-member household (LCR)')}">Part-member</span>`,
+  bday:       (t, md) => `<span class="ident-b bd" title="${esc(t || 'Birthday in the next two weeks')}">🎂 ${esc(md)}</span>`,
+};
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const BDAY_WINDOW_DAYS = 14;
+
+function bdayDaysAway(md, from) {
+  const m = String(md || '').match(/^(\d{2})-(\d{2})$/); if (!m) return null;
+  const now = from || new Date(), t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let d = new Date(now.getFullYear(), +m[1] - 1, +m[2]);
+  if (d < t0) d = new Date(now.getFullYear() + 1, +m[1] - 1, +m[2]);
+  return Math.round((d - t0) / 86400000);
+}
+function bdayLabel(md) { const m = String(md).match(/^(\d{2})-(\d{2})$/); return m ? `${MON[+m[1] - 1]} ${+m[2]}` : md; }
+function bdaySoon(m) { const d = bdayDaysAway(m?.ident?.bday); return d !== null && d <= BDAY_WINDOW_DAYS; }
+
+function memberHasIdent(m, kind) {
+  if (!m) return false;
+  if (kind === 'bday') return bdaySoon(m);
+  if (kind === 'partMember') return !!(m.ident?.partMember || hhById(m.householdId)?.partMember);
+  return !!m.ident?.[kind];
+}
+
+// Coloured dots beside names, with what each means on hover (or tap, on a
+// phone). A household's dots also show its members' markers, fainter, with
+// the names in the hint.
+function identDot(cls, tip, faint) {
+  return `<span class="idot ${cls}${faint ? ' agg' : ''}" data-tip="${esc(tip)}" title="${esc(tip)}" onclick="identTip(event, this)"></span>`;
+}
+function bdayTip(m) { const d = bdayDaysAway(m.ident.bday); return `Birthday ${bdayLabel(m.ident.bday)} (${d === 0 ? 'today' : d === 1 ? 'tomorrow' : 'in ' + d + ' days'})`; }
+function identBadgesHTML(m) {
+  if (!m) return '';
+  const out = [];
+  if (m.ident?.noCalling) out.push(identDot('nc', 'No calling (LCR Members Without Callings)'));
+  if (m.ident?.ysa) out.push(identDot('ysa', 'Young single adult'));
+  if (memberHasIdent(m, 'partMember')) out.push(identDot('pm', 'In a part-member household'));
+  if (bdaySoon(m)) out.push(identDot('bd', bdayTip(m)));
+  return out.length ? `<span class="idots">${out.join('')}</span>` : '';
+}
+function identDotsHH(hh) {
+  if (!hh) return '';
+  const ms = S.members.filter(m => m.householdId === hh.id);
+  const who = (pred, f) => { const l = ms.filter(pred); return l.length ? l.map(f || (m => m.name)).join(', ') : null; };
+  const out = [];
+  if (hh.partMember) out.push(identDot('pm', 'Part-member household'));
+  const nc = who(m => m.ident?.noCalling); if (nc) out.push(identDot('nc', 'No calling: ' + nc, true));
+  const y = who(m => m.ident?.ysa); if (y) out.push(identDot('ysa', 'YSA: ' + y, true));
+  const bd = who(bdaySoon, m => `${m.name} (${bdayLabel(m.ident.bday)})`); if (bd) out.push(identDot('bd', 'Birthday soon: ' + bd, true));
+  return out.length ? `<span class="idots">${out.join('')}</span>` : '';
+}
+// For lists that only have a name to go on (companionship ministers).
+function identDotsByName(name) {
+  const k = normNameKey(name || '');
+  const m = k && S.members.find(x => normNameKey(x.name) === k);
+  return m ? identBadgesHTML(m) : '';
+}
+function identDotsByHHRef(ref) {
+  const h = S.households.find(x => x.id === ref || norm(x.name) === norm(ref));
+  return identDotsHH(h);
+}
+function identTip(ev, el) {
+  ev.stopPropagation(); ev.preventDefault();      // inside a <label>, don't tick its checkbox
+  let t = document.getElementById('ident-tip');
+  if (!t) { t = document.createElement('div'); t.id = 'ident-tip'; document.body.appendChild(t); document.addEventListener('click', () => { t.style.display = 'none'; }); }
+  const r = el.getBoundingClientRect();
+  t.textContent = el.dataset.tip || '';
+  t.style.display = 'block';
+  t.style.left = Math.min(window.innerWidth - t.offsetWidth - 8, Math.max(8, r.left - 10)) + 'px';
+  t.style.top = (r.bottom + 6) + 'px';
+  clearTimeout(identTip._t); identTip._t = setTimeout(() => { t.style.display = 'none'; }, 4000);
+}
+function identLegendHTML() {
+  if (!Object.keys(S.identMeta || {}).length) return '';
+  return `<div class="ident-legend"><span><span class="idot nc"></span>No calling</span><span><span class="idot ysa"></span>YSA</span>
+    <span><span class="idot pm"></span>Part-member household</span><span><span class="idot bd"></span>Birthday in the next 2 weeks</span>
+    <span style="color:#999">Faint dot on a household = one of its members · tap a dot for details · <a href="#" onclick="showTab('idents');return false">Identifiers</a></span></div>`;
+}
+function renderIdentLegends() { const h = identLegendHTML(); document.querySelectorAll('.ident-legend-slot').forEach(el => { el.innerHTML = h; }); }
+// ── Reading a report ──
+function identNorm(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[’']/g, "'").replace(/\s*,\s*/g, ', ').replace(/\s+/g, ' ').trim();
+}
+const LOOKS_LIKE_NAME = /^[A-ZÀ-Þ][A-Za-zÀ-ÿ'’. -]{0,40},\s*[A-ZÀ-Þ]/;
+
+// Longest record name that the line starts with (followed by a non-letter).
+function startsWithName(lineN, list) {
+  let best = null;
+  list.forEach(r => {
+    if (!r.n || !lineN.startsWith(r.n)) return;
+    const next = lineN.charAt(r.n.length);
+    if (next && /[a-z]/.test(next)) return;
+    if (!best || r.n.length > best.n.length) best = r;
+  });
+  return best;
+}
+
+function parseBirthMonthDay(text) {
+  const t = ' ' + text + ' ';
+  let m = t.match(/[^\d](\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?(?=[^a-z])/i);
+  if (m) return `${String(MON.findIndex(x => x.toLowerCase() === m[2].slice(0, 3).toLowerCase()) + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  m = t.match(/[^a-z](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})(?!\d)/i);
+  if (m) return `${String(MON.findIndex(x => x.toLowerCase() === m[1].slice(0, 3).toLowerCase()) + 1).padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  m = t.match(/[^\d](\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?(?!\d)/);
+  if (m && +m[1] <= 12 && +m[2] <= 31) return `${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  return null;
+}
+
+// Column reader for LCR name reports. Finds the header row (the line with
+// "Name" or "Household"), takes the name column from that header to the next
+// one, and builds one record per data row ("anchor": a row with something in
+// the column right after the name). Name pieces that wrapped onto the lines
+// just above or below (long names in the YSA report) join the nearest row.
+function identRecords(pages, kind) {
+  const recs = [];
+  pages.forEach(P => {
+    const lines = statLines(P);
+    const hdr = lines.find(l => l.items.some(i => /^(Name|Household)$/i.test(i.s)) && l.items.length >= 2);
+    if (!hdr) return;
+    const hs = hdr.items.slice().sort((a, b) => a.x - b.x);
+    const hi = hs.findIndex(i => /^(Name|Household)$/i.test(i.s));
+    const nx0 = hs[hi].x - 4, nx1 = hs[hi + 1] ? hs[hi + 1].x - 4 : 9999;
+    const nextCol = hs[hi + 1] ? { x0: hs[hi + 1].x - 4, x1: hs[hi + 2] ? hs[hi + 2].x - 4 : 9999 } : null;
+    const dateCol = hs.findIndex(i => /^Birthday$/i.test(i.s));
+    const dc = dateCol >= 0 ? { x0: hs[dateCol].x - 6, x1: hs[dateCol + 1] ? hs[dateCol + 1].x - 4 : 9999 } : null;
+    const body = P.items.filter(i => i.y < hdr.y - 2 && !/For Church Use|Intellectual Reserve|©/.test(i.s));
+    const inName = i => i.x >= nx0 && i.x < nx1;
+    const rowsY = [];
+    body.forEach(i => { if (nextCol && i.x >= nextCol.x0 && i.x < nextCol.x1 && !rowsY.some(y => Math.abs(y - i.y) < 2.5)) rowsY.push(i.y); });
+    rowsY.sort((a, b) => b - a);
+    if (!rowsY.length) return;
+    const gaps = rowsY.slice(1).map((y, k) => rowsY[k] - y).sort((a, b) => a - b);
+    const pitch = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 20;
+    const groups = rowsY.map(y => ({ y, parts: [], date: null }));
+    body.filter(inName).forEach(i => {
+      const g = groups.reduce((b, c) => Math.abs(c.y - i.y) < Math.abs(b.y - i.y) ? c : b);
+      if (Math.abs(g.y - i.y) <= pitch * 0.75) g.parts.push(i);
+    });
+    if (dc) groups.forEach(g => { const d = body.find(i => i.x >= dc.x0 && i.x < dc.x1 && Math.abs(i.y - g.y) < 2.5); if (d) g.date = d.s; });
+    groups.forEach(g => {
+      const name = g.parts.sort((a, b) => b.y - a.y || a.x - b.x).map(p => p.s).join(' ').replace(/^\*\s*/, '').replace(/\s+/g, ' ').trim();
+      if (name) recs.push({ name, date: g.date });
+    });
+  });
+  return recs;
+}
+
+// Exact name first; otherwise a name that starts the other (one side cut
+// short), only when that picks out exactly one record.
+function identFind(n, idx) {
+  const exact = idx.filter(r => r.n === n);
+  if (exact.length) return exact[0];
+  const near = idx.filter(r => r.n && (r.n.startsWith(n + ' ') || n.startsWith(r.n + ' ')));
+  return near.length === 1 ? near[0] : null;
+}
+
+function parseIdentReport(kind, pages) {
+  const memberIdx0 = S.members.map(m => ({ n: identNorm(m.name), m }));
+  const hhIdx0 = S.households.map(h => ({ n: identNorm(h.name), h }));
+  const titleText0 = pages.flatMap(statLines).slice(0, 8).map(l => l.text).join(' ');
+  const recs = identRecords(pages, kind);
+  if (recs.length) {
+    const hits = new Map(), hhHits = new Map(), unmatched = [];
+    recs.forEach(r => {
+      const n = identNorm(r.name);
+      if (kind === 'partMember') {
+        const h = identFind(n, hhIdx0);
+        if (h) { hhHits.set(h.h.id, h.h); return; }
+      }
+      const m = identFind(n, memberIdx0);
+      if (!m) { unmatched.push(r.name); return; }
+      if (kind === 'partMember') { const hh = hhById(m.m.householdId); if (hh) hhHits.set(hh.id, hh); return; }
+      if (kind === 'bday') hits.set(m.m.id, { m: m.m, md: r.date ? parseBirthMonthDay(r.date) : null });
+      else hits.set(m.m.id, { m: m.m });
+    });
+    return { kind, hits: [...hits.values()], hhHits: [...hhHits.values()], unmatched: [...new Set(unmatched)],
+             titleOk: IDENT_KINDS[kind].title.test(titleText0), noDate: kind === 'bday' ? [...hits.values()].filter(h => !h.md).length : 0, records: recs.length };
+  }
+  // No table header found: fall back to reading line by line.
+  const lines = pages.flatMap(statLines).map(l => l.text).filter(t => !/For Church Use Only|Intellectual Reserve/i.test(t));
+  const memberIdx = S.members.map(m => ({ n: identNorm(m.name), m }));
+  const hhIdx = S.households.map(h => ({ n: identNorm(h.name), h }));
+  const hits = new Map(), hhHits = new Map(), unmatched = [];
+  lines.forEach(text => {
+    const n = identNorm(text);
+    const mm = startsWithName(n, memberIdx);
+    const hm = kind === 'partMember' ? startsWithName(n, hhIdx) : null;
+    if (hm && (!mm || hm.n.length >= mm.n.length)) { hhHits.set(hm.h.id, hm.h); return; }
+    if (mm) {
+      if (kind === 'bday') { const md = parseBirthMonthDay(text.slice(mm.n.length)); if (md) hits.set(mm.m.id, { m: mm.m, md }); else if (!hits.has(mm.m.id)) hits.set(mm.m.id, { m: mm.m, md: null }); }
+      else hits.set(mm.m.id, { m: mm.m });
+      return;
+    }
+    if (LOOKS_LIKE_NAME.test(text)) unmatched.push(text.split(/\s{2,}| (?=\d)/)[0].replace(/\s+(M|F|Male|Female)$/, '').slice(0, 60));
+  });
+  if (kind === 'partMember') hits.forEach(h => { const hh = hhById(h.m.householdId); if (hh) hhHits.set(hh.id, hh); });
+  const titleText = lines.slice(0, 6).join(' ');
+  return { kind, hits: [...hits.values()], hhHits: [...hhHits.values()], unmatched: [...new Set(unmatched)],
+           titleOk: IDENT_KINDS[kind].title.test(titleText), noDate: kind === 'bday' ? [...hits.values()].filter(h => !h.md).length : 0 };
+}
+
+let _identPlan = null;
+async function handleIdentPdf(kind, file) {
+  const statusEl = document.getElementById('ident-status');
+  document.getElementById('ident-file-' + kind).value = '';
+  if (!file) return;
+  _identPlan = null;
+  document.getElementById('ident-review').innerHTML = '';
+  statusEl.style.color = '#555';
+  statusEl.textContent = `Reading ${file.name}…`;
+  try {
+    const lib = await loadPdfJs();
+    const pages = await readPdfPages(file, lib);
+    const plan = parseIdentReport(kind, pages);
+    if (!plan.hits.length && !plan.hhHits.length) {
+      statusEl.style.color = '#dc3545';
+      statusEl.textContent = `No one in ${file.name} matched Members. Is it LCR's ${IDENT_KINDS[kind].label} report, printed to PDF? (Names are matched as "Last, First", like the member import.)`;
+      return;
+    }
+    _identPlan = plan;
+    statusEl.textContent = '';
+    renderIdentReview();
+  } catch (err) {
+    console.error('Identifier import failed:', err);
+    statusEl.style.color = '#dc3545';
+    statusEl.textContent = 'Could not read that PDF: ' + (err?.message || 'unknown error');
+  }
+}
+
+function identCurrentMembers(kind) {
+  return S.members.filter(m => kind === 'bday' ? !!m.ident?.bday : kind === 'partMember' ? !!m.ident?.partMember : !!m.ident?.[kind]);
+}
+
+function renderIdentReview() {
+  const p = _identPlan; if (!p) return;
+  const K = IDENT_KINDS[p.kind];
+  const newIds = new Set(p.kind === 'partMember'
+    ? S.members.filter(m => p.hhHits.some(h => h.id === m.householdId)).map(m => m.id)
+    : p.hits.filter(h => p.kind !== 'bday' || h.md).map(h => h.m.id));
+  const curIds = new Set(identCurrentMembers(p.kind).map(m => m.id));
+  const add = [...newIds].filter(id => !curIds.has(id)).length, drop = [...curIds].filter(id => !newIds.has(id)).length;
+  const list = arr => arr.length ? `<div style="font-size:0.78rem;color:#666;margin-top:0.2rem;max-height:110px;overflow-y:auto">${arr.map(esc).join(' · ')}</div>` : '';
+  document.getElementById('ident-review').innerHTML = `<div class="alert" style="background:#eef6ee;border:1px solid #cfe5cf;color:#333;margin-top:0.8rem">
+    <strong>${esc(K.label)}</strong>${p.titleOk ? '' : ` <span style="color:#856404;font-size:0.8rem">(the PDF's title doesn't look like this report — check it's the right one)</span>`}<br>
+    ${p.records ? `${p.records} ${p.kind === 'partMember' ? 'household' : 'name'}${p.records === 1 ? '' : 's'} on the report. ` : ''}${p.kind === 'partMember' ? `${p.hhHits.length} household${p.hhHits.length === 1 ? '' : 's'} matched (${newIds.size} members).` : `${newIds.size} member${newIds.size === 1 ? '' : 's'} matched.`}
+    ${curIds.size ? ` Compared with the last import: ${add} added, ${drop} no longer on the report.` : ''}
+    ${p.noDate ? `<div style="font-size:0.8rem;color:#856404;margin-top:0.3rem">${p.noDate} matched name${p.noDate === 1 ? '' : 's'} had no birthday date the tool could read, so they're skipped.</div>` : ''}
+    ${p.unmatched.length ? `<div style="font-size:0.8rem;color:#856404;margin-top:0.3rem">${p.unmatched.length} name${p.unmatched.length === 1 ? '' : 's'} on the report aren't in Members (import the member list again to pick them up):</div>${list(p.unmatched)}` : ''}
+    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.6rem">
+      <button class="btn btn-secondary btn-sm" onclick="cancelIdentImport()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="applyIdentPlan()">Save</button>
+    </div></div>`;
+}
+
+function cancelIdentImport() { _identPlan = null; document.getElementById('ident-review').innerHTML = ''; document.getElementById('ident-status').textContent = ''; }
+
+function applyIdentPlan() {
+  const p = _identPlan; if (!p) return;
+  const k = p.kind;
+  const setI = (m, key, v) => { m.ident = { ...(m.ident || {}) }; if (v === undefined || v === false || v === null) delete m.ident[key]; else m.ident[key] = v; if (!Object.keys(m.ident).length) delete m.ident; };
+  let count = 0;
+  if (k === 'partMember') {
+    const hhIds = new Set(p.hhHits.map(h => h.id));
+    S.households.forEach(h => { if (hhIds.has(h.id)) h.partMember = true; else delete h.partMember; });
+    S.members.forEach(m => { const on = hhIds.has(m.householdId); setI(m, 'partMember', on || undefined); if (on) count++; });
+  } else {
+    const by = new Map(p.hits.map(h => [h.m.id, h]));
+    S.members.forEach(m => {
+      const h = by.get(m.id);
+      if (k === 'bday') { setI(m, 'bday', h && h.md ? h.md : undefined); if (h && h.md) count++; }
+      else { setI(m, k, h ? true : undefined); if (h) count++; }
+    });
+  }
+  S.identMeta = { ...(S.identMeta || {}), [k]: { at: new Date().toISOString(), by: _currentUserName || _currentUserEmail || 'Unknown', count,
+    households: k === 'partMember' ? p.hhHits.length : undefined, unmatched: p.unmatched.slice(0, 200) } };
+  scheduleSync();
+  renderIdentLegends();
+  _identPlan = null;
+  document.getElementById('ident-review').innerHTML = '';
+  const st = document.getElementById('ident-status'); st.style.color = '#155724';
+  st.textContent = `✓ ${IDENT_KINDS[k].label} saved — ${count} member${count === 1 ? '' : 's'} marked.`;
+  renderIdentsTab();
+}
+
+function renderIdentsTab() {
+  const meta = S.identMeta || {};
+  Object.keys(IDENT_KINDS).forEach(k => {
+    const el = document.getElementById('ident-last-' + k); if (!el) return;
+    const x = meta[k];
+    el.innerHTML = x ? `${formatNoteDate(x.at)}${x.by ? ' · ' + esc(x.by) : ''} · ${k === 'partMember' ? `${x.households ?? '?'} households, ` : ''}${x.count} member${x.count === 1 ? '' : 's'}` : 'Not imported yet';
+  });
+  const host = document.getElementById('ident-body'); if (!host) return;
+  const nameList = arr => arr.length ? arr.map(m => `<span style="display:inline-block;margin:0.1rem 0.6rem 0.1rem 0;font-size:0.82rem">${esc(m.name)}</span>`).join('')
+    : '<span style="color:#aaa;font-size:0.82rem">No one yet.</span>';
+  const byName = (a, b) => a.name.localeCompare(b.name);
+  const soon = S.members.filter(bdaySoon).sort((a, b) => bdayDaysAway(a.ident.bday) - bdayDaysAway(b.ident.bday));
+  const pmH = S.households.filter(h => h.partMember).sort(byName);
+  const nm = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const card = (title, n, body, note) => `<div class="card"><div class="flex-between"><h2 style="margin:0">${title}</h2><span style="font-size:0.8rem;color:#888">${n}</span></div>${note ? `<p style="font-size:0.8rem;color:#888;margin:0 0 0.5rem">${note}</p>` : ''}${body}</div>`;
+  const unm = k => meta[k]?.unmatched?.length ? `<div style="font-size:0.76rem;color:#856404;margin-top:0.5rem">Not in Members at the last import: ${meta[k].unmatched.map(esc).join(' · ')}</div>` : '';
+  host.innerHTML =
+    card('🎂 Birthdays in the next two weeks', soon.length ? nm(soon.length, 'person').replace('persons', 'people') : '', soon.length ? soon.map(m => { const d = bdayDaysAway(m.ident.bday);
+      return `<div style="display:flex;justify-content:space-between;gap:0.5rem;font-size:0.85rem;padding:0.25rem 0;border-bottom:1px solid #f0f2f5"><span>${esc(m.name)}</span>
+      <span style="color:#9c1d4f;white-space:nowrap">${bdayLabel(m.ident.bday)} · ${d === 0 ? 'today' : d === 1 ? 'tomorrow' : 'in ' + d + ' days'}</span></div>`; }).join('')
+      : '<span style="color:#aaa;font-size:0.82rem">None in the next two weeks.</span>' + unm('bday'), 'From the last Birthdays import (month and day only).') +
+    card('Members without callings', nm(identCurrentMembers('noCalling').length, 'member'), nameList(identCurrentMembers('noCalling').sort(byName)) + unm('noCalling')) +
+    card('Part-member households', nm(pmH.length, 'household'), pmH.length ? pmH.map(h => `<div style="font-size:0.84rem;padding:0.2rem 0"><strong>${esc(h.name)}</strong>
+      <span style="color:#888">· ${S.members.filter(m => m.householdId === h.id).map(m => esc(m.name)).join(', ') || 'no members linked'}</span></div>`).join('')
+      : '<span style="color:#aaa;font-size:0.82rem">No one yet.</span>', 'Marks the household and each member in it.') + unm('partMember') +
+    card('Young single adults', nm(identCurrentMembers('ysa').length, 'member'), nameList(identCurrentMembers('ysa').sort(byName)) + unm('ysa'));
+}
+
 // ── LCR report links ("Fetch/Print/Download") ─────────────────────
 // Opens the report in LCR in a new browser tab (LCR asks the person to sign in
 // if needed). They download / save it as PDF there, come back, and use
@@ -6658,6 +7070,11 @@ const LCR_REPORT_URLS = {
   'st-ki': 'https://lcr.churchofjesuschrist.org/report/key-indicators?lang=eng',
   'st-qr': 'https://lcr.churchofjesuschrist.org/report/quarterly-report?lang=eng',
   'st-us': 'https://lcr.churchofjesuschrist.org/report/unit-statistics?lang=eng',
+  // Identifiers tab
+  'id-noCalling': 'https://lcr.churchofjesuschrist.org/mlt/report/member-callings?tab=without-callings&lang=eng',
+  'id-partMember': 'https://lcr.churchofjesuschrist.org/mlt/report/part-member-households?lang=eng',
+  'id-ysa': 'https://lcr.churchofjesuschrist.org/mlt/orgs?unitOrgTypeId=1183&lang=eng',
+  'id-bday': 'https://lcr.churchofjesuschrist.org/mlt/report/birthday-list?lang=eng',
 };
 function wireLcrFetchButtons() {
   document.querySelectorAll('a.lcr-fetch').forEach(a => {
