@@ -87,6 +87,12 @@ service cloud.firestore {
 
     function canUse() { return isApproved() && emailVerified(); }
 
+    // Unit Statistics tab: ward-level totals imported from LCR reports (no
+    // names). Same access as the shared ward data, kept in its own document.
+    match /wardData/stats {
+      allow read, write: if canUse();
+    }
+
     // ── Direct messages ──────────────────────────────────────────
     // threads/{id}: { participants: [uid], names, createdBy, createdAt, lastAt, lastBy, lastByName }
     // Only the people in a conversation can see it or its messages — this

@@ -341,6 +341,34 @@ sign-in, `stopPrivateListeners()` on sign-out).
   `badgeCount()` = Notifications unread + Messages unread, used by every push.
 - `firebase.json` now includes `firestore.rules`, so `firebase deploy --only firestore:rules` works.
 
+### Unit Statistics tab (LCR report dashboards)
+Four LCR reports, printed to PDF and imported with the usual Fetch/Print/Download → Import buttons
+(`LCR_REPORT_URLS['st-us' | 'st-qr' | 'st-ki' | 'st-fh']`). Ward totals only, no names. Stored in
+its own doc **`wardData/stats`** (rules: same access as `wardData/shared`), written with dotted
+field paths (`saveStats()`; creates the doc on first use) so concurrent imports don't clobber:
+- `us.snapshots[]` `{ date, by, groups: [{ label, value, items: [{label, value}] }] }` — every Unit
+  Statistics import is a new snapshot; the card shows ▲/▼ vs the previous one.
+  `parseUnitStats()`: "label  N" lines; section totals are in a different (bold) font.
+- `qr.{2026Q3}` `{ quarter, years [this, last, 5-yr-ago], rows: [{ n, section, label, actual,
+  potential, pct[3] }], convertCount }` — one per quarter; selector offers (year−3)Q1 … current
+  quarter, unimported ones say so. `parseQuarterly()`: row regex over `statLines()`; two-line labels
+  (rows 17, 26) join the next line. Convert Detail **names are deliberately not stored**.
+- `ki.series.{key}.{2026Q3}` = whole %, `ki.updatedAt/By` — each import adds/updates only its
+  quarters. `parseKeyIndicators()` reads **chart geometry** (`pdfPageData()` walks the pdf.js
+  operator list with the transform stack): ticked legend boxes (nearest square left of each label
+  that isn't white; the colour swatch is further left) give the included indicators in legend
+  order (left column, then right); each series is a stroked straight-segment path immediately
+  followed by its point markers, drawn in that same order; y via `axisFromTicks()` (tick labels
+  paired with gridlines); x via nearest "YYYY-Q" label. Prints lose series colours, hence order.
+  Verified: sparse and full prints agree; firstFour matches the FH report.
+- `fh` latest Family History import: `monthly[year][1..12]` from point markers (colour → year via
+  the legend marks; LCR hides overlapping labels, so labels aren't used), bar charts from their
+  labels (`allTickLabels()` excludes every axis column), YTD submitters "x / y" table, headline.
+- UI: `renderStatsTab()`, `statsLineChart()` (dependency-free SVG, sized to the viewport), KI
+  checkboxes + 2–16 quarter range (`_kiOn`, `_kiRange`), QR quarter select (`_qrPick`).
+- Note: the Covenant Path importer's token helper is `reportNameTokens()` — it had been named
+  `nameTokens`, silently replacing the note-matching `nameTokens()` (fixed 2026-10-20).
+
 ### Phone notifications (push) — Blaze + Cloud Function
 Set-up steps are in `NOTIFICATIONS_SETUP.md` (Blaze upgrade, budget alert, Web Push key,
 Firebase CLI, deploy).

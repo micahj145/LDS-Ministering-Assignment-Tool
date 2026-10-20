@@ -208,6 +208,7 @@ tr:hover td{background:#fafbfc}
   <button id="nav-propose-btn" onclick="showTab('propose')">Proposed Assignments</button>
   <button id="nav-council-btn" onclick="showTab('council')">Covenant Path Progress</button>
   <button id="nav-moves-btn" onclick="showTab('moves')">New Member Move Ins / Move Outs <span id="moves-mine"></span></button>
+  <button id="nav-stats-btn" onclick="showTab('stats')">Unit Statistics</button>
   <button id="nav-admin-btn" onclick="showTab('admin')" style="display:none">Admin <span id="admin-pending-count"></span></button>
 </nav>
 
@@ -612,6 +613,50 @@ tr:hover td{background:#fafbfc}
     <div id="moveout-review"></div>
   </div>
   <div id="moveout-log"></div>
+</div>
+
+<!-- UNIT STATISTICS TAB -->
+<div id="tab-stats" class="tab-content">
+  <div class="alert alert-info">Ward totals from four LCR reports — no names. Same steps as the other LCR imports: tap
+    <strong>Fetch/Print/Download</strong>, print the LCR page to PDF (Ctrl+P → Save as PDF; on Android ⋮ → Share → Print → Save as PDF), then tap that report's
+    <strong>Import</strong>. Each import adds to what's here: Key Indicators keeps every quarter ever imported, the Quarterly Report keeps each quarter
+    separately, and Unit Statistics shows the change since the previous import.</div>
+  <div class="card">
+    <h2 style="margin:0 0 0.6rem">Import from LCR</h2>
+    <div style="display:flex;gap:0.8rem;flex-wrap:wrap">
+      <div style="flex:1;min-width:170px">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Unit Statistics</div>
+        <input type="file" id="stats-file-us" accept=".pdf,application/pdf" style="display:none" onchange="handleStatsPdf('us', this.files[0])">
+        <a class="btn btn-secondary lcr-fetch" data-report="st-us" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('stats-file-us').click()">Import</button>
+        <div id="stats-last-us" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
+      </div>
+      <div style="flex:1;min-width:170px">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Quarterly Report</div>
+        <input type="file" id="stats-file-qr" accept=".pdf,application/pdf" style="display:none" onchange="handleStatsPdf('qr', this.files[0])">
+        <a class="btn btn-secondary lcr-fetch" data-report="st-qr" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('stats-file-qr').click()">Import</button>
+        <div id="stats-last-qr" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
+      </div>
+      <div style="flex:1;min-width:170px">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Key Indicators</div>
+        <input type="file" id="stats-file-ki" accept=".pdf,application/pdf" style="display:none" onchange="handleStatsPdf('ki', this.files[0])">
+        <a class="btn btn-secondary lcr-fetch" data-report="st-ki" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('stats-file-ki').click()">Import</button>
+        <div id="stats-last-ki" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
+      </div>
+      <div style="flex:1;min-width:170px">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Family History Activity</div>
+        <input type="file" id="stats-file-fh" accept=".pdf,application/pdf" style="display:none" onchange="handleStatsPdf('fh', this.files[0])">
+        <a class="btn btn-secondary lcr-fetch" data-report="st-fh" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('stats-file-fh').click()">Import</button>
+        <div id="stats-last-fh" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
+      </div>
+    </div>
+    <div id="stats-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+    <div id="stats-review"></div>
+  </div>
+  <div id="stats-body"></div>
 </div>
 
 <div id="tab-admin" class="tab-content">
@@ -1455,7 +1500,7 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   // Order must match the nav buttons in the DOM — the active-button lookup
   // below is by index, so inserting a tab means inserting it here too.
-  const tabs = ['import','notifications','messages','members','households','brothers','current','propose','council','moves','admin'];
+  const tabs = ['import','notifications','messages','members','households','brothers','current','propose','council','moves','stats','admin'];
   document.querySelectorAll('nav button')[tabs.indexOf(name)].classList.add('active');
   if (name === 'members')    renderMembers();
   if (name === 'households') renderHouseholds();
@@ -1466,6 +1511,7 @@ function showTab(name) {
   if (name === 'moves')      renderMoves();
   if (name === 'notifications') { renderNotifications(); markNotificationsSeen(); }
   if (name === 'messages')   { renderMessagesTab(); markRestrictedSeen(); }
+  if (name === 'stats')      renderStatsTab();
   if (name === 'admin')      renderAdminPanel();
 }
 
@@ -5754,19 +5800,19 @@ function parseCovenantPage(pages) {
   return out;
 }
 
-function nameTokens(s) {
+function reportNameTokens(s) {
   return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
     .replace(/[^a-z\s,'-]/g, ' ').replace(/[,'-]/g, ' ').split(/\s+/).filter(Boolean);
 }
 const NAME_SUFFIX = new Set(['jr', 'sr', 'ii', 'iii', 'iv']);
 
 function matchReportName(reportName) {
-  const toks = nameTokens(reportName);
+  const toks = reportNameTokens(reportName);
   const core = toks.filter((t, i) => !(i === toks.length - 1 && NAME_SUFFIX.has(t)));
   const exact = [], loose = [];
   S.members.forEach(m => {
     const [last, rest] = String(m.name || '').split(',');
-    const lt = nameTokens(last).filter(t => !NAME_SUFFIX.has(t)), ft = nameTokens(rest).filter(t => !NAME_SUFFIX.has(t));
+    const lt = reportNameTokens(last).filter(t => !NAME_SUFFIX.has(t)), ft = reportNameTokens(rest).filter(t => !NAME_SUFFIX.has(t));
     if (!lt.length || !ft.length) return;
     const endsWithLast = lt.every((t, i) => core[core.length - lt.length + i] === t);
     const firstIn = core.slice(0, core.length - lt.length).includes(ft[0]);
@@ -5942,6 +5988,658 @@ function lcrSnapshotHTML(e) {
     <span style="color:#aaa">· LCR ${esc(formatNoteDate(l.asOf))}</span></div>` : '';
 }
 
+// ── Unit Statistics: reading LCR report PDFs (text + chart geometry) ──
+// Shared by the four importers. pdfPageData() turns one pdf.js page into
+//   { items: [{ s, x, y, w, h, font }], shapes: [{ seq, kind, fill, stroke, ops, V, cx, cy, w, h }] }
+// in page coordinates (y up). `shapes` are the drawn paths with the current
+// transform applied, so chart points can be read from where they sit on the
+// axis even when LCR hides a point's number label.
+async function pdfPageData(page, lib) {
+  const tc = await page.getTextContent();
+  const items = tc.items.filter(t => t.str && t.str.trim()).map(t => ({
+    s: t.str.replace(/\s+/g, ' ').trim(), x: t.transform[4], y: t.transform[5], w: t.width || 0, h: t.height || 0, font: t.fontName }));
+  const ops = await page.getOperatorList();
+  const O = lib.OPS;
+  const mul = (m, n) => [m[0]*n[0]+m[2]*n[1], m[1]*n[0]+m[3]*n[1], m[0]*n[2]+m[2]*n[3], m[1]*n[2]+m[3]*n[3], m[0]*n[4]+m[2]*n[5]+m[4], m[1]*n[4]+m[3]*n[5]+m[5]];
+  const ap = (m, x, y) => [m[0]*x+m[2]*y+m[4], m[1]*x+m[3]*y+m[5]];
+  const rgb = a => Array.from(Object.values(a || {})).slice(0, 3).map(v => Math.round(v)).join(',');
+  let ctm = [1, 0, 0, 1, 0, 0], fill = null, stroke = null;
+  const stack = [], shapes = [];
+  let pending = null;
+  for (let i = 0; i < ops.fnArray.length; i++) {
+    const f = ops.fnArray[i], a = ops.argsArray[i];
+    if (f === O.save) stack.push([ctm, fill, stroke]);
+    else if (f === O.restore) { const r = stack.pop(); if (r) [ctm, fill, stroke] = r; }
+    else if (f === O.transform) ctm = mul(ctm, a);
+    else if (f === O.setFillRGBColor) fill = rgb(a);
+    else if (f === O.setStrokeRGBColor) stroke = rgb(a);
+    else if (f === O.setFillGray) fill = [a[0], a[0], a[0]].map(v => Math.round(v * 255)).join(',');
+    else if (f === O.setStrokeGray) stroke = [a[0], a[0], a[0]].map(v => Math.round(v * 255)).join(',');
+    else if (f === O.constructPath) {
+      const opsA = Array.from(a[0]), c = Array.from(a[1]), V = [];
+      let k = 0;
+      opsA.forEach(o => {
+        if (o === O.moveTo || o === O.lineTo) { V.push(ap(ctm, c[k], c[k + 1])); k += 2; }
+        else if (o === O.curveTo) { V.push(ap(ctm, c[k + 4], c[k + 5])); k += 6; }
+        else if (o === O.curveTo2 || o === O.curveTo3) { V.push(ap(ctm, c[k + 2], c[k + 3])); k += 4; }
+        else if (o === O.rectangle) { const p = [ap(ctm, c[k], c[k + 1]), ap(ctm, c[k] + c[k + 2], c[k + 1] + c[k + 3])]; V.push(...p); k += 4; }
+      });
+      if (!V.length) continue;
+      const xs = V.map(v => v[0]), ys = V.map(v => v[1]);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      pending = { seq: shapes.length, fill, stroke, ops: opsA, V, x0, x1, y0, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0,
+        line: opsA.every(o => o === O.moveTo || o === O.lineTo), kind: null };
+      shapes.push(pending);
+    } else if (pending && (f === O.fill || f === O.eoFill)) { pending.kind = 'fill'; pending = null; }
+    else if (pending && f === O.stroke) { pending.kind = 'stroke'; pending = null; }
+    else if (pending && (f === O.fillStroke || f === O.eoFillStroke)) { pending.kind = 'fill'; pending = null; }
+    else if (pending && (f === O.endPath || f === O.clip || f === O.eoClip)) { pending.kind = 'clip'; pending = null; }
+  }
+  return { items, shapes: shapes.filter(s => s.kind === 'fill' || s.kind === 'stroke') };
+}
+
+async function readPdfPages(file, lib, data) {
+  const doc = await lib.getDocument({ data: data || new Uint8Array(await file.arrayBuffer()) }).promise;
+  const pages = [];
+  for (let i = 1; i <= doc.numPages; i++) pages.push(await pdfPageData(await doc.getPage(i), lib));
+  return pages;
+}
+
+// Text lines (top to bottom), runs that touch glued together.
+function statLines(page) {
+  const rows = [];
+  page.items.forEach(it => {
+    let r = rows.find(r => Math.abs(r.y - it.y) < 2.5);
+    if (!r) rows.push(r = { y: it.y, items: [] });
+    r.items.push(it);
+  });
+  return rows.sort((a, b) => b.y - a.y).map(r => {
+    const its = r.items.sort((a, b) => a.x - b.x);
+    const text = its.reduce((acc, it, k) => { const p = its[k - 1]; const gap = p ? it.x - (p.x + p.w) : 99; return acc + (k && gap > 1 ? ' ' : '') + it.s; }, '')
+      .normalize('NFC').replace(/\s+/g, ' ').trim();
+    return { y: r.y, text, items: its };
+  });
+}
+
+function detectStatsReport(pages) {
+  const t = pages.slice(0, 1).flatMap(p => p.items.map(i => i.s)).join(' ');
+  if (/Family History Activity Report/i.test(t)) return 'fh';
+  if (/Key Indicators and Trends/i.test(t)) return 'ki';
+  if (/Quarterly Report/i.test(t)) return 'qr';
+  if (/Unit Statistics/i.test(t)) return 'us';
+  return null;
+}
+
+// Axis calibration: numeric tick labels in a column, paired with the
+// horizontal gridline each sits beside when there is one (exact), otherwise
+// the label's own position. Returns value(y) or null.
+function axisFromTicks(ticks, shapes, x0, x1) {
+  if (ticks.length < 2) return null;
+  const grid = shapes.filter(s => s.kind === 'stroke' && s.h < 0.05 && s.w > 40 && s.x0 >= x0 - 30 && s.x0 <= x1).map(s => s.cy);
+  const pts = ticks.map(t => {
+    const g = grid.filter(y => Math.abs(y - (t.y + t.h * 0.35)) < 3).sort((a, b) => Math.abs(a - t.y) - Math.abs(b - t.y))[0];
+    return { v: t.v, y: g !== undefined ? g : t.y + t.h * 0.35 };
+  });
+  const n = pts.length, sx = pts.reduce((s, p) => s + p.y, 0), sy = pts.reduce((s, p) => s + p.v, 0);
+  const sxx = pts.reduce((s, p) => s + p.y * p.y, 0), sxy = pts.reduce((s, p) => s + p.y * p.v, 0);
+  const den = n * sxx - sx * sx; if (!den) return null;
+  const A = (n * sxy - sx * sy) / den, B = (sy - A * sx) / n;
+  return y => A * y + B;
+}
+
+// A column of evenly stepped integers (0,10,20…) with nearly the same x.
+function tickColumn(items, region) {
+  const nums = items.filter(i => /^\d+$/.test(i.s) && i.x >= region.x0 && i.x <= region.x1 && i.y >= region.y0 && i.y <= region.y1);
+  if (!nums.length) return [];
+  const minX = Math.min(...nums.map(i => i.x + i.w));
+  const col = nums.filter(i => Math.abs(i.x + i.w - minX) < 6 || i.x + i.w <= minX + 6).sort((a, b) => a.y - b.y);
+  // right-aligned column: keep labels whose right edge lines up
+  const right = col.map(i => i.x + i.w), r0 = right.sort((a, b) => a - b)[Math.floor(right.length / 2)];
+  const out = nums.filter(i => Math.abs(i.x + i.w - r0) < 4).sort((a, b) => a.y - b.y).map(i => ({ v: +i.s, y: i.y, h: i.h, x: i.x }));
+  if (out.length < 2) return [];
+  const step = out[1].v - out[0].v;
+  return step > 0 && out.every((t, k) => !k || t.v - out[k - 1].v === step) ? out : [];
+}
+
+// Every axis label on the page: integers that line up on their right edge
+// in a column of three or more, evenly stepped.
+function allTickLabels(items) {
+  const nums = items.filter(i => /^\d+$/.test(i.s));
+  const out = new Set();
+  nums.forEach(a => {
+    const col = nums.filter(b => Math.abs(b.x + b.w - (a.x + a.w)) < 2.5).sort((p, q) => p.y - q.y);
+    // Several charts can share a column (one above another): split into runs
+    // that keep the same value step and spacing.
+    let run = [];
+    const flush = () => { if (run.length >= 3) run.forEach(t => out.add(t)); };
+    col.forEach(t => {
+      if (run.length < 2) {
+        if (run.length === 1 && !(+t.s > +run[0].s)) { flush(); run = []; }
+        run.push(t); return;
+      }
+      const step = +run[1].s - +run[0].s, gap = run[1].y - run[0].y, last = run[run.length - 1];
+      if (+t.s - +last.s === step && Math.abs((t.y - last.y) - gap) < gap * 0.25) run.push(t);
+      else { flush(); run = [t]; }
+    });
+    flush();
+  });
+  return out;
+}
+
+// ── Family History Activity Report ──
+function parseFamilyHistory(pages) {
+  const P = pages[0], items = P.items;
+  const find = re => items.find(i => re.test(i.s));
+  const out = { monthly: {}, firstFour: {}, logins: {}, participation: { names: {}, memories: {}, indexed: {} }, submitters: null, headline: '', problems: [] };
+  const head = items.find(i => /than last year/i.test(i.s)); if (head) out.headline = head.s;
+  const unit = items.find(i => /\(\d{4,}\)$/.test(i.s)); if (unit) out.unit = unit.s;
+
+  // Members submitting by month: points are small filled marks, one colour
+  // per year; the legend marks beside "YTD 2025"/"YTD 2026" say which.
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthItems = MONTHS.map(m => items.find(i => i.s === m)).filter(Boolean);
+  const title = find(/Members Submitting This Year/i);
+  if (monthItems.length >= 6 && title) {
+    const yBase = Math.max(...monthItems.map(i => i.y));
+    const region = { x0: 0, x1: monthItems[0].x, y0: yBase, y1: title.y };
+    const ticks = tickColumn(items, region);
+    const val = axisFromTicks(ticks, P.shapes, 0, 9999);
+    const legend = items.filter(i => /^YTD \d{4}$/.test(i.s) && i.y > yBase && i.y < title.y);
+    const marks = P.shapes.filter(s => s.kind === 'fill' && s.w > 1.5 && s.w < 7 && s.h > 1.5 && s.h < 7 && s.cy > yBase && s.cy < title.y && s.fill && s.fill !== '255,255,255');
+    const colorYear = {};
+    legend.forEach(l => {
+      const m = marks.filter(s => s.cx < l.x + 1 && s.cx > l.x - 15 && Math.abs(s.cy - (l.y + l.h * 0.35)) < 5).sort((a, b) => b.cx - a.cx)[0];
+      if (m) colorYear[m.fill] = l.s.slice(4);
+    });
+    const legendSeq = new Set(marks.filter(s => legend.some(l => s.cx < l.x + 1 && s.cx > l.x - 15 && Math.abs(s.cy - (l.y + l.h * 0.35)) < 5)).map(s => s.seq));
+    if (val && Object.keys(colorYear).length) {
+      const mx = monthItems.map(i => ({ m: MONTHS.indexOf(i.s) + 1, x: i.x + i.w / 2 }));
+      marks.filter(s => !legendSeq.has(s.seq) && colorYear[s.fill]).forEach(s => {
+        const yr = colorYear[s.fill];
+        const m = mx.reduce((b, c) => Math.abs(c.x - s.cx) < Math.abs(b.x - s.cx) ? c : b);
+        (out.monthly[yr] = out.monthly[yr] || {})[m.m] = Math.round(val(s.cy));
+      });
+    } else out.problems.push('monthly chart');
+  } else out.problems.push('monthly chart');
+
+  // The three bar charts: every bar is labelled, so read the labels.
+  const t1 = find(/First Four Generations/i), t2 = find(/Members Logging/i), t3 = find(/Members Participating/i);
+  if (t1 && t2 && t3) {
+    const cut1 = (t1.x + t1.w + t2.x) / 2, cut2 = (t2.x + t2.w + t3.x) / 2;
+    const topY = Math.max(t1.y, t2.y, t3.y) + 5;
+    const ytd = items.filter(i => /^YTD \d{4}$/.test(i.s) && i.y < t1.y - 20);
+    const bottom = ytd.length ? Math.min(...ytd.map(i => i.y)) - 2 : 0;
+    const table = find(/YTD Submitters Unit Detail/i);
+    const floor = table ? table.y + 10 : 0;
+    const tickSet = allTickLabels(items);
+    const chart = (x0, x1) => {
+      const reg = { x0, x1, y0: Math.max(bottom, floor), y1: topY };
+      const labels = items.filter(i => /^\d+(\.\d+)?%?$/.test(i.s) && i.x + i.w / 2 >= x0 && i.x + i.w / 2 < x1 && i.y > reg.y0 && i.y < topY && !tickSet.has(i));
+      return { labels: labels.map(l => ({ v: parseFloat(l.s), x: l.x + l.w / 2, y: l.y })), years: ytd.filter(i => i.x >= x0 && i.x < x1) };
+    };
+    const byYearLabel = (c, into) => c.labels.forEach(l => {
+      const y = c.years.reduce((b, k) => !b || Math.abs(k.x + k.w / 2 - l.x) < Math.abs(b.x + b.w / 2 - l.x) ? k : b, null);
+      if (y) into[y.s.slice(4)] = l.v;
+    });
+    byYearLabel(chart(0, cut1), out.firstFour);
+    byYearLabel(chart(cut1, cut2), out.logins);
+    const c3 = chart(cut2, 9999);
+    const cats = [['names', /Added Names/i], ['memories', /Added Memor/i], ['indexed', /^Indexed$/i]].map(([k, re]) => ({ k, it: items.find(i => re.test(i.s) && i.x >= cut2) })).filter(c => c.it);
+    const yrs = [...new Set(c3.years.map(y => y.s.slice(4)))].sort();
+    cats.forEach(c => {
+      const mine = c3.labels.filter(l => cats.reduce((b, k) => Math.abs(k.it.x + k.it.w / 2 - l.x) < Math.abs(b.it.x + b.it.w / 2 - l.x) ? k : b) === c).sort((a, b) => a.x - b.x);
+      if (mine.length === yrs.length) mine.forEach((l, i) => { out.participation[c.k][yrs[i]] = l.v; });
+    });
+    if (!Object.keys(out.firstFour).length || !Object.keys(out.logins).length) out.problems.push('bar charts');
+  } else out.problems.push('bar charts');
+
+  // YTD Submitters table: "x / y" cells under Totals, Adults, Youth, New Members, YSAs.
+  const hdr = statLines(P).find(l => /Totals/.test(l.text) && /Adults/.test(l.text) && /Youth/.test(l.text));
+  if (hdr) {
+    const cols = ['Totals', 'Adults', 'Youth', 'New Members', 'YSAs'].map(n => ({ n, it: hdr.items.find(i => i.s === n) || hdr.items.find(i => i.s.startsWith(n.split(' ')[0])) }));
+    const cells = items.filter(i => /^\d+\s*\/\s*\d+$/.test(i.s) && i.y < hdr.y && i.y > hdr.y - 40);
+    const sub = {};
+    cells.forEach(c => {
+      const col = cols.filter(k => k.it).reduce((b, k) => Math.abs(k.it.x - c.x) < Math.abs(b.it.x - c.x) ? k : b);
+      const [a, b] = c.s.split('/').map(v => +v.trim());
+      sub[col.n] = { n: a, of: b };
+    });
+    if (Object.keys(sub).length) out.submitters = sub; else out.problems.push('submitters table');
+  } else out.problems.push('submitters table');
+  const yrs = Object.keys(out.monthly).sort();
+  out.year = yrs[yrs.length - 1] || null;
+  return out;
+}
+
+// ── Key Indicators and Trends ──
+const KI_INDICATORS = [
+  { key: 'sacrament',  label: 'Sacrament meeting attendance',                         re: /^Sacrament meeting attendance/i },
+  { key: 'recommend',  label: 'Endowed adults with temple recommend',                 re: /^Endowed adults with temple recommend/i },
+  { key: 'ymPriest',   label: 'Young Men priesthood attendance',                      re: /^Young Men priesthood attendance/i },
+  { key: 'yw',         label: 'Young Women attendance',                               re: /^Young Women attendance/i },
+  { key: 'mpAttend',   label: 'Melchizedek Priesthood attendance',                    re: /^Melchizedek Priesthood attendance/i },
+  { key: 'rs',         label: 'Relief Society attendance',                            re: /^Relief Society attendance/i },
+  { key: 'menMP',      label: 'Men holding the Melchizedek Priesthood',               re: /^Men holding the Melchizedek Priesthood/i },
+  { key: 'ordinances', label: 'Members submitting temple ordinances (last 12 months)', re: /^Members submitting temple ordinances/i },
+  { key: 'firstFour',  label: 'First four generations in Family Tree',               re: /^First four generations of ancestors/i },
+];
+
+function parseKeyIndicators(pages) {
+  const P = pages[0], items = P.items, out = { series: {}, quarters: [], included: [], problems: [] };
+  // Legend: each indicator's label, and whether its checkbox is ticked
+  // (a ticked box is a filled blue square to the left of the label).
+  const legend = KI_INDICATORS.map(ind => ({ ind, it: items.find(i => ind.re.test(i.s)) })).filter(l => l.it);
+  if (legend.length < KI_INDICATORS.length) out.problems.push('legend');
+  // The checkbox is the square nearest the label (the colour swatch sits
+  // further left). Ticked: filled in a colour; unticked: white with a grey ring.
+  const WHITEISH = f => !f || f.split(',').map(Number).every(v => v > 235);
+  legend.forEach(l => {
+    const mid = l.it.y + l.it.h * 0.35;
+    const boxes = P.shapes.filter(s => s.kind === 'fill' && s.w > 8 && s.w < 20 && s.h > 8 && s.h < 20 && s.cx < l.it.x && s.cx > l.it.x - 22 && Math.abs(s.cy - mid) < 8);
+    l.on = boxes.some(s => !WHITEISH(s.fill));
+  });
+  // Legend reading order matches drawing order: left column top to bottom, then right.
+  const xs = legend.map(l => l.it.x), mid = (Math.min(...xs) + Math.max(...xs)) / 2;
+  legend.sort((a, b) => (a.it.x > mid) - (b.it.x > mid) || b.it.y - a.it.y);
+  const on = legend.filter(l => l.on);
+  out.included = on.map(l => l.ind.key);
+
+  const qItems = items.filter(i => /^\d{4}-[1-4]$/.test(i.s));
+  const qs = qItems.map(i => ({ q: i.s.replace('-', 'Q'), x: i.x + i.w / 2, y: i.y }));
+  out.quarters = [...new Set(qs.map(q => q.q))].sort();
+  if (!qs.length) { out.problems.push('quarters'); return out; }
+  const base = Math.max(...qs.map(q => q.y));
+  const legendLow = legend.length ? Math.min(...legend.map(l => l.it.y)) : 9999;
+  const region = { x0: 0, x1: Math.min(...qs.map(q => q.x)), y0: base, y1: legendLow };
+  const ticks = tickColumn(items, region);
+  const val = axisFromTicks(ticks, P.shapes, 0, 9999);
+  if (!val) { out.problems.push('axis'); return out; }
+  // A series is a stroked line made of straight segments, immediately
+  // followed by its point markers (gridlines have none).
+  const S = P.shapes;
+  const series = [];
+  S.forEach((s, k) => {
+    if (s.kind !== 'stroke' || !s.line || s.cy < base || s.cy > legendLow) return;
+    const nxt = S[k + 1];
+    if (nxt && nxt.kind === 'fill' && nxt.w < 8 && nxt.h < 8 && nxt.w > 1) series.push(s);
+  });
+  if (series.length !== on.length) out.problems.push(`found ${series.length} lines for ${on.length} ticked indicators`);
+  series.forEach((s, i) => {
+    const l = on[i]; if (!l) return;
+    const pts = {};
+    s.V.forEach(v => {
+      const q = qs.reduce((b, c) => Math.abs(c.x - v[0]) < Math.abs(b.x - v[0]) ? c : b);
+      if (Math.abs(q.x - v[0]) < 12) pts[q.q] = Math.round(val(v[1]));
+    });
+    out.series[l.ind.key] = pts;
+  });
+  return out;
+}
+
+// ── Quarterly Report ──
+const QR_SECTIONS = ['Indicators of Conversion and Church Growth', 'Members / Families', 'Adults', 'Youth', 'Children', 'Converts (past 12 months)'];
+function parseQuarterly(pages) {
+  const out = { quarter: null, years: [], rows: [], convertCount: null, problems: [] };
+  const lines = pages.flatMap(statLines);
+  const qh = lines.map(l => l.text.match(/Quarter\s+([1-4])\s*-\s*(\d{4})/)).find(Boolean);
+  if (qh) out.quarter = `${qh[2]}Q${qh[1]}`; else out.problems.push('quarter');
+  const yh = lines.find(l => /^Actual Potential \d{4} \d{4} \d{4}$/.test(l.text));
+  if (yh) out.years = yh.text.match(/\d{4}/g);
+  let section = '', carry = '';
+  const NUM = '(\\d+|--)', PCT = '(\\d+%|--)';
+  const rowRe = new RegExp(`^(\\d{1,2})\\s+(.*?)\\s*${NUM}\\s+${NUM}\\s+${PCT}\\s+${PCT}\\s+${PCT}$`);
+  const stop = /^(Convert Detail|Total converts)/i;
+  let inTable = false, done = false;
+  lines.forEach((l, k) => {
+    if (/Total converts age 8 and older/i.test(l.text)) { const m = l.text.match(/(\d+)\s*$/); if (m) out.convertCount = +m[1]; }
+    if (done) return;
+    if (stop.test(l.text)) { done = out.rows.length >= 20; return; }
+    if (QR_SECTIONS.includes(l.text)) { section = l.text; inTable = true; carry = ''; return; }
+    if (!inTable) return;
+    const m = l.text.match(rowRe);
+    if (m) {
+      let label = m[2];
+      if (!label) {
+        const next = lines[k + 1] && lines[k + 1].text;
+        label = carry + (next && !rowRe.test(next) && !QR_SECTIONS.includes(next) && !/For Church Use/.test(next) ? ' ' + next : '');
+      }
+      const n = v => v === '--' ? null : parseInt(v, 10);
+      out.rows.push({ n: +m[1], section, label: label.trim(), actual: n(m[3]), potential: n(m[4]), pct: [n(m[5]), n(m[6]), n(m[7])] });
+      carry = '';
+    } else if (!/For Church Use|^\d{1,2} \w{3} \d{4}/.test(l.text) && !/^Quarter \d$/.test(l.text) && !/^Actual Potential/.test(l.text)) {
+      carry = (carry ? carry + ' ' : '') + l.text;
+      if (out.rows.length && carry && lines[k - 1] && rowRe.test(lines[k - 1].text) && !lines[k - 1].text.match(rowRe)[2]) { carry = ''; }
+    }
+  });
+  // de-duplicate (a row read twice across a page break) and keep order
+  const seen = new Set(); out.rows = out.rows.filter(r => !seen.has(r.n) && seen.add(r.n));
+  if (out.rows.length < 20) out.problems.push(`only ${out.rows.length} rows`);
+  return out;
+}
+
+// ── Unit Statistics ──
+function parseUnitStats(pages) {
+  const out = { groups: [], problems: [] };
+  const all = [];
+  pages.forEach(p => statLines(p).forEach(l => {
+    const m = l.text.match(/^(.*\D)\s+(\d+)$/);
+    if (!m || /For Church Use|Unit Statistics|Ward \(|Branch \(/.test(l.text)) return;
+    all.push({ label: m[1].trim(), value: +m[2], font: l.items[0].font });
+  }));
+  if (!all.length) { out.problems.push('no rows'); return out; }
+  // Section totals use a different (bold) font from the lines under them.
+  const counts = {}; all.forEach(r => counts[r.font] = (counts[r.font] || 0) + 1);
+  const body = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+  all.forEach(r => {
+    if (r.font !== body) {
+      const last = out.groups[out.groups.length - 1];
+      if (last && last.label === r.label && last.value === r.value) return;      // repeated after a page break
+      out.groups.push({ label: r.label, value: r.value, items: [] });
+    } else {
+      if (!out.groups.length) out.groups.push({ label: '', value: null, items: [] });
+      out.groups[out.groups.length - 1].items.push({ label: r.label, value: r.value });
+    }
+  });
+  return out;
+}
+
+
+// ── Unit Statistics tab ───────────────────────────────────────
+// Four LCR reports, printed to PDF and imported (same Fetch/Print/Download →
+// Import flow as the other LCR imports). Everything here is ward-level
+// totals — no names — and lives in its own document, wardData/stats, so an
+// import can't collide with someone saving notes in wardData/shared:
+//   fh  latest Family History Activity import (monthly submitters by year,
+//       bar charts, YTD submitters table)
+//   ki  { series: { indicatorKey: { '2026Q3': 26, … } } } — each import adds or
+//       updates the quarters it contains; older quarters are kept
+//   qr  { '2026Q3': { years, rows, convertCount, … } } — one entry per quarter
+//   us  { snapshots: [{ date, by, groups }] } — every Unit Statistics import
+// Writes use dotted field paths so two people importing different reports
+// at the same time don't overwrite each other.
+const STATS_REPORTS = {
+  fh: { label: 'Family History Activity', parse: parseFamilyHistory },
+  ki: { label: 'Key Indicators and Trends', parse: parseKeyIndicators },
+  qr: { label: 'Quarterly Report', parse: parseQuarterly },
+  us: { label: 'Unit Statistics', parse: parseUnitStats },
+};
+// LCR's legend colours; Men holding the MP shares Endowed's orange in LCR,
+// so it gets a different shade here to tell them apart. Light grey darkened.
+const KI_COLORS = { sacrament: '#7d8186', recommend: '#d45311', ymPriest: '#20abd7', yw: '#e10f5a', mpAttend: '#157493',
+                    rs: '#9c4f9c', menMP: '#f0a030', ordinances: '#b00504', firstFour: '#318d43' };
+let _stats = null, _statsLoaded = false, _statsPlan = null;
+let _kiOn = null, _kiRange = 8, _qrPick = null;
+
+function statsDoc() { return db.collection('wardData').doc('stats'); }
+
+async function loadStats(force) {
+  if (_statsLoaded && !force) return;
+  try {
+    const d = await statsDoc().get();
+    _stats = d.exists ? d.data() : {};
+    _statsLoaded = true;
+  } catch (e) {
+    console.warn('Could not load unit statistics:', e?.message);
+    _stats = _stats || {};
+  }
+}
+
+async function saveStats(updates) {
+  try { await statsDoc().update(updates); }
+  catch (e) {
+    if (!/not.?found|No document/i.test(String(e?.code || e?.message))) throw e;
+    await statsDoc().set({ createdAt: new Date().toISOString() });
+    await statsDoc().update(updates);
+  }
+}
+
+function qLabel(q) { const m = String(q || '').match(/^(\d{4})Q([1-4])$/); return m ? `Q${m[2]} ${m[1]}` : q; }
+function currentQuarter() { const d = new Date(); return `${d.getFullYear()}Q${Math.floor(d.getMonth() / 3) + 1}`; }
+function quarterAdd(q, n) { const m = q.match(/^(\d{4})Q([1-4])$/); let i = +m[1] * 4 + (+m[2] - 1) + n; return `${Math.floor(i / 4)}Q${i % 4 + 1}`; }
+function statsWho(o) { return o && o.importedAt ? `Imported ${formatNoteDate(o.importedAt)}${o.importedBy ? ' by ' + esc(o.importedBy) : ''}` : 'Not imported yet'; }
+
+async function renderStatsTab() {
+  const host = document.getElementById('stats-body');
+  if (!host) return;
+  if (!_statsLoaded) { host.innerHTML = '<div class="card"><p style="color:#888">Loading…</p></div>'; await loadStats(); }
+  const S2 = _stats || {};
+  document.getElementById('stats-last-fh').innerHTML = statsWho(S2.fh);
+  document.getElementById('stats-last-ki').innerHTML = S2.ki?.updatedAt ? `Updated ${formatNoteDate(S2.ki.updatedAt)}${S2.ki.updatedBy ? ' by ' + esc(S2.ki.updatedBy) : ''}` : 'Not imported yet';
+  const qrs = Object.keys(S2.qr || {}).sort();
+  document.getElementById('stats-last-qr').innerHTML = qrs.length ? `${qrs.length} quarter${qrs.length === 1 ? '' : 's'} imported (latest ${qLabel(qrs[qrs.length - 1])})` : 'Not imported yet';
+  const snaps = S2.us?.snapshots || [];
+  document.getElementById('stats-last-us').innerHTML = snaps.length ? `Imported ${formatNoteDate(snaps[snaps.length - 1].date)}${snaps[snaps.length - 1].by ? ' by ' + esc(snaps[snaps.length - 1].by) : ''}` : 'Not imported yet';
+  host.innerHTML = statsUnitHTML(S2) + statsQuarterlyHTML(S2) + statsKiHTML(S2) + statsFhHTML(S2);
+}
+
+// ── Unit Statistics (snapshot) ──
+function statsUnitHTML(S2) {
+  const snaps = (S2.us?.snapshots || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const cur = snaps[snaps.length - 1], prev = snaps[snaps.length - 2];
+  const card = body => `<div class="card"><div class="flex-between"><h2 style="margin:0">Unit Statistics</h2>
+    <span style="font-size:0.8rem;color:#888">${cur ? 'As of ' + formatNoteDate(cur.date) + (prev ? ' · change since ' + formatNoteDate(prev.date) : '') : ''}</span></div>${body}</div>`;
+  if (!cur) return card('<p style="color:#888;font-size:0.85rem">Import the Unit Statistics report to see membership totals here.</p>');
+  const prevVal = label => { if (!prev) return null; for (const g of prev.groups || []) { if (g.label === label) return g.value; const i = (g.items || []).find(x => x.label === label); if (i) return i.value; } return null; };
+  const delta = (label, v) => { const p = prevVal(label); if (p === null || p === v) return ''; const d = v - p; return ` <span style="font-size:0.72rem;color:${d > 0 ? '#157347' : '#b02a37'}">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</span>`; };
+  return card(`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:0.75rem">${(cur.groups || []).map(g => `
+    <div style="border:1px solid #e0e6ed;border-radius:8px;padding:0.6rem 0.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.5rem">
+        <span style="font-weight:600;color:#1a3a5c;font-size:0.88rem">${esc(g.label)}</span>
+        <span style="font-size:1.25rem;font-weight:700;color:#1a3a5c;white-space:nowrap">${g.value ?? ''}${g.value !== null ? delta(g.label, g.value) : ''}</span></div>
+      ${(g.items || []).map(i => `<div style="display:flex;justify-content:space-between;gap:0.5rem;font-size:0.8rem;color:#555;margin-top:0.2rem">
+        <span>${esc(i.label)}</span><span style="white-space:nowrap">${i.value}${delta(i.label, i.value)}</span></div>`).join('')}
+    </div>`).join('')}</div>`);
+}
+
+// ── Quarterly Report ──
+function statsQuarterlyHTML(S2) {
+  const have = S2.qr || {};
+  const latest = Object.keys(have).sort().pop();
+  const now = currentQuarter();
+  const first = `${new Date().getFullYear() - 3}Q1`;
+  const opts = []; for (let q = now; q >= first; q = quarterAdd(q, -1)) opts.push(q);
+  Object.keys(have).forEach(q => { if (!opts.includes(q)) opts.push(q); });
+  opts.sort().reverse();
+  if (!_qrPick || !opts.includes(_qrPick)) _qrPick = latest || opts[1] || opts[0];
+  const r = have[_qrPick];
+  const sel = `<select onchange="_qrPick=this.value;renderStatsTab()" style="padding:0.3rem 0.5rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem">
+    ${opts.map(q => `<option value="${q}" ${q === _qrPick ? 'selected' : ''}>${qLabel(q)}${have[q] ? '' : ' — not imported'}</option>`).join('')}</select>`;
+  let body;
+  if (!r) body = `<p style="color:#888;font-size:0.85rem;margin-top:0.6rem">${qLabel(_qrPick)} hasn't been imported. In LCR's Quarterly Report choose ${qLabel(_qrPick)}, print it to PDF, and import it above.</p>`;
+  else {
+    const y = r.years || [];
+    let lastSec = '';
+    const pct = v => v === null || v === undefined ? '–' : v + '%';
+    const rows = (r.rows || []).map(x => {
+      const sec = x.section !== lastSec ? `<tr><td colspan="7" style="background:#f3f6fa;font-weight:600;color:#1a3a5c;font-size:0.8rem">${esc(x.section)}</td></tr>` : '';
+      lastSec = x.section;
+      return sec + `<tr><td style="color:#999">${x.n}</td><td>${esc(x.label)}</td><td style="text-align:right">${x.actual ?? '–'}</td><td style="text-align:right">${x.potential ?? '–'}</td>
+        <td style="text-align:right;font-weight:600">${pct(x.pct?.[0])}</td><td style="text-align:right;color:#666">${pct(x.pct?.[1])}</td><td style="text-align:right;color:#666">${pct(x.pct?.[2])}</td></tr>`;
+    }).join('');
+    body = `<div style="font-size:0.78rem;color:#888;margin:0.3rem 0 0.6rem">${statsWho(r)}${r.convertCount !== null && r.convertCount !== undefined ? ` · ${r.convertCount} convert${r.convertCount === 1 ? '' : 's'} (age 8+) in the last 12 months` : ''}</div>
+      <div style="overflow-x:auto"><table style="font-size:0.84rem;min-width:600px"><thead><tr><th>#</th><th>Indicator</th><th style="text-align:right">Actual</th><th style="text-align:right">Potential</th>
+      <th style="text-align:right">${esc(y[0] || '')}</th><th style="text-align:right">${esc(y[1] || '')}</th><th style="text-align:right">${esc(y[2] || '')}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  return `<div class="card"><div class="flex-between"><h2 style="margin:0">Quarterly Report</h2>${sel}</div>${body}</div>`;
+}
+
+// ── Key Indicators ──
+function statsKiHTML(S2) {
+  const series = S2.ki?.series || {};
+  const withData = KI_INDICATORS.filter(k => Object.keys(series[k.key] || {}).length);
+  const card = body => `<div class="card"><h2 style="margin:0 0 0.4rem">Key Indicators and Trends</h2>${body}</div>`;
+  if (!withData.length) return card('<p style="color:#888;font-size:0.85rem">Import the Key Indicators report to chart the trends here.</p>');
+  if (!_kiOn) _kiOn = new Set(withData.map(k => k.key));
+  const allQ = [...new Set(withData.flatMap(k => Object.keys(series[k.key])))].sort();
+  const lastQ = allQ[allQ.length - 1];
+  const n = Math.max(2, Math.min(16, _kiRange));
+  const qs = []; for (let i = n - 1; i >= 0; i--) qs.push(quarterAdd(lastQ, -i));
+  const shown = withData.filter(k => _kiOn.has(k.key));
+  const checks = KI_INDICATORS.map(k => {
+    const has = withData.includes(k);
+    return `<label style="display:flex;align-items:center;gap:0.35rem;font-weight:400;font-size:0.82rem;${has ? 'cursor:pointer' : 'color:#bbb'}" title="${has ? '' : 'Not in any import yet'}">
+      <input type="checkbox" style="width:auto" ${has && _kiOn.has(k.key) ? 'checked' : ''} ${has ? '' : 'disabled'} onchange="kiToggle('${k.key}', this.checked)">
+      <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${KI_COLORS[k.key]}"></span>${esc(k.label)}</label>`;
+  }).join('');
+  const range = `<label style="font-size:0.82rem;font-weight:400;display:flex;align-items:center;gap:0.4rem">Show the last
+    <select onchange="_kiRange=+this.value;renderStatsTab()" style="padding:0.2rem 0.4rem;border:1px solid #ddd;border-radius:6px">
+    ${Array.from({ length: 15 }, (_, i) => i + 2).map(v => `<option value="${v}" ${v === n ? 'selected' : ''}>${v}</option>`).join('')}</select> quarters (to ${qLabel(lastQ)})</label>`;
+  const chart = statsLineChart(qs.map(qLabel), shown.map(k => ({ name: k.label, color: KI_COLORS[k.key], values: qs.map(q => series[k.key][q] ?? null) })), { max: 100, suffix: '%' });
+  const missing = qs.filter(q => !shown.some(k => series[k.key][q] !== undefined));
+  return card(`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0.25rem 1rem;margin-bottom:0.6rem">${checks}</div>
+    <div style="display:flex;gap:0.8rem;flex-wrap:wrap;align-items:center;margin-bottom:0.4rem">${range}
+      <button class="btn btn-secondary btn-sm" onclick="kiAll(true)">All</button><button class="btn btn-secondary btn-sm" onclick="kiAll(false)">None</button></div>
+    ${shown.length ? chart : '<p style="color:#888;font-size:0.85rem">Tick an indicator to chart it.</p>'}
+    ${missing.length && shown.length ? `<div style="font-size:0.76rem;color:#999">No imported data for ${missing.map(qLabel).join(', ')}.</div>` : ''}
+    <div style="font-size:0.74rem;color:#999;margin-top:0.3rem">Values are read from LCR's chart and are whole percentages, as LCR plots them.</div>`);
+}
+function kiToggle(key, on) { if (!_kiOn) _kiOn = new Set(); on ? _kiOn.add(key) : _kiOn.delete(key); renderStatsTab(); }
+function kiAll(on) { _kiOn = new Set(on ? KI_INDICATORS.map(k => k.key) : []); renderStatsTab(); }
+
+// ── Family History ──
+function statsFhHTML(S2) {
+  const f = S2.fh;
+  const card = body => `<div class="card"><div class="flex-between"><h2 style="margin:0">Family History Activity</h2>
+    <span style="font-size:0.8rem;color:#888">${f ? statsWho(f) : ''}</span></div>${body}</div>`;
+  if (!f) return card('<p style="color:#888;font-size:0.85rem">Import the Family History Activity report to see it here.</p>');
+  const yrs = Object.keys(f.monthly || {}).sort();
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  // As in LCR: this year green, earlier years grey.
+  const monthly = yrs.length ? statsLineChart(M, yrs.map((y, i) => ({ name: 'YTD ' + y, color: i === yrs.length - 1 ? '#6fa832' : '#a3a8ae', values: M.map((_, m) => f.monthly[y][m + 1] ?? null) })), { height: 220 }) : '';
+  const bars = (title, obj, suffix) => {
+    const ks = Object.keys(obj || {}).sort(); if (!ks.length) return '';
+    const max = Math.max(...ks.map(k => obj[k]), 1);
+    return `<div style="flex:1;min-width:200px"><div style="font-size:0.82rem;font-weight:600;color:#1a3a5c;margin-bottom:0.3rem">${esc(title)}</div>
+      ${ks.map(k => `<div style="display:flex;align-items:center;gap:0.4rem;font-size:0.78rem;margin:0.15rem 0">
+        <span style="width:34px;color:#666;white-space:nowrap">${esc(k)}</span>
+        <span style="flex:1;background:#eef2f7;border-radius:4px;height:14px;position:relative"><span style="position:absolute;left:0;top:0;bottom:0;width:${(obj[k] / max * 100).toFixed(1)}%;background:#1a3a5c;border-radius:4px"></span></span>
+        <span style="width:42px;text-align:right">${obj[k]}${suffix || ''}</span></div>`).join('')}</div>`;
+  };
+  const P = f.participation || {};
+  const sub = f.submitters ? `<div style="overflow-x:auto;margin-top:0.8rem"><table style="font-size:0.84rem;min-width:480px"><thead><tr><th>YTD submitters</th>${Object.keys(f.submitters).map(k => `<th style="text-align:right">${esc(k)}</th>`).join('')}</tr></thead>
+    <tbody><tr><td>${esc(f.unit || 'This unit')}</td>${Object.values(f.submitters).map(v => `<td style="text-align:right">${v.n} / ${v.of}</td>`).join('')}</tr></tbody></table></div>` : '';
+  return card(`${f.headline ? `<p style="font-size:0.86rem;margin:0.2rem 0 0.6rem">${esc(f.headline)}</p>` : ''}
+    <div style="font-size:0.82rem;font-weight:600;color:#1a3a5c">Members submitting names, year to date</div>${monthly}
+    <div style="font-size:0.76rem;color:#999;margin:0.4rem 0 0">Bars: year to date for each year.</div>
+    <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:0.8rem">
+      ${bars('First four generations in the tree', f.firstFour, '%')}${bars('Members logging in (web and mobile)', f.logins)}
+      ${bars('Added names to tree', P.names)}${bars('Added memories to tree', P.memories)}${bars('Indexed', P.indexed)}</div>${sub}`);
+}
+
+// Small dependency-free SVG line chart. values: number | null per label.
+function statsLineChart(labels, series, opt = {}) {
+  // Drawn at about the width it will show at, so labels stay readable on a phone.
+  const W = Math.max(320, Math.min(760, (window.innerWidth || 760) - 70)), H = Math.round((opt.height || 260) * (W < 500 ? 0.85 : 1)), L = 30, R = 8, T = 10, B = 26;
+  const vals = series.flatMap(s => s.values).filter(v => v !== null && v !== undefined);
+  const max = opt.max || Math.max(10, Math.ceil(Math.max(...vals, 0) / 10) * 10);
+  const x = i => L + (labels.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (labels.length - 1));
+  const y = v => T + (H - T - B) * (1 - v / max);
+  const grid = [0, .2, .4, .6, .8, 1].map(f => `<line x1="${L}" x2="${W - R}" y1="${y(max * f)}" y2="${y(max * f)}" stroke="#e6e9ee"/>
+    <text x="${L - 5}" y="${y(max * f) + 3}" font-size="10" text-anchor="end" fill="#888">${Math.round(max * f)}</text>`).join('');
+  const every = Math.ceil(labels.length / 12);
+  const xl = labels.map((l, i) => i % every ? '' : `<text x="${x(i)}" y="${H - 8}" font-size="10" text-anchor="middle" fill="#888">${esc(l)}</text>`).join('');
+  const lines = series.map(s => {
+    let d = '', pen = false;
+    s.values.forEach((v, i) => { if (v === null || v === undefined) { pen = false; return; } d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`; pen = true; });
+    const dots = s.values.map((v, i) => v === null || v === undefined ? '' : `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}${opt.suffix || ''}</title></circle>`).join('');
+    return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2"/>${dots}`;
+  }).join('');
+  const legend = series.length > 1 && !opt.noLegend ? `<div style="display:flex;flex-wrap:wrap;gap:0.3rem 0.9rem;font-size:0.76rem;color:#555;margin-top:0.2rem">${series.map(s =>
+    `<span style="display:inline-flex;align-items:center;gap:0.3rem"><span style="width:12px;height:3px;background:${s.color};display:inline-block"></span>${esc(s.name)}</span>`).join('')}</div>` : '';
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img">${grid}${xl}${lines}</svg>${legend}`;
+}
+
+// ── Import ──
+async function handleStatsPdf(kind, file) {
+  const statusEl = document.getElementById('stats-status');
+  document.getElementById('stats-file-' + kind).value = '';
+  if (!file) return;
+  _statsPlan = null;
+  document.getElementById('stats-review').innerHTML = '';
+  statusEl.style.color = '#555';
+  statusEl.textContent = `Reading ${file.name}…`;
+  try {
+    const lib = await loadPdfJs();
+    const pages = await readPdfPages(file, lib);
+    const found = detectStatsReport(pages);
+    if (!found) { statusEl.style.color = '#dc3545'; statusEl.textContent = `${file.name} doesn't look like any of these LCR reports. Print the report page from LCR to PDF and try again.`; return; }
+    if (found !== kind && !confirm(`This looks like the ${STATS_REPORTS[found].label} report, not ${STATS_REPORTS[kind].label}. Import it as ${STATS_REPORTS[found].label}?`)) { statusEl.textContent = ''; return; }
+    const data = STATS_REPORTS[found].parse(pages);
+    _statsPlan = { kind: found, data };
+    statusEl.textContent = '';
+    renderStatsReview();
+  } catch (err) {
+    console.error('Unit statistics import failed:', err);
+    statusEl.style.color = '#dc3545';
+    statusEl.textContent = 'Could not read that PDF: ' + (err?.message || 'unknown error');
+  }
+}
+
+function statsPlanSummary(p) {
+  const d = p.data;
+  if (p.kind === 'ki') {
+    const qs = d.quarters;
+    const names = d.included.map(k => KI_INDICATORS.find(i => i.key === k).label);
+    return `${names.length} indicator${names.length === 1 ? '' : 's'} over ${qs.length} quarter${qs.length === 1 ? '' : 's'} (${qLabel(qs[0])} – ${qLabel(qs[qs.length - 1])}): ${names.map(esc).join(', ')}.
+      These quarters are added or updated; quarters from earlier imports are kept.`;
+  }
+  if (p.kind === 'qr') {
+    const had = _stats?.qr?.[d.quarter];
+    return `${qLabel(d.quarter)}: ${d.rows.length} lines${d.convertCount !== null ? `, ${d.convertCount} converts in the last 12 months` : ''}.${had ? ' This replaces the copy imported ' + formatNoteDate(had.importedAt) + '.' : ''}
+      Convert names on the report are not saved.`;
+  }
+  if (p.kind === 'us') return `${d.groups.length} sections (total members ${d.groups.find(g => /Total Members/i.test(g.label))?.value ?? '?'}). Saved as a new snapshot, so changes since the last import show.`;
+  if (p.kind === 'fh') {
+    const yrs = Object.keys(d.monthly).sort();
+    return `Members submitting by month for ${yrs.map(y => 'YTD ' + y).join(' and ')}, the three bar charts${d.submitters ? ', and the YTD submitters table' : ''}. Replaces the previous Family History import.`;
+  }
+  return '';
+}
+
+function renderStatsReview() {
+  const p = _statsPlan; if (!p) return;
+  const probs = p.data.problems || [];
+  const nothing = (p.kind === 'ki' && !Object.keys(p.data.series).length) || (p.kind === 'qr' && (!p.data.quarter || !p.data.rows.length)) ||
+                  (p.kind === 'us' && !p.data.groups.length) || (p.kind === 'fh' && !Object.keys(p.data.monthly).length && !p.data.submitters);
+  document.getElementById('stats-review').innerHTML = `<div class="alert" style="background:${nothing ? '#f8d7da' : '#eef6ee'};border:1px solid ${nothing ? '#f1aeb5' : '#cfe5cf'};color:#333;margin-top:0.8rem">
+    <strong>${esc(STATS_REPORTS[p.kind].label)}</strong> — ${nothing ? 'nothing could be read from this PDF.' : statsPlanSummary(p)}
+    ${probs.length && !nothing ? `<div style="font-size:0.8rem;color:#856404;margin-top:0.3rem">Couldn't read: ${probs.map(esc).join('; ')}. The rest is fine to save.</div>` : ''}
+    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.6rem">
+      <button class="btn btn-secondary btn-sm" onclick="cancelStatsImport()">Cancel</button>
+      ${nothing ? '' : '<button class="btn btn-primary btn-sm" id="stats-save-btn" onclick="applyStatsPlan()">Save</button>'}
+    </div></div>`;
+}
+
+function cancelStatsImport() { _statsPlan = null; document.getElementById('stats-review').innerHTML = ''; document.getElementById('stats-status').textContent = ''; }
+
+async function applyStatsPlan() {
+  const p = _statsPlan; if (!p) return;
+  const by = _currentUserName || _currentUserEmail || 'Unknown', now = new Date().toISOString();
+  const d = { ...p.data }; delete d.problems;
+  const u = {};
+  if (p.kind === 'fh') u.fh = { ...d, importedAt: now, importedBy: by };
+  if (p.kind === 'qr') u['qr.' + d.quarter] = { quarter: d.quarter, years: d.years, rows: d.rows, convertCount: d.convertCount, importedAt: now, importedBy: by };
+  if (p.kind === 'us') u['us.snapshots'] = firebase.firestore.FieldValue.arrayUnion({ date: now, by, groups: d.groups });
+  if (p.kind === 'ki') {
+    Object.entries(d.series).forEach(([k, pts]) => Object.entries(pts).forEach(([q, v]) => { u[`ki.series.${k}.${q}`] = v; }));
+    u['ki.updatedAt'] = now; u['ki.updatedBy'] = by;
+  }
+  const btn = document.getElementById('stats-save-btn'); if (btn) btn.disabled = true;
+  try {
+    await saveStats(u);
+    await loadStats(true);
+    if (p.kind === 'qr') _qrPick = d.quarter;
+    if (p.kind === 'ki') _kiOn = null;
+    _statsPlan = null;
+    document.getElementById('stats-review').innerHTML = '';
+    const st = document.getElementById('stats-status'); st.style.color = '#155724'; st.textContent = `✓ ${STATS_REPORTS[p.kind].label} saved.`;
+    renderStatsTab();
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    alert('Could not save: ' + (e?.message || 'unknown error'));
+  }
+}
+
 // ── LCR report links ("Fetch/Print/Download") ─────────────────────
 // Opens the report in LCR in a new browser tab (LCR asks the person to sign in
 // if needed). They download / save it as PDF there, come back, and use
@@ -5955,6 +6653,11 @@ const LCR_REPORT_URLS = {
   'cp-new':       'https://lcr.churchofjesuschrist.org/one-work/progress-record?lang=eng&tab=recentConverts',
   'cp-returning': 'https://lcr.churchofjesuschrist.org/one-work/progress-record?lang=eng&tab=returningMembers',
   'cp-mission':   'https://lcr.churchofjesuschrist.org/one-work/progress-record?lang=eng&tab=peopleBeingTaught',
+  // Unit Statistics tab
+  'st-fh': 'https://lcr.churchofjesuschrist.org/report/family-history/activity-report?lang=eng',
+  'st-ki': 'https://lcr.churchofjesuschrist.org/report/key-indicators?lang=eng',
+  'st-qr': 'https://lcr.churchofjesuschrist.org/report/quarterly-report?lang=eng',
+  'st-us': 'https://lcr.churchofjesuschrist.org/report/unit-statistics?lang=eng',
 };
 function wireLcrFetchButtons() {
   document.querySelectorAll('a.lcr-fetch').forEach(a => {
