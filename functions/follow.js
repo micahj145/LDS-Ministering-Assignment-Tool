@@ -60,17 +60,19 @@ function householdChanges(beforeDoc, afterDoc) {
 
   // Companionships: newly assigned / unassigned, and notes.
   const allHH = [...new Map([...hhB, ...hhA]).values()];
-  [['current', 'Current Assignments'], ['proposed', 'Proposed Assignments']].forEach(([key, label]) => {
+  const TAB = { current: 'current', proposed: 'propose', currentRS: 'currentRS', proposedRS: 'proposeRS' };
+  [['current', 'Current Brother Assignments'], ['proposed', 'Draft Brother Assignments'],
+   ['currentRS', 'Current Sister Assignments'], ['proposedRS', 'Draft Sister Assignments']].forEach(([key, label]) => {
     const cB = byId(B[key]), cA = byId(A[key]);
     allHH.forEach(hh => {
       cA.forEach((c, id) => {
         const o = cB.get(id);
         const was = !!o && servesHH(o, hh), is = servesHH(c, hh);
-        if (is && !was) add(hh.id, `${hh.name} assigned to ${pairName(c)} (${label})`, `#tab=${key === 'current' ? 'current' : 'propose'}`);
+        if (is && !was) add(hh.id, `${hh.name} assigned to ${pairName(c)} (${label})`, `#tab=${TAB[key]}`);
         if (is && o) newNotes(o.notes, c.notes).forEach(n => add(hh.id, `${n.author || 'Someone'} added a note on the companionship serving ${hh.name} (${label})`, `#open=${key},${enc(id)}`));
-        if (!is && was) add(hh.id, `${hh.name} no longer assigned to ${pairName(c)} (${label})`, `#tab=${key === 'current' ? 'current' : 'propose'}`);
+        if (!is && was) add(hh.id, `${hh.name} no longer assigned to ${pairName(c)} (${label})`, `#tab=${TAB[key]}`);
       });
-      cB.forEach((o, id) => { if (!cA.has(id) && servesHH(o, hh)) add(hh.id, `${pairName(o)} companionship serving ${hh.name} was removed (${label})`, `#tab=${key === 'current' ? 'current' : 'propose'}`); });
+      cB.forEach((o, id) => { if (!cA.has(id) && servesHH(o, hh)) add(hh.id, `${pairName(o)} companionship serving ${hh.name} was removed (${label})`, `#tab=${TAB[key]}`); });
     });
   });
 

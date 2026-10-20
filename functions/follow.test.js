@@ -46,14 +46,14 @@ test('companionship assigned, note, unassigned, removed — by id or older name 
   const a = base(); const b = clone(a);
   b.current.push({ id: 'c1', m1Name: 'Tom', m2Name: 'Sam', households: ['h1'], notes: [] });
   let t = householdChanges(a, b).map(c => c.text);
-  assert.ok(t.includes('Whitfield, Daniel & Grace assigned to Tom + Sam (Current Assignments)'));
+  assert.ok(t.includes('Whitfield, Daniel & Grace assigned to Tom + Sam (Current Brother Assignments)'));
   const c = clone(b); c.current[0].notes.push(note('n3', 'Tom'));
   t = householdChanges(b, c).map(x => x.text);
   assert.ok(t[0].startsWith('Tom added a note on the companionship serving Whitfield'));
   const d = clone(c); d.current[0].households = ['Okafor, Ruth'];      // name form
   t = householdChanges(c, d).map(x => `${x.hhId}:${x.text}`);
-  assert.ok(t.includes('h2:Okafor, Ruth assigned to Tom + Sam (Current Assignments)'));
-  assert.ok(t.includes('h1:Whitfield, Daniel & Grace no longer assigned to Tom + Sam (Current Assignments)'));
+  assert.ok(t.includes('h2:Okafor, Ruth assigned to Tom + Sam (Current Brother Assignments)'));
+  assert.ok(t.includes('h1:Whitfield, Daniel & Grace no longer assigned to Tom + Sam (Current Brother Assignments)'));
   const e = clone(d); e.current = [];
   assert.ok(householdChanges(d, e).some(x => x.hhId === 'h2' && /companionship serving Okafor, Ruth was removed/.test(x.text)));
 });
@@ -97,4 +97,12 @@ test('a council entry for an unlinked member also reports under entry:<id>', () 
   a.groups.returning = [{ id: 'r1', memberId: 'm9', name: 'Solo, Pat', goals: [], notes: [] }];
   const b = clone(a); b.groups.returning[0].notes.push(note('nn'));
   assert.deepStrictEqual(householdChanges(a, b).map(x => x.hhId), ['entry:r1']);
+});
+
+test('sister companionships notify household followers too', () => {
+  const hh = { id: 'h1', name: 'Whitfield, Daniel & Grace', notes: [] };
+  const before = { households: [hh], members: [], currentRS: [] };
+  const after = { households: [hh], members: [], currentRS: [{ id: 'r1', m1Name: 'Ana', m2Name: 'Eve', households: ['h1'], assignees: [], notes: [] }] };
+  const t = householdChanges(before, after).map(c => c.hhId + ':' + c.text + '|' + c.link);
+  assert.ok(t.some(x => x.includes('h1:Whitfield, Daniel & Grace assigned to Ana + Eve (Current Sister Assignments)') && x.includes('#tab=currentRS')), t.join('\n'));
 });

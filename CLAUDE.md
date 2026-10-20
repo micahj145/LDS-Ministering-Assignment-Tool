@@ -341,6 +341,36 @@ sign-in, `stopPrivateListeners()` on sign-out).
   `badgeCount()` = Notifications unread + Messages unread, used by every push.
 - `firebase.json` now includes `firestore.rules`, so `firebase deploy --only firestore:rules` works.
 
+### Ministering: brothers and sisters, current and draft (Oct 2026)
+- **Tabs**: Brothers, Current / Draft Ministering Brother Assignments (`S.current` / `S.proposed`,
+  tab ids `current` / `propose`), Sisters, Current / Draft Ministering Sister Assignments
+  (`S.currentRS` / `S.proposedRS`, tabs `currentRS` / `proposeRS`). `LISTS` maps each list key to its
+  tab and label; anything that walks companionships (tagged notes, linked notes, notes modal,
+  goToLink, move-out helpers, tags.js, follow.js) uses all four.
+- **Access**: everyone sees every tab (`hasFullAccess()` now always true). Roles on the profile:
+  `council` | `eq` | `rs` (Admin tab select). `canEditEQ()` (admin or eq) gates brother lists, the
+  Brothers pool and the **EQ household pool** (`hh.inPool`, also on Move Ins); `canEditRS()` (admin or
+  rs) gates sister lists, both sister pools and the **RS household pool** (`hh.rsPool`). Static
+  controls carry `.eq-edit` / `.rs-edit` (hidden) and `.eq-viewonly` / `.rs-viewonly` notices,
+  toggled in `applyAccessVisibility()`. Client-side only — the rules don't know roles.
+- **Pools**: brothers `m.inPool`; sisters `m.rsPool` (ministering) and `m.rsRecipient` (receives);
+  households `hh.inPool` (EQ) and `hh.rsPool` (RS). `sisters()` = female members 18+ (or no age).
+- **Companionship shape**: `{ id, m1Id, m1Name, m2Id, m2Name, m3Id?, m3Name?, households: [hhId],
+  assignees?: [memberId], extraAssignees?: [names not in Members], notes, position, source? }`.
+  Brother cards (`companionshipHTML`) show m3 and extras; `saveEditCompanionship` keeps unedited
+  fields. Sister cards (`rsCompanionshipHTML`) show households 🏠 and individual sisters; edited in
+  `#rs-modal` (ministers from `sisters()`, ★ pool / ☆ maybe; pickers = RS-pool households +
+  receives-pool sisters, plus anything already selected).
+- **LCR import** (`parseMinisteringReport`, card on both Current tabs, `LCR_REPORT_URLS.ministering`):
+  rows from the cells' stripe fills (shaded rows = fills, plain rows = gaps); a row that continues
+  past a page break has no name and joins the previous one. Companionships: groups whose members
+  all list each other (assignments = those every member lists); else a one-companion row + its
+  companion = a pair; leftovers = solo (`how`). Verified on the Oct 2026 PDF: 464 rows, 61
+  companionships, every row reconciles. Side: all-male → EQ, all-female → RS, couples/unknown →
+  by assignees (all female → RS) and listed for the user to change. Replace Current (per side,
+  per role) keeping id/notes of companionships with the same minister set (`minKey`). EQ:
+  assignees → their households; RS: assignees stay individuals (RS households kept from before).
+
 ### Identifiers tab (markers beside names)
 Four LCR name reports (Members Without Callings, Part-Member Households, YSAs, Birthdays) imported
 with Fetch/Print/Download → Import (`LCR_REPORT_URLS['id-…']`; YSA comes from LCR's Organizations

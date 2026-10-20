@@ -216,8 +216,11 @@ tr:hover td{background:#fafbfc}
   <button onclick="showTab('members')">Members <span id="members-count"></span></button>
   <button onclick="showTab('households')">Households <span id="households-count"></span></button>
   <button id="nav-brothers-btn" onclick="showTab('brothers')">Brothers <span id="brothers-count"></span></button>
-  <button id="nav-current-btn" onclick="showTab('current')">Current Assignments</button>
-  <button id="nav-propose-btn" onclick="showTab('propose')">Proposed Assignments</button>
+  <button id="nav-current-btn" onclick="showTab('current')">Current Ministering Brother Assignments</button>
+  <button id="nav-propose-btn" onclick="showTab('propose')">Draft Ministering Brother Assignments</button>
+  <button id="nav-sisters-btn" onclick="showTab('sisters')">Sisters <span id="sisters-count"></span></button>
+  <button id="nav-currentRS-btn" onclick="showTab('currentRS')">Current Ministering Sister Assignments</button>
+  <button id="nav-proposeRS-btn" onclick="showTab('proposeRS')">Draft Ministering Sister Assignments</button>
   <button id="nav-council-btn" onclick="showTab('council')">Covenant Path Progress</button>
   <button id="nav-moves-btn" onclick="showTab('moves')">New Member Move Ins / Move Outs <span id="moves-mine"></span></button>
   <button id="nav-idents-btn" onclick="showTab('idents')">Identifiers</button>
@@ -422,8 +425,10 @@ tr:hover td{background:#fafbfc}
       <input type="text" id="hh-search" placeholder="Search household name or address..." oninput="renderHouseholds()" style="flex:1;min-width:200px">
       <select id="hh-addr-filter" onchange="renderHouseholds()">
         <option value="">All Households</option>
-        <option value="in-pool">In Pool</option>
-        <option value="maybe">Maybe</option>
+        <option value="in-pool">EQ Pool</option>
+        <option value="maybe">EQ Maybe</option>
+        <option value="rs-in-pool">RS Pool</option>
+        <option value="rs-maybe">RS Maybe</option>
         <option value="part-member">Part-member household</option>
         <option value="out-pool">Out of Pool</option>
         <option value="has-addr">Has Address</option>
@@ -460,12 +465,28 @@ tr:hover td{background:#fafbfc}
 <!-- CURRENT ASSIGNMENTS TAB -->
 <div id="tab-current" class="tab-content">
   <div class="ident-legend-slot"></div>
+  <div class="alert alert-info eq-viewonly" style="display:none">You can see these assignments; the EQ presidency changes them.</div>
   <div id="current-stats" class="stats-row"></div>
+  <div class="card eq-edit" style="margin-bottom:1.25rem">
+    <div class="flex-between" style="flex-wrap:wrap;gap:0.6rem">
+      <div><h2 style="margin:0;border:none;padding:0">Import Current from LCR</h2>
+        <div style="font-size:0.8rem;color:#888;margin-top:0.2rem;max-width:640px">LCR's Ministering Assignments page (Individuals tab) lists brothers' and sisters'
+          companionships together. Tap <strong>Fetch/Print/Download</strong>, print the page to PDF (Ctrl+P → Save as PDF; Android ⋮ → Share → Print → Save as PDF),
+          then <strong>Import</strong>. You review it first; Current is replaced with LCR's, and notes on companionships with the same ministers are kept.</div></div>
+      <div style="min-width:170px">
+        <input type="file" id="min-file-eq" accept=".pdf,application/pdf" style="display:none" onchange="handleMinisteringPdf(this.files[0], 'eq')">
+        <a class="btn btn-secondary lcr-fetch" data-report="ministering" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('min-file-eq').click()">Import</button>
+      </div>
+    </div>
+    <div id="min-status-eq" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+    <div id="min-review-eq"></div>
+  </div>
 
-  <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
+  <div class="card eq-edit" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
     <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap">
-      <button class="btn btn-secondary btn-sm" onclick="promoteProposedToCurrent()">&larr; Promote All from Proposed</button>
-      <button class="btn btn-secondary btn-sm" onclick="copyCurrentToProposed()">Copy to Proposed &rarr;</button>
+      <button class="btn btn-secondary btn-sm" onclick="promoteProposedToCurrent()">&larr; Promote All from Draft</button>
+      <button class="btn btn-secondary btn-sm" onclick="copyCurrentToProposed()">Copy to Draft &rarr;</button>
     </div>
   </div>
 
@@ -474,14 +495,14 @@ tr:hover td{background:#fafbfc}
       <div class="card">
         <div class="flex-between">
           <h2 style="margin:0;border:none;padding:0">Current Companionships</h2>
-          <button class="btn btn-primary btn-sm" onclick="openAddModal('current')">+ Add</button>
+          <button class="btn btn-primary btn-sm eq-edit" onclick="openAddModal('current')">+ Add</button>
         </div>
         <div id="current-list"></div>
       </div>
       <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="exportCurrent()">Export CSV</button>
         <button class="btn btn-secondary" onclick="window.print()">Print</button>
-        <button class="btn btn-danger btn-sm" onclick="clearData('assignments')">Clear All</button>
+        <button class="btn btn-danger btn-sm eq-edit" onclick="clearData('assignments')">Clear All</button>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:1rem">
@@ -500,6 +521,7 @@ tr:hover td{background:#fafbfc}
 <!-- PROPOSE ASSIGNMENTS TAB -->
 <div id="tab-propose" class="tab-content">
   <div class="ident-legend-slot"></div>
+  <div class="alert alert-info eq-viewonly" style="display:none">You can see this working draft; the EQ presidency changes it.</div>
   <div id="propose-stats" class="stats-row"></div>
 
   <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
@@ -525,15 +547,15 @@ tr:hover td{background:#fafbfc}
     <div>
       <div class="card">
         <div class="flex-between">
-          <h2 style="margin:0;border:none;padding:0">Proposed Companionships</h2>
-          <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Add</button>
+          <h2 style="margin:0;border:none;padding:0">Draft Companionships</h2>
+          <button class="btn btn-primary btn-sm eq-edit" onclick="openAddModal()">+ Add</button>
         </div>
         <div id="proposed-list"></div>
       </div>
       <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="exportProposed()">Export CSV</button>
         <button class="btn btn-secondary" onclick="window.print()">Print</button>
-        <button class="btn btn-danger btn-sm" onclick="clearProposed()">Clear All</button>
+        <button class="btn btn-danger btn-sm eq-edit" onclick="clearProposed()">Clear All</button>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:1rem">
@@ -558,6 +580,127 @@ tr:hover td{background:#fafbfc}
 </div>
 
 <!-- COVENANT PATH PROGRESS TAB (internally 'council') -->
+<!-- SISTERS TAB -->
+<div id="tab-sisters" class="tab-content">
+  <div class="ident-legend-slot"></div>
+  <div id="sisters-stats" class="stats-row"></div>
+  <div class="card">
+    <div class="filter-bar">
+      <input type="text" id="sister-search" placeholder="Search name..." oninput="renderSisters()" style="flex:1;min-width:160px">
+      <select id="sister-filter" onchange="renderSisters()">
+        <option value="">All Sisters</option>
+        <option value="in-pool">In Pool</option>
+        <option value="maybe">Maybe</option>
+        <option value="out-pool">Out of Pool</option>
+        <option value="assigned">Currently Ministering</option>
+        <option value="unassigned">Not Ministering</option>
+        <option value="has-ms">Has ministering sisters</option>
+        <option value="no-ms">No ministering sisters</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" onclick="exportSistersCSV()">Export CSV</button>
+    </div>
+    <p style="font-size:0.8rem;color:#888;margin:0 0 0.6rem">Women 18 and older in Members. "Pool" marks who the Relief Society presidency is considering as ministering sisters.</p>
+    <div id="sisters-table"></div>
+  </div>
+</div>
+
+<!-- CURRENT MINISTERING SISTER ASSIGNMENTS TAB -->
+<div id="tab-currentRS" class="tab-content">
+  <div class="ident-legend-slot"></div>
+  <div class="alert alert-info rs-viewonly" style="display:none">You can see these assignments; the Relief Society presidency changes them.</div>
+  <div id="currentRS-stats" class="stats-row"></div>
+  <div class="card rs-edit" style="margin-bottom:1.25rem">
+    <div class="flex-between" style="flex-wrap:wrap;gap:0.6rem">
+      <div><h2 style="margin:0;border:none;padding:0">Import Current from LCR</h2>
+        <div style="font-size:0.8rem;color:#888;margin-top:0.2rem;max-width:640px">LCR's Ministering Assignments page (Individuals tab) lists brothers' and sisters'
+          companionships together. Tap <strong>Fetch/Print/Download</strong>, print the page to PDF (Ctrl+P → Save as PDF; Android ⋮ → Share → Print → Save as PDF),
+          then <strong>Import</strong>. You review it first; Current is replaced with LCR's, and notes on companionships with the same ministers are kept.</div></div>
+      <div style="min-width:170px">
+        <input type="file" id="min-file-rs" accept=".pdf,application/pdf" style="display:none" onchange="handleMinisteringPdf(this.files[0], 'rs')">
+        <a class="btn btn-secondary lcr-fetch" data-report="ministering" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('min-file-rs').click()">Import</button>
+      </div>
+    </div>
+    <div id="min-status-rs" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+    <div id="min-review-rs"></div>
+  </div>
+
+  <div class="card rs-edit" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
+    <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="promoteRS()">&larr; Promote All from Draft</button>
+      <button class="btn btn-secondary btn-sm" onclick="copyRSToDraft()">Copy to Draft &rarr;</button>
+    </div>
+  </div>
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="flex-between">
+          <h2 style="margin:0;border:none;padding:0">Current Companionships</h2>
+          <button class="btn btn-primary btn-sm rs-edit" onclick="openRSModal('currentRS')">+ Add</button>
+        </div>
+        <div id="currentRS-list"></div>
+      </div>
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="exportRS('currentRS')">Export CSV</button>
+        <button class="btn btn-secondary" onclick="window.print()">Print</button>
+        <button class="btn btn-danger btn-sm rs-edit" onclick="clearRS('currentRS')">Clear All</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      <div class="card"><h2>Pool sisters not ministering</h2><div id="currentRS-unassigned"></div></div>
+      <div class="card"><h2>Sisters without ministering sisters</h2><div id="currentRS-unserved"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- DRAFT MINISTERING SISTER ASSIGNMENTS TAB -->
+<div id="tab-proposeRS" class="tab-content">
+  <div class="ident-legend-slot"></div>
+  <div class="alert alert-info rs-viewonly" style="display:none">You can see this working draft; the Relief Society presidency changes it.</div>
+  <div id="proposedRS-stats" class="stats-row"></div>
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="flex-between">
+          <h2 style="margin:0;border:none;padding:0">Draft Companionships</h2>
+          <button class="btn btn-primary btn-sm rs-edit" onclick="openRSModal('proposedRS')">+ Add</button>
+        </div>
+        <div id="proposedRS-list"></div>
+      </div>
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="exportRS('proposedRS')">Export CSV</button>
+        <button class="btn btn-secondary" onclick="window.print()">Print</button>
+        <button class="btn btn-danger btn-sm rs-edit" onclick="clearRS('proposedRS')">Clear All</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      <div class="card"><h2>Pool sisters not ministering</h2><div id="proposedRS-unassigned"></div></div>
+      <div class="card"><h2>Sisters without ministering sisters</h2><div id="proposedRS-unserved"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- RS companionship modal -->
+<div class="modal-overlay" id="rs-modal">
+  <div class="modal wide">
+    <h3 id="rs-modal-title">Companionship</h3>
+    <div class="form-group"><label>Ministering sister 1</label><select id="rs-m1"></select></div>
+    <div class="form-group"><label>Ministering sister 2</label><select id="rs-m2"></select></div>
+    <div class="form-group"><label>Ministering sister 3 <span style="font-weight:400;color:#888">(optional)</span></label><select id="rs-m3"></select></div>
+    <div class="form-group">
+      <label>Sisters they minister to</label>
+      <input type="text" id="rs-asg-search" placeholder="Search sisters…" oninput="renderRSAssigneePicker()" style="margin-bottom:0.35rem">
+      <div id="rs-asg-list" class="hh-picker"></div>
+      <div id="rs-extra" style="font-size:0.76rem;color:#888;margin-top:0.3rem"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="rs-delete" onclick="deleteRSCompanionship()" style="margin-right:auto">Delete</button>
+      <button class="btn btn-secondary" onclick="closeModal('rs-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRSCompanionship()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div id="tab-council" class="tab-content">
   <div class="ident-legend-slot"></div>
   <div class="alert alert-info">
@@ -935,6 +1078,7 @@ async function runSync() {
     // round-trip rather than being part of what gets stringified.
     const payload = JSON.parse(JSON.stringify({
       members: S.members, households: S.households, current: S.current, proposed: S.proposed,
+      currentRS: S.currentRS || [], proposedRS: S.proposedRS || [],
       groups: normalizeGroups(S.groups), users: S.users || [], activityLog: log,
       identMeta: S.identMeta || {},
     }));
@@ -978,6 +1122,8 @@ async function loadAllData() {
   S.households  = data.households  || [];
   S.current     = data.current     || [];
   S.proposed    = data.proposed    || [];
+  S.currentRS   = data.currentRS   || [];
+  S.proposedRS  = data.proposedRS  || [];
   S.activityLog = data.activityLog || [];
   S.groups      = normalizeGroups(data.groups);
   S.users       = Array.isArray(data.users) ? data.users : [];
@@ -1263,15 +1409,16 @@ async function renderAdminPanel() {
   const row = p => {
     const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
     const isSelf = p.id === _currentUserId;
-    const isEq = p.role === 'eq';
+    const isEq = p.role === 'eq', isRs = p.role === 'rs';
     return `
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f0f0f0;padding:0.5rem 0;gap:0.6rem">
       <div><div style="font-weight:500">${name ? esc(name) + ' — ' : ''}${esc(p.email)}${isSelf ? ' <span style="font-weight:400;color:#888">(you)</span>' : ''}</div>
-      <div style="font-size:0.78rem;color:#888">${p.status} · ${isEq ? 'EQ presidency' : 'ward council'}${p.isAdmin ? ' · admin' : ''} · ${p.emailVerified ? '<span style="color:#155724">email verified</span>' : '<span style="color:#856404">email not verified yet</span>'}</div></div>
+      <div style="font-size:0.78rem;color:#888">${p.status} · ${isEq ? 'EQ presidency' : isRs ? 'RS presidency' : 'ward council'}${p.isAdmin ? ' · admin' : ''} · ${p.emailVerified ? '<span style="color:#155724">email verified</span>' : '<span style="color:#856404">email not verified yet</span>'}</div></div>
       <div style="display:flex;gap:0.4rem;align-items:center;flex-shrink:0">
-        <select style="font-size:0.8rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px" onchange="setUserRole('${p.id}', this.value)" title="What this person can see">
-          <option value="council" ${isEq ? '' : 'selected'}>Ward Council</option>
+        <select style="font-size:0.8rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px" onchange="setUserRole('${p.id}', this.value)" title="Which ministering lists this person can change (everyone can see them all)">
+          <option value="council" ${isEq || isRs ? '' : 'selected'}>Ward Council</option>
           <option value="eq" ${isEq ? 'selected' : ''}>EQ Presidency</option>
+          <option value="rs" ${isRs ? 'selected' : ''}>RS Presidency</option>
         </select>
         ${p.status !== 'approved' ? `<button class="btn btn-primary btn-sm" onclick="setUserStatus('${p.id}','approved')">Approve</button>` : ''}
         ${p.status !== 'denied' && !isSelf ? `<button class="btn btn-danger btn-sm" onclick="setUserStatus('${p.id}','denied')">Deny</button>` : ''}
@@ -1313,16 +1460,16 @@ async function setUserRole(id, role) {
   if (!_currentUserIsAdmin) { alert('Only an admin can change roles.'); renderAdminPanel(); return; }
   const p = _adminProfiles.find(x => x.id === id) || {};
   const who = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'this user';
-  const detail = role === 'eq'
-    ? 'They will get the full tool, including Brothers and the Current and Proposed assignment tabs.'
-    : 'They will see Import, Members, Households, Covenant Path Progress and Move Ins / Move Outs only — not the ministering assignment tabs.';
+  const detail = role === 'eq' ? 'They can change the ministering brother lists (Brothers pool, Current and Draft brother assignments). Everyone can see all the lists.'
+    : role === 'rs' ? 'They can change the ministering sister lists (Sisters pool, Current and Draft sister assignments). Everyone can see all the lists.'
+    : 'They can see every tab, including all the ministering lists, but not change the assignment lists.';
   // Cancelling re-renders so the dropdown snaps back to the stored value.
-  if (!confirm(`Set ${who} to ${role === 'eq' ? 'EQ Presidency' : 'Ward Council'}?\n\n${detail}`)) { renderAdminPanel(); return; }
+  if (!confirm(`Set ${who} to ${{ eq: 'EQ Presidency', rs: 'RS Presidency' }[role] || 'Ward Council'}?\n\n${detail}`)) { renderAdminPanel(); return; }
   try {
     await db.collection('profiles').doc(id).update({ role });
   } catch (error) { alert('Failed to update: ' + error.message); renderAdminPanel(); return; }
   // Changing your own role should take effect now, not at the next reload.
-  if (id === _currentUserId) { _currentUserRole = role === 'eq' ? 'eq' : 'council'; applyAccessVisibility(); }
+  if (id === _currentUserId) { _currentUserRole = roleOf(role); applyAccessVisibility(); }
   renderAdminPanel();
 }
 
@@ -1432,7 +1579,21 @@ let _currentUserRole = 'council';
 // Everything below only shows or hides. Each guarded action re-checks for
 // itself, and none of it is a data boundary: any approved user can still read
 // the whole ward document. See CLAUDE.md.
-function hasFullAccess() { return _currentUserIsAdmin || _currentUserRole === 'eq'; }
+// Everyone can see every tab now (ministering included). Changing assignment
+// lists is by role: EQ presidency the brother lists, RS presidency the sister
+// lists, the admin both. This is a convenience in the app, not a security
+// boundary — firestore.rules lets any approved user write the ward document.
+function hasFullAccess() { return true; }
+function canEditEQ() { return _currentUserIsAdmin || _currentUserRole === 'eq'; }
+function canEditRS() { return _currentUserIsAdmin || _currentUserRole === 'rs'; }
+const LISTS = {
+  current:    { min: 'eq', tab: 'current',   label: 'Current Ministering Brother Assignments' },
+  proposed:   { min: 'eq', tab: 'propose',   label: 'Draft Ministering Brother Assignments' },
+  currentRS:  { min: 'rs', tab: 'currentRS', label: 'Current Ministering Sister Assignments' },
+  proposedRS: { min: 'rs', tab: 'proposeRS', label: 'Draft Ministering Sister Assignments' },
+};
+function canEditList(key) { return (LISTS[key]?.min === 'rs') ? canEditRS() : canEditEQ(); }
+function roleOf(r) { return r === 'eq' || r === 'rs' ? r : 'council'; }
 
 function applyAccessVisibility() {
   const admin = _currentUserIsAdmin ? '' : 'none';
@@ -1440,10 +1601,11 @@ function applyAccessVisibility() {
   document.getElementById('data-management-card').style.display = admin;
   document.getElementById('session-load-wrap').style.display    = admin;
 
-  const full = hasFullAccess() ? '' : 'none';
-  document.getElementById('nav-brothers-btn').style.display = full;
-  document.getElementById('nav-current-btn').style.display  = full;
-  document.getElementById('nav-propose-btn').style.display  = full;
+  // Edit controls on the ministering tabs follow the role.
+  document.querySelectorAll('.eq-edit').forEach(el => { el.style.display = canEditEQ() ? '' : 'none'; });
+  document.querySelectorAll('.rs-edit').forEach(el => { el.style.display = canEditRS() ? '' : 'none'; });
+  document.querySelectorAll('.eq-viewonly').forEach(el => { el.style.display = canEditEQ() ? 'none' : ''; });
+  document.querySelectorAll('.rs-viewonly').forEach(el => { el.style.display = canEditRS() ? 'none' : ''; });
 }
 
 async function resolveAuthState() {
@@ -1513,7 +1675,7 @@ async function resolveAuthState() {
   _currentUserLastName = profile.lastName || '';
   _currentUserName = [_currentUserFirstName, _currentUserLastName].filter(Boolean).join(' ') || _currentUserEmail;
   _currentUserIsAdmin = profile.isAdmin === true;
-  _currentUserRole = profile.role === 'eq' ? 'eq' : 'council';
+  _currentUserRole = roleOf(profile.role);
   _notifSeenAt = Date.parse(profile.notifSeenAt) || 0;
   applyFollowState(profile);
   applyPrivateSeenState(profile);
@@ -1572,13 +1734,16 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   // Order must match the nav buttons in the DOM — the active-button lookup
   // below is by index, so inserting a tab means inserting it here too.
-  const tabs = ['import','notifications','messages','members','households','brothers','current','propose','council','moves','idents','stats','admin'];
+  const tabs = ['import','notifications','messages','members','households','brothers','current','propose','sisters','currentRS','proposeRS','council','moves','idents','stats','admin'];
   document.querySelectorAll('nav button')[tabs.indexOf(name)].classList.add('active');
   if (name === 'members')    renderMembers();
   if (name === 'households') renderHouseholds();
   if (name === 'brothers')   renderBrothers();
   if (name === 'current')    renderCurrent();
   if (name === 'propose')    renderProposed();
+  if (name === 'sisters')    renderSisters();
+  if (name === 'currentRS')  renderCurrentRS();
+  if (name === 'proposeRS')  renderProposedRS();
   if (name === 'council')    renderCouncil();
   if (name === 'moves')      renderMoves();
   if (name === 'notifications') { renderNotifications(); markNotificationsSeen(); }
@@ -2087,12 +2252,15 @@ function cyclePool(cur) {
   return false;                                        // Maybe → Out
 }
 function toggleBrotherPool(id) {
+  if (!canEditEQ()) { alert('The EQ presidency sets the brothers pool.'); return; }
   const b = S.members.find(x => x.id === id); if (!b) return;
   b.inPool = cyclePool(b.inPool);
   dbUpsertMember(b); renderBrothers();
 }
 
+function poolBadgeRS(hh) { return poolBadge(hh.rsPool, `toggleHHRSPool('${hh.id}')`, canEditRS()); }
 function toggleHHPool(id) {
+  if (!canEditEQ()) { alert('The EQ presidency sets the EQ household pool.'); return; }
   const hh = S.households.find(x => x.id === id); if (!hh) return;
   hh.inPool = cyclePool(hh.inPool);
   dbUpsertHousehold(hh); renderHouseholds();
@@ -2151,14 +2319,14 @@ function memberHousehold(member) {
 
 function currentMinisterNames() {
   const s = new Set();
-  S.current.forEach(c => { s.add(norm(c.m1Name)); if(c.m2Name) s.add(norm(c.m2Name)); });
+  S.current.forEach(c => { s.add(norm(c.m1Name)); if(c.m2Name) s.add(norm(c.m2Name)); if(c.m3Name) s.add(norm(c.m3Name)); });
   return s;
 }
 function assignedMinisters(listKey = 'proposed', excludeId) {
   const s = new Set();
   S[listKey].forEach(c => {
     if (c.id === excludeId) return;
-    if(c.m1Id) s.add(c.m1Id); if(c.m2Id) s.add(c.m2Id);
+    if(c.m1Id) s.add(c.m1Id); if(c.m2Id) s.add(c.m2Id); if(c.m3Id) s.add(c.m3Id);
   });
   return s;
 }
@@ -2381,6 +2549,8 @@ function renderHouseholds() {
     if (af === 'no-addr'   &&  hh.address)           return false;
     if (af === 'geocoded'  && !hh.lat)               return false;
     if (af === 'part-member' && !hh.partMember)       return false;
+    if (af === 'rs-in-pool' && hh.rsPool !== true)    return false;
+    if (af === 'rs-maybe'   && hh.rsPool !== 'maybe') return false;
     return true;
   }).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -2390,8 +2560,9 @@ function renderHouseholds() {
   const maybeCount  = list.filter(hh => hh.inPool === 'maybe').length;
   document.getElementById('households-stats').innerHTML = `
     <div class="stat-card"><div class="number">${list.length}</div><div class="label">Total Households</div></div>
-    <div class="stat-card"><div class="number">${inPoolCount}</div><div class="label">In Pool</div></div>
-    <div class="stat-card"><div class="number">${maybeCount}</div><div class="label">Maybe</div></div>
+    <div class="stat-card"><div class="number">${inPoolCount}</div><div class="label">EQ Pool</div></div>
+    <div class="stat-card"><div class="number">${maybeCount}</div><div class="label">EQ Maybe</div></div>
+    <div class="stat-card"><div class="number">${list.filter(h => h.rsPool === true).length}</div><div class="label">RS Pool</div></div>
     <div class="stat-card"><div class="number">${withAddr}</div><div class="label">Have Address</div></div>
     <div class="stat-card"><div class="number">${geocoded}</div><div class="label">Geocoded</div></div>
   `;
@@ -2404,7 +2575,7 @@ function renderHouseholds() {
   }
 
   let t = `<div style="overflow-x:auto"><table><thead><tr>
-    <th>Household Name</th><th>Members</th><th>Head</th><th>Address</th><th>Phone</th><th>Email</th><th>Pool</th><th>Status</th><th>Notes</th><th>Actions</th>
+    <th>Household Name</th><th>Members</th><th>Head</th><th>Address</th><th>Phone</th><th>Email</th><th title="Households the EQ presidency assigns ministering brothers to">EQ Pool</th><th title="Households the RS presidency assigns ministering sisters to">RS Pool</th><th>Status</th><th>Notes</th><th>Actions</th>
   </tr></thead><tbody>`;
 
   filtered.forEach(hh => {
@@ -2431,7 +2602,8 @@ function renderHouseholds() {
       </td>
       <td style="font-size:0.82rem">${esc(hh.phone||'')}</td>
       <td style="font-size:0.82rem">${esc(hh.email||'')}</td>
-      <td>${poolBadge}</td>
+      <td>${canEditEQ() ? poolBadge : poolBadge.replace(/onclick="[^"]*"/, '').replace('cursor:pointer', 'cursor:default')}</td>
+      <td>${poolBadgeRS(hh)}</td>
       <td>${addrBadge}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-secondary btn-sm" onclick="openNotesModal('household','${hh.id}')">${(hh.notes?.length||0) ? `Notes (${hh.notes.length})` : 'Notes'}</button>
@@ -2580,8 +2752,11 @@ function renderCurrent() {
 }
 
 function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed', idx, total) {
+  const rec = id ? (S[listKey] || []).find(x => x.id === id) : null;
+  const canEdit = canEditList(listKey);
+  const m3 = rec?.m3Name || '';
   const ministers = m2
-    ? `${esc(m1)}${identDotsByName(m1)} <span style="color:#aaa">+</span> ${esc(m2)}${identDotsByName(m2)}`
+    ? `${esc(m1)}${identDotsByName(m1)} <span style="color:#aaa">+</span> ${esc(m2)}${identDotsByName(m2)}${m3 ? ` <span style="color:#aaa">+</span> ${esc(m3)}${identDotsByName(m3)}` : ''}`
     : `${esc(m1)}${identDotsByName(m1)} <span class="badge badge-blue">Solo</span>`;
 
   // Resolve household display names
@@ -2590,10 +2765,11 @@ function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed', i
     const obj = resolveHH(h);
     const label = obj ? obj.name : h;
     return `<span class="household-tag">${esc(label)}${identDotsHH(obj)}</span>`;
-  }).join('') || '<span style="color:#aaa;font-size:0.82rem">No households</span>';
+  }).join('') + (rec?.extraAssignees || []).map(n => `<span class="household-tag" style="opacity:0.7" title="On LCR's list but not in Members">${esc(n)}</span>`).join('')
+    || '<span style="color:#aaa;font-size:0.82rem">No households</span>';
 
   const notesArr = id ? (S[listKey].find(x => x.id === id)?.notes || []) : [];
-  const moveBtns = (id && idx !== undefined)
+  const moveBtns = (id && idx !== undefined && canEdit)
     ? `<div style="display:flex;flex-direction:column;gap:0.15rem;flex-shrink:0">
          <button class="btn btn-secondary btn-sm" style="padding:0.1rem 0.5rem;line-height:1.2" title="Move up"
            ${idx === 0 ? 'disabled' : ''} onclick="event.stopPropagation();moveCompanionship('${listKey}','${id}',-1)">▲</button>
@@ -2603,7 +2779,7 @@ function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed', i
     : '';
   const editBtn = id
     ? `<div style="display:flex;gap:0.35rem;flex-shrink:0">
-         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditModal('${id}','${listKey}')">Edit</button>
+         ${canEdit ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openEditModal('${id}','${listKey}')">Edit</button>` : ''}
          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openNotesModal('${listKey}','${id}')">${notesArr.length ? `Notes (${notesArr.length})` : 'Notes'}</button>
        </div>`
     : '';
@@ -2639,7 +2815,7 @@ function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed', i
       </div>`).join('')
     : '';
 
-  return `<div class="companionship-card" ${id?`onclick="openEditModal('${id}','${listKey}')"`:''}>
+  return `<div class="companionship-card" ${id && canEdit ?`onclick="openEditModal('${id}','${listKey}')"`:''}>
     <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:0.35rem;gap:0.5rem">
       ${moveBtns}
       <div class="ministers" style="flex:1">${ministers}</div>${editBtn}
@@ -2652,6 +2828,7 @@ function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed', i
 }
 
 async function copyCurrentToProposed() {
+  if (!canEditEQ()) return;
   if (!S.current.length) { alert('No current assignments to copy.'); return; }
   const bList = brothers();
   const hhLookup = new Map(S.households.map(h => [norm(h.name), h.id]));
@@ -2661,18 +2838,19 @@ async function copyCurrentToProposed() {
     const m2 = c.m2Name ? bList.find(b => norm(b.name)===norm(c.m2Name)) : null;
     // Resolve household names to IDs if possible
     const hhs = c.households.map(n => hhLookup.get(norm(n)) || n);
-    return { id:uid(), m1Id:m1?.id||null, m1Name:c.m1Name, m2Id:m2?.id||null, m2Name:c.m2Name||'', households:hhs };
+    return { id:uid(), m1Id:m1?.id||null, m1Name:c.m1Name, m2Id:m2?.id||null, m2Name:c.m2Name||'', m3Id:c.m3Id||null, m3Name:c.m3Name||'', households:hhs, extraAssignees:c.extraAssignees||[] };
   });
   await dbReplaceCompanionshipList('proposed', S.proposed);
   showTab('propose');
 }
 
 async function promoteProposedToCurrent() {
+  if (!canEditEQ()) return;
   if (!S.proposed.length) { alert('No proposed companionships to promote.'); return; }
-  if (!confirm(`Replace Current Assignments with all ${S.proposed.length} proposed companionship(s)? Proposed will be left unchanged.`)) return;
+  if (!confirm(`Replace Current Ministering Brother Assignments with all ${S.proposed.length} draft companionship(s)? The draft is left unchanged.`)) return;
   S.current = S.proposed.map(p => ({
-    id: uid(), m1Id: p.m1Id, m1Name: p.m1Name, m2Id: p.m2Id, m2Name: p.m2Name || '',
-    households: [...p.households], notes: []
+    id: uid(), m1Id: p.m1Id, m1Name: p.m1Name, m2Id: p.m2Id, m2Name: p.m2Name || '', m3Id: p.m3Id || null, m3Name: p.m3Name || '',
+    households: [...p.households], extraAssignees: p.extraAssignees || [], notes: []
   }));
   await dbReplaceCompanionshipList('current', S.current);
   showTab('current');
@@ -2776,6 +2954,7 @@ function renderProposed() {
 let _modalListKey = 'proposed';
 
 function openAddModal(listKey = 'proposed') {
+  if (!canEditList(listKey)) return;
   if (!S.members.length) { alert('Import member data first.'); return; }
   _modalListKey = listKey;
   populateBrotherSelects('add-m1','add-m2', null, null, undefined, null);
@@ -2785,6 +2964,7 @@ function openAddModal(listKey = 'proposed') {
 }
 
 function openEditModal(id, listKey = 'proposed') {
+  if (!canEditList(listKey)) return;
   const p = S[listKey].find(x => x.id === id); if (!p) return;
   _modalListKey = listKey;
   populateBrotherSelects('edit-m1','edit-m2', p.m1Id, p.m2Id, p.m2Name||'', id);
@@ -3003,7 +3183,8 @@ function saveEditCompanionship() {
   const idx = S[_modalListKey].findIndex(x => x.id === id); if (idx < 0) return;
   const existingNotes = S[_modalListKey][idx].notes || [];
   const existingPosition = S[_modalListKey][idx].position;
-  const record = { id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:existingNotes, position:existingPosition };
+  // Keep what the form doesn't edit (a third minister or LCR names from an import).
+  const record = { ...S[_modalListKey][idx], id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:existingNotes, position:existingPosition };
   S[_modalListKey][idx] = record;
   dbUpsertCompanionship(_modalListKey, record); closeModal('edit-modal'); renderModalList();
 }
@@ -3016,6 +3197,7 @@ function deleteCompanionship() {
 }
 
 async function moveCompanionship(listKey, id, direction) {
+  if (!canEditList(listKey)) return;
   const list = S[listKey];
   const idx = list.findIndex(x => x.id === id);
   if (idx < 0) return;
@@ -3023,7 +3205,7 @@ async function moveCompanionship(listKey, id, direction) {
   if (swapIdx < 0 || swapIdx >= list.length) return;
   [list[idx], list[swapIdx]] = [list[swapIdx], list[idx]];
   list.forEach((c, i) => { c.position = i; });
-  if (listKey === 'current') renderCurrent(); else renderProposed();
+  ({ current: renderCurrent, proposed: renderProposed, currentRS: renderCurrentRS, proposedRS: renderProposedRS })[listKey]();
   await dbUpsertCompanionships(listKey, list);
 }
 
@@ -3325,7 +3507,8 @@ function exportProposed() {
 }
 
 async function clearProposed() {
-  if (!confirm('Clear all proposed assignments?')) return;
+  if (!canEditEQ()) return;
+  if (!confirm('Clear all draft ministering brother assignments?')) return;
   S.proposed = [];
   await dbReplaceCompanionshipList('proposed', []);
   renderProposed();
@@ -3478,7 +3661,7 @@ function getNotesTarget(ctx) {
   if (!ctx) return null;
   if (ctx.type === 'member' || ctx.type === 'brother') return S.members.find(x => x.id === ctx.id);
   if (ctx.type === 'household') return S.households.find(x => x.id === ctx.id);
-  if (ctx.type === 'proposed' || ctx.type === 'current') return S[ctx.type].find(x => x.id === ctx.id);
+  if (LISTS[ctx.type]) return (S[ctx.type] || []).find(x => x.id === ctx.id);
   if (ctx.type === 'group') return (S.groups?.[ctx.groupKey] || []).find(x => x.id === ctx.id);
   return null;
 }
@@ -3488,7 +3671,7 @@ function persistNotesTarget() {
   if (!target) return;
   if (_notesCtx.type === 'member' || _notesCtx.type === 'brother') dbUpsertMember(target);
   else if (_notesCtx.type === 'household') dbUpsertHousehold(target);
-  else if (_notesCtx.type === 'current' || _notesCtx.type === 'proposed') dbUpsertCompanionship(_notesCtx.type, target);
+  else if (LISTS[_notesCtx.type]) dbUpsertCompanionship(_notesCtx.type, target);
   else if (_notesCtx.type === 'group') dbUpsertGroups();
 }
 
@@ -3752,9 +3935,9 @@ function groupLinkedNotes(entry) {
     });
   });
 
-  [['current', 'Current Assignments'], ['proposed', 'Proposed Assignments']].forEach(([key, label]) => {
+  Object.entries(LISTS).map(([k, v]) => [k, v.label]).forEach(([key, label]) => {
     (S[key] || []).forEach(c => {
-      const isMinister = member && (c.m1Id === member.id || c.m2Id === member.id);
+      const isMinister = member && (c.m1Id === member.id || c.m2Id === member.id || c.m3Id === member.id || (c.assignees || []).includes(member.id));
       const servesHH = hhId && (c.households || []).some(h => h === hhId || (S.households.find(x => x.id === hhId)?.name === h));
       const pair = c.m1Name + (c.m2Name ? ' + ' + c.m2Name : '');
       (c.notes || []).forEach(n => {
@@ -4242,7 +4425,7 @@ function renderMoves() {
     const poolColors = { in: 'background:#d4edda;color:#155724', maybe: 'background:#fff3cd;color:#856404', out: 'background:#f8d7da;color:#721c24' };
     const poolSel = !hh ? '<span style="font-size:0.78rem;color:#aaa">No household</span>' : `
       <select style="font-size:0.82rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px;font-weight:500;${poolColors[pool]}"
-        onchange="setMoveInPool('${hh.id}', this.value)" title="Whether this household is in the ministering pool — same setting as the Households tab">
+        onchange="setMoveInPool('${hh.id}', this.value)" ${canEditEQ() ? '' : 'disabled'} title="Whether this household is in the EQ ministering pool — same setting as the Households tab (EQ presidency changes it)">
         <option value="in" ${pool === 'in' ? 'selected' : ''}>In Pool</option>
         <option value="maybe" ${pool === 'maybe' ? 'selected' : ''}>Maybe</option>
         <option value="out" ${pool === 'out' ? 'selected' : ''}>Out</option>
@@ -4278,7 +4461,7 @@ function renderMoves() {
     ? `<div style="overflow-x:auto"><table><thead><tr>
          <th style="width:24%">Household</th>
          <th style="width:15%">Status</th>
-         <th style="width:9%">Pool</th>
+         <th style="width:9%" title="The EQ household pool, same as the Households tab">EQ Pool</th>
          <th style="width:22%">Next Step <span style="font-weight:400;color:#aaa">· most recent</span></th>
          <th style="width:22%">Notes <span style="font-weight:400;color:#aaa">· most recent</span></th>
          <th>Actions</th>
@@ -4362,6 +4545,7 @@ function splitMoveInEntry(id) {
 }
 
 function setMoveInPool(householdId, value) {
+  if (!canEditEQ()) { renderMoves(); return; }
   const hh = hhById(householdId);
   if (!hh) return;
   hh.inPool = value === 'in' ? true : value === 'maybe' ? 'maybe' : false;
@@ -4766,11 +4950,11 @@ function ageFromBirth(iso) {
 }
 
 function companionshipsAsMinister(memberId) {
-  return ['current', 'proposed'].reduce((n, k) => n + (S[k] || []).filter(c => c.m1Id === memberId || c.m2Id === memberId).length, 0);
+  return Object.keys(LISTS).reduce((n, k) => n + (S[k] || []).filter(c => c.m1Id === memberId || c.m2Id === memberId || c.m3Id === memberId).length, 0);
 }
 
 function companionshipsServing(hh) {
-  return ['current', 'proposed'].reduce((n, k) => n + (S[k] || []).filter(c =>
+  return Object.keys(LISTS).reduce((n, k) => n + (S[k] || []).filter(c =>
     (c.households || []).some(h => h === hh.id || h === hh.name)).length, 0);
 }
 
@@ -5050,7 +5234,7 @@ function allTaggedNotes(uid) {
   });
   S.members.forEach(m => take(m.notes, { where: `Members · ${m.name}`, open: ['member', m.id] }));
   S.households.forEach(h => take(h.notes, { where: `Households · ${h.name}`, open: ['household', h.id] }));
-  [['current', 'Current Assignments'], ['proposed', 'Proposed Assignments']].forEach(([k, label]) =>
+  Object.entries(LISTS).map(([k, v]) => [k, v.label]).forEach(([k, label]) =>
     (S[k] || []).forEach(c => take(c.notes, { where: `${label} · ${c.m1Name}${c.m2Name ? ' + ' + c.m2Name : ''}`, open: [k, c.id] })));
   GROUPS.forEach(g => groupList(g.key).forEach(e => {
     [['goals', 'Goals'], ['notes', 'Notes'], ['nextSteps', 'Next Steps']].forEach(([f, fl]) =>
@@ -5410,7 +5594,7 @@ function goToLink(hash) {
   if (!m) return;
   if (m[1] === 'tab') { showTab(decodeURIComponent(m[2])); return; }
   const [type, id, groupKey, field] = m[2].split(',').map(decodeURIComponent);
-  const tabFor = { household: 'households', member: 'members', current: 'current', proposed: 'propose',
+  const tabFor = { household: 'households', member: 'members', current: 'current', proposed: 'propose', currentRS: 'currentRS', proposedRS: 'proposeRS',
                    group: groupKey === 'movein' ? 'moves' : 'council' }[type];
   if (tabFor) showTab(tabFor);
   if (!getNotesTarget({ type, id, groupKey })) { alert('That item is no longer in the tool — it may have been removed.'); return; }
@@ -7052,6 +7236,429 @@ function renderIdentsTab() {
     card('Young single adults', nm(identCurrentMembers('ysa').length, 'member'), nameList(identCurrentMembers('ysa').sort(byName)) + unm('ysa'));
 }
 
+// ── LCR Ministering Assignments (Individuals tab), printed to PDF ──
+// Three columns: Name | Ministering Companion | Ministering Assignment.
+// Every member is listed; a row is as tall as its assignment list, with the
+// name centred in it, so rows are found from the cells' background stripes
+// (shaded rows are drawn as fills; the plain rows are the gaps between).
+// A row that runs over a page break continues, without a name, on the next page.
+function parseMinisteringReport(pages) {
+  const rows = [];
+  pages.forEach(P => {
+    const hName = P.items.find(i => i.s === 'Name'), hComp = P.items.find(i => /^Ministering Companion$/i.test(i.s)), hAsg = P.items.find(i => /^Ministering Assignment$/i.test(i.s));
+    if (!hName || !hComp || !hAsg) return;
+    const cols = [[hName.x - 4, hComp.x - 4], [hComp.x - 4, hAsg.x - 4], [hAsg.x - 4, 9999]];
+    const top = hName.y - 1;                                     // below the header row
+    const body = P.items.filter(i => i.y < top && !/For Church Use|Intellectual Reserve|©/.test(i.s) && !/^\d{1,2} \w{3} \d{4}$/.test(i.s) && !/^\d+$/.test(i.s));
+    if (!body.length) return;
+    const cellX = hName.x - 1;
+    const stripes = P.shapes.filter(s => s.kind === 'fill' && Math.abs(s.x0 - cellX) < 4 && s.h > 4 && s.fill && s.fill !== '255,255,255' && s.y1 <= top + 2)
+      .map(s => [s.y0, s.y1]).sort((a, b) => b[1] - a[1]);
+    // merge duplicates, then fill the gaps between stripes with plain rows
+    const st = []; stripes.forEach(b => { const l = st[st.length - 1]; if (l && Math.abs(l[0] - b[0]) < 0.5 && Math.abs(l[1] - b[1]) < 0.5) return; st.push(b); });
+    const bottom = Math.min(...body.map(i => i.y)) - 3;
+    const bands = []; let cur = Math.min(top, hName.y - 2);
+    const headerBand = P.shapes.find(s => s.kind === 'fill' && Math.abs(s.x0 - cellX) < 4 && s.y0 <= hName.y && s.y1 >= hName.y);
+    if (headerBand) cur = headerBand.y0;
+    st.filter(b => !headerBand || b[1] <= headerBand.y0 + 0.5).forEach(b => {
+      if (cur - b[1] > 2) bands.push([b[1], cur]);
+      bands.push([b[0], b[1]]); cur = b[0];
+    });
+    if (cur - bottom > 2) bands.push([bottom, cur]);
+    const mid = i => i.y + i.h * 0.3;
+    bands.forEach(([y0, y1]) => {
+      const inB = body.filter(i => mid(i) >= y0 && mid(i) < y1).sort((a, b) => b.y - a.y || a.x - b.x);
+      const col = k => inB.filter(i => i.x >= cols[k][0] && i.x < cols[k][1]);
+      // one name per line; a line with no comma is the wrapped end of the one above
+      const names = items => { const out = []; items.forEach(i => { if (out.length && !i.s.includes(',') && Math.abs(out[out.length - 1].y - i.y) > 2) out[out.length - 1].s += ' ' + i.s; else if (out.length && Math.abs(out[out.length - 1].y - i.y) <= 2) out[out.length - 1].s += ' ' + i.s; else out.push({ s: i.s, y: i.y }); }); return out.map(o => o.s.replace(/\s+/g, ' ').trim()); };
+      const name = names(col(0)).join(' '), comps = names(col(1)), asg = names(col(2));
+      if (!name && !comps.length && !asg.length) return;
+      if (!name && rows.length) { const r = rows[rows.length - 1]; r.companions.push(...comps); r.assignments.push(...asg); return; }
+      rows.push({ name, companions: comps, assignments: asg });
+    });
+  });
+  // Companionships. A person in two companionships shows both companions and
+  // both assignment lists on their one row, so:
+  //  1. a group whose members all list exactly each other is a companionship;
+  //  2. otherwise someone listing just one companion gives that pair, with
+  //     their own (smaller) assignment list;
+  //  3. assignments left on a row after that are a companionship of that
+  //     person alone (or with someone outside the ward), marked solo.
+  const key = n => String(n || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const byKey = new Map(rows.filter(r => r.name).map(r => [key(r.name), r]));
+  const comp = new Map();
+  const add = (people, asg, how) => {
+    const k = people.map(key).sort().join(' | ');
+    const c = comp.get(k) || { ministers: [...new Set(people)], assignments: [], how };
+    asg.forEach(a => { if (!c.assignments.includes(a)) c.assignments.push(a); });
+    comp.set(k, c);
+  };
+  rows.forEach(r => {
+    if (!r.name || !r.companions.length) return;
+    const G = [r.name, ...r.companions], gk = new Set(G.map(key));
+    const ok = G.every(n => { const o = byKey.get(key(n)); if (!o) return n !== r.name ? true : false;
+      const want = [...gk].filter(x => x !== key(n)).sort().join('|'); return o.companions.map(key).sort().join('|') === want; });
+    // only what every member of the group lists (one of them may also be in another companionship)
+    if (ok) add(G, r.assignments.filter(a => G.every(n => { const o = byKey.get(key(n)); return !o || o.assignments.includes(a); })), 'group');
+  });
+  rows.forEach(r => {
+    if (!r.name || r.companions.length !== 1) return;
+    const o = byKey.get(key(r.companions[0]));
+    if (o && o.companions.length > 1) add([r.name, r.companions[0]], r.assignments, 'pair');
+  });
+  rows.forEach(r => {
+    if (!r.name || !r.assignments.length) return;
+    const mine = [...comp.values()].filter(c => c.ministers.some(m => key(m) === key(r.name)));
+    const covered = new Set(mine.flatMap(c => c.assignments));
+    const rest = r.assignments.filter(a => !covered.has(a));
+    if (rest.length) add([r.name], rest, mine.length ? 'solo-extra' : 'solo');
+  });
+  return { rows, companionships: [...comp.values()] };
+}
+
+// ── Ministering sisters ───────────────────────────────────────
+// Mirrors the brothers side, with two differences: a sisters' companionship
+// can be assigned households AND individual sisters, and there are two
+// separate pools on each sister:
+//   member.rsPool       considered as a ministering sister (true / 'maybe' / out)
+//   member.rsRecipient  in the pool of individual sisters to be ministered to
+//   household.rsPool    in the RS household pool (separate from hh.inPool, the EQ pool)
+// Lists: S.currentRS / S.proposedRS, entries
+//   { id, m1Id, m1Name, m2Id, m2Name, m3Id, m3Name, households: [hhId], assignees: [memberId],
+//     extraAssignees: [LCR names not in Members], notes, position, source }
+function isFemale(g) { return /^f/i.test(String(g || '').trim()); }
+function sisters() { return S.members.filter(m => isFemale(m.gender) && (!m.age || m.age >= 18)); }
+function rsPoolSisters() { return sisters().filter(m => m.rsPool === true); }
+function rsMaybeSisters() { return sisters().filter(m => m.rsPool === 'maybe'); }
+function rsRecipientSisters() { return sisters().filter(m => m.rsRecipient === true); }
+function rsPoolHouseholds() { return S.households.filter(h => h.rsPool === true); }
+function rsMinisterIds(list) { const s = new Set(); (list || []).forEach(c => [c.m1Id, c.m2Id, c.m3Id].forEach(id => id && s.add(id))); return s; }
+function rsServed(list) {
+  const hh = new Set(), mem = new Set();
+  (list || []).forEach(c => { (c.households || []).forEach(h => hh.add(h)); (c.assignees || []).forEach(a => mem.add(a)); });
+  return { hh, mem };
+}
+function poolBadge(state, onclick, can, labels) {
+  const st = state === true ? 'in' : state === 'maybe' ? 'maybe' : 'out';
+  const [cls, text] = { in: ['badge-green', labels?.in || 'In Pool'], maybe: ['badge-yellow', 'Maybe'], out: ['badge-red', labels?.out || 'Out'] }[st];
+  return `<span class="badge ${cls}" style="cursor:${can ? 'pointer' : 'default'}" ${can ? `onclick="${onclick}"` : ''} title="${can ? 'Click to change' : 'The presidency changes this'}">${text}</span>`;
+}
+function toggleSisterPool(id) {
+  if (!canEditRS()) return;
+  const m = S.members.find(x => x.id === id); if (!m) return;
+  m.rsPool = cyclePool(m.rsPool); dbUpsertMember(m); renderSisters();
+}
+function toggleSisterRecipient(id) {
+  if (!canEditRS()) return;
+  const m = S.members.find(x => x.id === id); if (!m) return;
+  m.rsRecipient = m.rsRecipient === true ? false : true; dbUpsertMember(m); renderSisters();
+}
+function toggleHHRSPool(id) {
+  if (!canEditRS()) { alert('The Relief Society presidency sets the RS household pool.'); return; }
+  const hh = S.households.find(x => x.id === id); if (!hh) return;
+  hh.rsPool = cyclePool(hh.rsPool); dbUpsertHousehold(hh); renderHouseholds();
+}
+
+function renderSisters() {
+  const list = sisters();
+  const cnt = document.getElementById('sisters-count'); if (cnt) cnt.innerHTML = list.length ? `<span class="badge badge-blue">${list.length}</span>` : '';
+  const ministering = rsMinisterIds(S.currentRS);
+  const served = rsServed(S.currentRS);
+  const hasMS = m => served.mem.has(m.id) || served.hh.has(m.householdId);
+  const q = norm(document.getElementById('sister-search').value);
+  const f = document.getElementById('sister-filter').value;
+  const can = canEditRS();
+  const rows = list.filter(m => {
+    if (q && !norm(m.name).includes(q)) return false;
+    if (f === 'in-pool' && m.rsPool !== true) return false;
+    if (f === 'maybe' && m.rsPool !== 'maybe') return false;
+    if (f === 'out-pool' && (m.rsPool === true || m.rsPool === 'maybe')) return false;
+    if (f === 'assigned' && !ministering.has(m.id)) return false;
+    if (f === 'unassigned' && ministering.has(m.id)) return false;
+    if (f === 'has-ms' && !hasMS(m)) return false;
+    if (f === 'no-ms' && hasMS(m)) return false;
+    return true;
+  }).sort((a, b) => a.name.localeCompare(b.name));
+  document.getElementById('sisters-stats').innerHTML = `
+    <div class="stat-card"><div class="number">${list.length}</div><div class="label">Sisters (18+)</div></div>
+    <div class="stat-card"><div class="number">${rsPoolSisters().length}</div><div class="label">Ministering Pool</div></div>
+    <div class="stat-card"><div class="number">${rsMaybeSisters().length}</div><div class="label">Maybe</div></div>
+    <div class="stat-card"><div class="number">${list.filter(m => ministering.has(m.id)).length}</div><div class="label">Currently Ministering</div></div>
+    <div class="stat-card"><div class="number">${rsRecipientSisters().length}</div><div class="label">In Receives Pool</div></div>
+    <div class="stat-card"><div class="number">${list.filter(hasMS).length}</div><div class="label">Have Ministering Sisters</div></div>`;
+  if (!rows.length) {
+    document.getElementById('sisters-table').innerHTML = list.length ? '<div class="empty-state"><div class="icon">🔍</div><p>No results.</p></div>'
+      : '<div class="empty-state"><div class="icon">📋</div><p>No sisters in Members yet (women 18 and older).</p></div>';
+    return;
+  }
+  document.getElementById('sisters-table').innerHTML = `<div style="overflow-x:auto"><table><thead><tr>
+    <th>Name</th><th>Household</th><th>Phone</th><th title="Considered as a ministering sister">Ministering Pool</th><th title="In the pool of individual sisters to be ministered to">Receives Pool</th>
+    <th>Ministering</th><th>Has Ministering Sisters</th><th>Notes</th></tr></thead><tbody>${rows.map(m => {
+      const hh = memberHousehold(m);
+      return `<tr><td><strong>${esc(m.name)}</strong>${identBadgesHTML(m)}</td>
+        <td style="font-size:0.82rem">${hh ? esc(hh.name) : '<span style="color:#aaa">—</span>'}</td>
+        <td style="font-size:0.82rem">${esc(m.phone || '')}</td>
+        <td>${poolBadge(m.rsPool, `toggleSisterPool('${m.id}')`, can)}</td>
+        <td>${poolBadge(m.rsRecipient === true, `toggleSisterRecipient('${m.id}')`, can, { in: 'Yes', out: 'No' })}</td>
+        <td><span class="badge ${ministering.has(m.id) ? 'badge-green' : 'badge-red'}">${ministering.has(m.id) ? 'Assigned' : 'Unassigned'}</span></td>
+        <td>${hasMS(m) ? '<span class="badge badge-green">Yes</span>' : '<span style="color:#aaa">—</span>'}</td>
+        <td><button class="btn btn-secondary btn-sm" onclick="openNotesModal('member','${m.id}')">${(m.notes?.length || 0) ? `Notes (${m.notes.length})` : 'Notes'}</button></td></tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+function exportSistersCSV() {
+  const list = sisters(); if (!list.length) { alert('No data.'); return; }
+  const mi = rsMinisterIds(S.currentRS);
+  let csv = 'Name,Household,Phone,MinisteringPool,ReceivesPool,CurrentlyMinistering\n';
+  list.forEach(m => { const hh = memberHousehold(m);
+    csv += [m.name, hh ? hh.name : '', m.phone, m.rsPool === true ? 'In' : m.rsPool === 'maybe' ? 'Maybe' : 'Out', m.rsRecipient === true ? 'Yes' : 'No', mi.has(m.id) ? 'Yes' : 'No']
+      .map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',') + '\n'; });
+  dlCSV(csv, 'sisters.csv');
+}
+
+function rsCompanionshipHTML(c, listKey, idx, total) {
+  const can = canEditRS();
+  const names = [c.m1Name, c.m2Name, c.m3Name].filter(Boolean);
+  const ministers = names.map(n => `${esc(n)}${identDotsByName(n)}`).join(' <span style="color:#aaa">+</span> ') + (names.length === 1 ? ' <span class="badge badge-blue">Solo</span>' : '');
+  const hhTags = (c.households || []).map(id => { const h = hhById(id); return `<span class="household-tag">🏠 ${esc(h ? h.name : id)}${identDotsHH(h)}</span>`; }).join('');
+  const sisTags = (c.assignees || []).map(id => { const m = S.members.find(x => x.id === id); return `<span class="household-tag" style="background:#fbe9f1;color:#7a2448">${esc(m ? m.name : '?')}${identBadgesHTML(m)}</span>`; }).join('');
+  const extra = (c.extraAssignees || []).map(n => `<span class="household-tag" style="opacity:0.7" title="On LCR's list but not in Members">${esc(n)}</span>`).join('');
+  const notes = c.notes || [];
+  return `<div class="companionship-card" ${can ? `onclick="openRSModal('${listKey}','${c.id}')"` : ''}>
+    <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:0.35rem;gap:0.5rem">
+      ${can && idx !== undefined ? `<div style="display:flex;flex-direction:column;gap:0.15rem;flex-shrink:0">
+        <button class="btn btn-secondary btn-sm" style="padding:0.1rem 0.5rem;line-height:1.2" ${idx === 0 ? 'disabled' : ''} onclick="event.stopPropagation();moveCompanionship('${listKey}','${c.id}',-1)">▲</button>
+        <button class="btn btn-secondary btn-sm" style="padding:0.1rem 0.5rem;line-height:1.2" ${idx === total - 1 ? 'disabled' : ''} onclick="event.stopPropagation();moveCompanionship('${listKey}','${c.id}',1)">▼</button></div>` : ''}
+      <div class="ministers" style="flex:1">${ministers}</div>
+      <div style="display:flex;gap:0.35rem;flex-shrink:0">
+        ${can ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openRSModal('${listKey}','${c.id}')">Edit</button>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openNotesModal('${listKey}','${c.id}')">${notes.length ? `Notes (${notes.length})` : 'Notes'}</button></div>
+    </div>
+    <div>${hhTags}${sisTags}${extra || ''}${!hhTags && !sisTags && !extra ? '<span style="color:#aaa;font-size:0.82rem">No one assigned</span>' : ''}</div>
+    ${notes.map(n => `<div style="margin-top:0.35rem;padding:0.28rem 0.55rem;border-left:3px solid #f2c1d6;font-size:0.8rem;color:#555">
+      <span style="font-weight:600;color:#1a3a5c">${esc(n.author)}</span><span style="color:#aaa;font-size:0.75rem"> · ${formatNoteDate(n.date)}</span>
+      <div style="margin-top:0.1rem;white-space:pre-wrap;font-style:italic">${esc(n.text)}</div></div>`).join('')}
+  </div>`;
+}
+
+function renderRSList(listKey, prefix) {
+  const list = S[listKey] || [];
+  const mi = rsMinisterIds(list), served = rsServed(list);
+  const pool = rsPoolSisters(), recip = rsRecipientSisters(), hhPool = rsPoolHouseholds();
+  const unMin = pool.filter(m => !mi.has(m.id));
+  const unRecip = recip.filter(m => !served.mem.has(m.id) && !served.hh.has(m.householdId));
+  const unHH = hhPool.filter(h => !served.hh.has(h.id));
+  document.getElementById(prefix + '-stats').innerHTML = `
+    <div class="stat-card"><div class="number">${list.length}</div><div class="label">Companionships</div></div>
+    <div class="stat-card"><div class="number">${pool.length - unMin.length}/${pool.length}</div><div class="label">Pool Sisters Ministering</div></div>
+    <div class="stat-card"><div class="number">${hhPool.length - unHH.length}/${hhPool.length}</div><div class="label">RS Pool Households Assigned</div></div>
+    <div class="stat-card"><div class="number">${recip.length - unRecip.length}/${recip.length}</div><div class="label">Receives-Pool Sisters Assigned</div></div>`;
+  document.getElementById(listKey + '-list').innerHTML = list.length ? list.map((c, i) => rsCompanionshipHTML(c, listKey, i, list.length)).join('')
+    : `<div class="empty-state"><div class="icon">✏️</div><p>${listKey === 'currentRS' ? 'No current sister assignments yet — import them from LCR above.' : 'No draft yet. Click "+ Add", or copy Current to the draft.'}</p></div>`;
+  const li = (inner) => `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">${inner}</li>`;
+  document.getElementById(prefix + '-unassigned').innerHTML = !pool.length
+    ? '<p style="color:#888;font-size:0.88rem">No sisters in the ministering pool yet — set them on the Sisters tab.</p>'
+    : !unMin.length ? '<p style="color:#155724;font-size:0.88rem">✓ Every pool sister is ministering.</p>'
+    : `<p style="font-size:0.82rem;color:#888;margin-bottom:0.5rem">${unMin.length} not yet assigned:</p><ul style="list-style:none;padding:0">${unMin.map(m => li(`${esc(m.name)}${identBadgesHTML(m)}`)).join('')}</ul>`;
+  document.getElementById(prefix + '-unserved').innerHTML = `
+    <div style="font-size:0.82rem;font-weight:600;color:#1a3a5c;margin-bottom:0.3rem">RS pool households (${unHH.length})</div>
+    ${!hhPool.length ? '<p style="color:#888;font-size:0.84rem">No households in the RS pool yet — set them on the Households tab.</p>'
+      : !unHH.length ? '<p style="color:#155724;font-size:0.84rem">✓ All assigned.</p>'
+      : `<ul style="list-style:none;padding:0;margin-bottom:0.8rem">${unHH.map(h => li(`${esc(h.name)}${identDotsHH(h)}`)).join('')}</ul>`}
+    <div style="font-size:0.82rem;font-weight:600;color:#1a3a5c;margin:0.4rem 0 0.3rem">Receives-pool sisters (${unRecip.length})</div>
+    ${!recip.length ? '<p style="color:#888;font-size:0.84rem">No sisters in the receives pool yet — set them on the Sisters tab.</p>'
+      : !unRecip.length ? '<p style="color:#155724;font-size:0.84rem">✓ All assigned.</p>'
+      : `<ul style="list-style:none;padding:0">${unRecip.map(m => li(`${esc(m.name)}${identBadgesHTML(m)}`)).join('')}</ul>`}`;
+}
+function renderCurrentRS() { renderRSList('currentRS', 'currentRS'); }
+function renderProposedRS() { renderRSList('proposedRS', 'proposedRS'); }
+
+// Modal
+let _rsCtx = null;
+function rsMinisterOptions(sel) {
+  const pool = new Set(rsPoolSisters().map(m => m.id)), maybe = new Set(rsMaybeSisters().map(m => m.id));
+  const list = sisters().sort((a, b) => (pool.has(b.id) - pool.has(a.id)) || (maybe.has(b.id) - maybe.has(a.id)) || a.name.localeCompare(b.name));
+  return `<option value="">—</option>` + list.map(m => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${pool.has(m.id) ? '★ ' : maybe.has(m.id) ? '☆ ' : ''}${esc(m.name)}</option>`).join('');
+}
+function openRSModal(listKey, id) {
+  if (!canEditRS()) return;
+  if (!S.members.length) { alert('Import member data first.'); return; }
+  const c = id ? (S[listKey] || []).find(x => x.id === id) : null;
+  _rsCtx = { listKey, id: c ? c.id : null, hh: new Set(c ? c.households || [] : []), mem: new Set(c ? c.assignees || [] : []) };
+  document.getElementById('rs-modal-title').textContent = c ? 'Edit companionship' : 'New companionship';
+  document.getElementById('rs-m1').innerHTML = rsMinisterOptions(c?.m1Id);
+  document.getElementById('rs-m2').innerHTML = rsMinisterOptions(c?.m2Id);
+  document.getElementById('rs-m3').innerHTML = rsMinisterOptions(c?.m3Id);
+  document.getElementById('rs-asg-search').value = '';
+  document.getElementById('rs-extra').textContent = c?.extraAssignees?.length ? `Also on LCR's list (not in Members): ${c.extraAssignees.join(', ')}` : '★ = in the ministering pool, ☆ = maybe.';
+  document.getElementById('rs-delete').style.display = c ? '' : 'none';
+  renderRSAssigneePicker();
+  document.getElementById('rs-modal').classList.add('open');
+}
+function renderRSAssigneePicker() {
+  const ctx = _rsCtx; if (!ctx) return;
+  const q = norm(document.getElementById('rs-asg-search').value);
+  const others = (S[ctx.listKey] || []).filter(c => c.id !== ctx.id), taken = rsServed(others);
+  const hhs = S.households.filter(h => h.rsPool === true || ctx.hh.has(h.id)).filter(h => !q || norm(h.name).includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+  const sis = sisters().filter(m => m.rsRecipient === true || ctx.mem.has(m.id)).filter(m => !q || norm(m.name).includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+  const row = (kind, id, label, dots, isTaken, on) => `<label><input type="checkbox" ${on ? 'checked' : ''} onchange="rsPick('${kind}','${id}',this.checked)">
+    <span>${kind === 'hh' ? '🏠 ' : ''}${esc(label)}${dots}${isTaken && !on ? ' <span style="color:#aaa;font-size:0.76rem">(assigned elsewhere)</span>' : ''}</span></label>`;
+  document.getElementById('rs-asg-list').innerHTML =
+    `<div style="font-size:0.74rem;font-weight:600;color:#888;padding:0.3rem 0.65rem">RS POOL HOUSEHOLDS</div>` +
+    (hhs.map(h => row('hh', h.id, h.name, identDotsHH(h), taken.hh.has(h.id), ctx.hh.has(h.id))).join('') || '<div style="color:#aaa;font-size:0.8rem;padding:0.2rem 0.65rem">None in the RS pool (Households tab).</div>') +
+    `<div style="font-size:0.74rem;font-weight:600;color:#888;padding:0.5rem 0.65rem 0.3rem">RECEIVES-POOL SISTERS</div>` +
+    (sis.map(m => row('mem', m.id, m.name, identBadgesHTML(m), taken.mem.has(m.id), ctx.mem.has(m.id))).join('') || '<div style="color:#aaa;font-size:0.8rem;padding:0.2rem 0.65rem">None in the receives pool (Sisters tab).</div>');
+}
+function rsPick(kind, id, on) { const set = _rsCtx[kind]; on ? set.add(id) : set.delete(id); }
+function saveRSCompanionship() {
+  const ctx = _rsCtx; if (!ctx || !canEditRS()) return;
+  const ids = ['rs-m1', 'rs-m2', 'rs-m3'].map(k => document.getElementById(k).value).filter(Boolean);
+  const uniq = [...new Set(ids)];
+  if (!uniq.length) { alert('Pick at least one ministering sister.'); return; }
+  const ms = uniq.map(id => S.members.find(m => m.id === id));
+  const list = S[ctx.listKey];
+  const old = ctx.id ? list.find(x => x.id === ctx.id) : null;
+  const rec = { ...(old || { id: uid(), notes: [], position: list.length }),
+    m1Id: ms[0]?.id || null, m1Name: ms[0]?.name || '', m2Id: ms[1]?.id || null, m2Name: ms[1]?.name || '', m3Id: ms[2]?.id || null, m3Name: ms[2]?.name || '',
+    households: [...ctx.hh], assignees: [...ctx.mem] };
+  if (old) list[list.indexOf(old)] = rec; else list.push(rec);
+  dbUpsertCompanionship(ctx.listKey, rec);
+  closeModal('rs-modal');
+  ctx.listKey === 'currentRS' ? renderCurrentRS() : renderProposedRS();
+}
+function deleteRSCompanionship() {
+  const ctx = _rsCtx; if (!ctx?.id || !canEditRS() || !confirm('Delete this companionship?')) return;
+  S[ctx.listKey] = S[ctx.listKey].filter(x => x.id !== ctx.id);
+  dbDeleteCompanionship(ctx.listKey, ctx.id);
+  closeModal('rs-modal');
+  ctx.listKey === 'currentRS' ? renderCurrentRS() : renderProposedRS();
+}
+const rsCopy = c => ({ ...c, id: uid(), notes: [], households: [...(c.households || [])], assignees: [...(c.assignees || [])], extraAssignees: [...(c.extraAssignees || [])] });
+async function copyRSToDraft() {
+  if (!canEditRS()) return;
+  if (!S.currentRS.length) { alert('No current sister assignments to copy.'); return; }
+  if (S.proposedRS.length && !confirm(`Replace the draft (${S.proposedRS.length} companionships) with a copy of Current?`)) return;
+  S.proposedRS = S.currentRS.map(rsCopy);
+  await dbReplaceCompanionshipList('proposedRS', S.proposedRS); showTab('proposeRS');
+}
+async function promoteRS() {
+  if (!canEditRS()) return;
+  if (!S.proposedRS.length) { alert('No draft companionships to promote.'); return; }
+  if (!confirm(`Replace Current Ministering Sister Assignments with all ${S.proposedRS.length} draft companionship(s)? The draft is left unchanged.`)) return;
+  S.currentRS = S.proposedRS.map(rsCopy);
+  await dbReplaceCompanionshipList('currentRS', S.currentRS); showTab('currentRS');
+}
+async function clearRS(listKey) {
+  if (!canEditRS() || !confirm(`Clear all ${LISTS[listKey].label.toLowerCase()}?`)) return;
+  S[listKey] = []; await dbReplaceCompanionshipList(listKey, []);
+  listKey === 'currentRS' ? renderCurrentRS() : renderProposedRS();
+}
+function exportRS(listKey) {
+  const list = S[listKey] || []; if (!list.length) { alert('Nothing to export.'); return; }
+  let csv = 'Minister1,Minister2,Minister3,Type,Assigned,Address\n';
+  list.forEach(c => {
+    const rows = [...(c.households || []).map(id => { const h = hhById(id); return ['Household', h ? h.name : id, h?.address || '']; }),
+                  ...(c.assignees || []).map(id => { const m = S.members.find(x => x.id === id); return ['Sister', m ? m.name : id, memberHousehold(m)?.address || '']; }),
+                  ...(c.extraAssignees || []).map(n => ['Sister (not in Members)', n, ''])];
+    (rows.length ? rows : [['', '', '']]).forEach(r => { csv += [c.m1Name, c.m2Name, c.m3Name, ...r].map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',') + '\n'; });
+  });
+  dlCSV(csv, listKey === 'currentRS' ? 'current_sister_assignments.csv' : 'draft_sister_assignments.csv');
+}
+
+// ── Importing LCR's Ministering Assignments into Current ──
+let _minPlan = null;
+async function handleMinisteringPdf(file, from) {
+  const statusEl = document.getElementById('min-status-' + from);
+  document.getElementById('min-file-' + from).value = '';
+  if (!file) return;
+  _minPlan = null;
+  ['eq', 'rs'].forEach(k => { const r = document.getElementById('min-review-' + k); if (r) r.innerHTML = ''; });
+  statusEl.style.color = '#555'; statusEl.textContent = `Reading ${file.name}…`;
+  try {
+    const lib = await loadPdfJs();
+    const pages = await readPdfPages(file, lib);
+    const parsed = parseMinisteringReport(pages);
+    if (!parsed.companionships.length) { statusEl.style.color = '#dc3545'; statusEl.textContent = `No companionships found in ${file.name}. Is it LCR's Ministering Assignments page (Individuals tab) printed to PDF?`; return; }
+    const memIdx = S.members.map(m => ({ n: identNorm(m.name), m }));
+    const find = n => identFind(identNorm(n), memIdx)?.m || null;
+    const comps = parsed.companionships.map(c => {
+      const ministers = c.ministers.map(n => ({ name: n, m: find(n) }));
+      const assignees = c.assignments.map(n => ({ name: n, m: find(n) }));
+      const g = [...new Set(ministers.map(x => x.m ? (isFemale(x.m.gender) ? 'F' : isMale(x.m.gender) ? 'M' : '?') : '?'))];
+      const ag = assignees.filter(a => a.m).map(a => isFemale(a.m.gender) ? 'F' : 'M');
+      const byAsg = ag.length && ag.every(x => x === 'F') ? 'rs' : 'eq';
+      const side = g.length === 1 && g[0] === 'M' ? 'eq' : g.length === 1 && g[0] === 'F' ? 'rs' : byAsg;
+      return { ministers, assignees, side, unsure: !(g.length === 1 && g[0] !== '?'), how: c.how };
+    });
+    _minPlan = { from, comps, rows: parsed.rows.length, doEq: canEditEQ(), doRs: canEditRS() };
+    statusEl.textContent = '';
+    renderMinReview();
+  } catch (err) {
+    console.error('Ministering import failed:', err);
+    statusEl.style.color = '#dc3545'; statusEl.textContent = 'Could not read that PDF: ' + (err?.message || 'unknown error');
+  }
+}
+function renderMinReview() {
+  const p = _minPlan; if (!p) return;
+  const eq = p.comps.filter(c => c.side === 'eq'), rs = p.comps.filter(c => c.side === 'rs');
+  const nm = c => c.ministers.map(x => esc(x.name)).join(' + ');
+  const unsure = p.comps.map((c, i) => ({ c, i })).filter(x => x.c.unsure);
+  const missM = [...new Set(p.comps.flatMap(c => c.ministers.filter(x => !x.m).map(x => x.name)))];
+  const missA = [...new Set(p.comps.flatMap(c => c.assignees.filter(x => !x.m).map(x => x.name)))];
+  document.getElementById('min-review-' + p.from).innerHTML = `<div class="alert" style="background:#eef6ee;border:1px solid #cfe5cf;color:#333;margin-top:0.8rem">
+    <strong>${p.comps.length} companionships</strong> found (${p.rows} people listed): <strong>${eq.length}</strong> brothers', <strong>${rs.length}</strong> sisters'.
+    ${p.comps.filter(c => c.ministers.length === 3).length ? ` ${p.comps.filter(c => c.ministers.length === 3).length} have three companions.` : ''}
+    ${p.comps.filter(c => c.ministers.length === 1).length ? ` ${p.comps.filter(c => c.ministers.length === 1).length} are listed with no companion in the ward (solo).` : ''}
+    ${unsure.length ? `<div style="margin-top:0.5rem;font-size:0.84rem">Couples or people not in Members — check which list each goes on:</div>
+      ${unsure.map(({ c, i }) => `<div style="display:flex;gap:0.5rem;align-items:center;font-size:0.82rem;margin:0.2rem 0">
+        <select onchange="_minPlan.comps[${i}].side=this.value;renderMinReview()" style="font-size:0.8rem;padding:0.15rem"><option value="eq" ${c.side === 'eq' ? 'selected' : ''}>Brothers</option><option value="rs" ${c.side === 'rs' ? 'selected' : ''}>Sisters</option></select>
+        <span>${nm(c)} <span style="color:#888">· ministers to ${c.assignees.length}</span></span></div>`).join('')}` : ''}
+    ${missM.length || missA.length ? `<div style="font-size:0.8rem;color:#856404;margin-top:0.5rem">Not in Members (kept as names): ${[...missM, ...missA].map(esc).join(' · ')}</div>` : ''}
+    <div style="margin-top:0.6rem;font-size:0.85rem">
+      <label style="font-weight:400;display:flex;gap:0.4rem;align-items:center"><input type="checkbox" style="width:auto" ${p.doEq ? 'checked' : ''} ${canEditEQ() ? '' : 'disabled'} onchange="_minPlan.doEq=this.checked">
+        Replace <strong>Current Ministering Brother Assignments</strong> (${S.current.length} now → ${eq.length})${canEditEQ() ? '' : ' — EQ presidency only'}</label>
+      <label style="font-weight:400;display:flex;gap:0.4rem;align-items:center"><input type="checkbox" style="width:auto" ${p.doRs ? 'checked' : ''} ${canEditRS() ? '' : 'disabled'} onchange="_minPlan.doRs=this.checked">
+        Replace <strong>Current Ministering Sister Assignments</strong> (${(S.currentRS || []).length} now → ${rs.length})${canEditRS() ? '' : ' — RS presidency only'}</label>
+      <div style="font-size:0.76rem;color:#888;margin-top:0.2rem">Notes on a companionship with the same ministers are kept. Brothers' assignments become those people's households; sisters' stay as individual sisters. Drafts aren't touched.</div>
+    </div>
+    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.6rem">
+      <button class="btn btn-secondary btn-sm" onclick="cancelMinImport()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="applyMinPlan()">Save</button></div></div>`;
+}
+function cancelMinImport() { const f = _minPlan?.from; _minPlan = null; if (f) { document.getElementById('min-review-' + f).innerHTML = ''; document.getElementById('min-status-' + f).textContent = ''; } }
+function minKey(names) { return names.filter(Boolean).map(n => normNameKey(n)).sort().join(' | '); }
+async function applyMinPlan() {
+  const p = _minPlan; if (!p || (!p.doEq && !p.doRs)) { alert('Nothing ticked to replace.'); return; }
+  const now = new Date().toISOString();
+  const build = (side, oldList) => {
+    const old = new Map((oldList || []).map(c => [minKey([c.m1Name, c.m2Name, c.m3Name]), c]));
+    return p.comps.filter(c => c.side === side).map((c, i) => {
+      const ms = c.ministers.map(x => ({ id: x.m?.id || null, name: x.m?.name || x.name }));
+      const prev = old.get(minKey(ms.map(x => x.name)));
+      const rec = { id: prev?.id || uid(), notes: prev?.notes || [], position: i, source: 'LCR', importedAt: now,
+        m1Id: ms[0]?.id || null, m1Name: ms[0]?.name || '', m2Id: ms[1]?.id || null, m2Name: ms[1]?.name || '', m3Id: ms[2]?.id || null, m3Name: ms[2]?.name || '',
+        extraAssignees: c.assignees.filter(a => !a.m).map(a => a.name) };
+      const matched = c.assignees.filter(a => a.m).map(a => a.m);
+      if (side === 'eq') {
+        rec.assignees = matched.map(m => m.id);
+        rec.households = [...new Set(matched.map(m => m.householdId).filter(Boolean))];
+        matched.filter(m => !m.householdId).forEach(m => rec.extraAssignees.push(m.name));
+      } else {
+        rec.assignees = matched.map(m => m.id);
+        rec.households = prev?.households?.filter(h => hhById(h)) || [];
+      }
+      return rec;
+    });
+  };
+  const done = [];
+  if (p.doEq && canEditEQ()) { S.current = build('eq', S.current); await dbReplaceCompanionshipList('current', S.current); done.push(`${S.current.length} brothers' companionships`); }
+  if (p.doRs && canEditRS()) { S.currentRS = build('rs', S.currentRS); await dbReplaceCompanionshipList('currentRS', S.currentRS); done.push(`${S.currentRS.length} sisters' companionships`); }
+  const f = p.from; _minPlan = null;
+  document.getElementById('min-review-' + f).innerHTML = '';
+  const st = document.getElementById('min-status-' + f); st.style.color = '#155724'; st.textContent = '✓ Saved ' + done.join(' and ') + '.';
+  renderCurrent(); renderCurrentRS(); renderBrothers(); renderSisters();
+}
+
 // ── LCR report links ("Fetch/Print/Download") ─────────────────────
 // Opens the report in LCR in a new browser tab (LCR asks the person to sign in
 // if needed). They download / save it as PDF there, come back, and use
@@ -7070,6 +7677,8 @@ const LCR_REPORT_URLS = {
   'st-ki': 'https://lcr.churchofjesuschrist.org/report/key-indicators?lang=eng',
   'st-qr': 'https://lcr.churchofjesuschrist.org/report/quarterly-report?lang=eng',
   'st-us': 'https://lcr.churchofjesuschrist.org/report/unit-statistics?lang=eng',
+  // Ministering assignments (Individuals tab) → Current brother and sister lists
+  ministering: 'https://lcr.churchofjesuschrist.org/ministering-assignments?lang=eng&tab=individuals',
   // Identifiers tab
   'id-noCalling': 'https://lcr.churchofjesuschrist.org/mlt/report/member-callings?tab=without-callings&lang=eng',
   'id-partMember': 'https://lcr.churchofjesuschrist.org/mlt/report/part-member-households?lang=eng',

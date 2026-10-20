@@ -11,7 +11,7 @@ function forEachNote(doc, fn) {
   const d = doc || {};
   (d.members || []).forEach(m => (m.notes || []).forEach(n => fn(n, 'note')));
   (d.households || []).forEach(h => (h.notes || []).forEach(n => fn(n, 'note')));
-  ['current', 'proposed'].forEach(k => (d[k] || []).forEach(c => (c.notes || []).forEach(n => fn(n, 'note'))));
+  ['current', 'proposed', 'currentRS', 'proposedRS'].forEach(k => (d[k] || []).forEach(c => (c.notes || []).forEach(n => fn(n, 'note'))));
   Object.values(d.groups || {}).forEach(list => (Array.isArray(list) ? list : []).forEach(e =>
     ['goals', 'notes', 'nextSteps'].forEach(f => (e[f] || []).forEach(n => fn(n, KIND[f])))));
 }
