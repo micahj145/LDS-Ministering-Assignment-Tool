@@ -5817,17 +5817,25 @@ async function sendMessage() {
   if (text.length > 5000) { err.textContent = 'That message is too long (5,000 characters at most).'; return; }
   const btn = document.getElementById('msg-send'); if (btn) btn.disabled = true;
   const now = new Date().toISOString();
-  const tRef = db.collection('threads').doc(_openThreadId);
+  const tid = _openThreadId;
+  const tRef = db.collection('threads').doc(tid);
   const batch = db.batch();
   batch.set(tRef.collection('messages').doc(), { authorId: _currentUserId, authorName: _currentUserName || _currentUserEmail || 'Unknown', text, createdAt: now });
   batch.update(tRef, { lastAt: now, lastBy: _currentUserId, lastByName: _currentUserName || '', ['names.' + _currentUserId]: _currentUserName || '' });
+  // Empty the box now: the live listeners redraw the conversation (and copy
+  // whatever is in the box into the new one) before commit() resolves, so
+  // clearing afterwards would hit a box that's no longer on screen.
+  ta.value = ''; err.textContent = '';
   try {
     await batch.commit();
-    ta.value = ''; err.textContent = '';
-    _threadSeen = { ..._threadSeen, [_openThreadId]: now };
+    _threadSeen = { ..._threadSeen, [tid]: now };
   } catch (e) {
-    err.textContent = 'Not sent: ' + (e?.message || 'unknown error');
-  } finally { if (btn) btn.disabled = false; }
+    const box = document.getElementById('msg-text');
+    if (box && !box.value) box.value = text;            // give the text back so it isn't lost
+    const er = document.getElementById('msg-error');
+    if (er) er.textContent = 'Not sent: ' + (e?.message || 'unknown error');
+  } finally { const b = document.getElementById('msg-send'); if (b) b.disabled = false; }
+  document.getElementById('msg-text')?.focus();
 }
 
 async function deleteMessage(id) {
