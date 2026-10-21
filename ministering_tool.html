@@ -496,6 +496,12 @@ tr:hover td{background:#fafbfc}
           <h2 style="margin:0;border:none;padding:0">Current Companionships</h2>
           <button class="btn btn-primary btn-sm eq-edit" onclick="openAddModal('current')">+ Add</button>
         </div>
+        <div class="comp-search" style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin:0.6rem 0 0.5rem">
+          <input type="text" id="cs-q-current" placeholder="Search companionships by name…" oninput="renderCurrent()" style="flex:1;min-width:150px;padding:0.4rem 0.6rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem">
+          <select id="cs-mode-current" onchange="renderCurrent()" style="padding:0.38rem;border:1px solid #ddd;border-radius:6px;font-size:0.82rem" title="Which side of the companionship to search">
+            <option value="any">Minister or ministered to</option><option value="minister">Minister</option><option value="served">Ministered to</option></select>
+          <span id="cs-count-current" style="font-size:0.78rem;color:#888"></span>
+        </div>
         <div id="current-list"></div>
       </div>
       <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
@@ -548,6 +554,12 @@ tr:hover td{background:#fafbfc}
         <div class="flex-between">
           <h2 style="margin:0;border:none;padding:0">Draft Companionships</h2>
           <button class="btn btn-primary btn-sm eq-edit" onclick="openAddModal()">+ Add</button>
+        </div>
+        <div class="comp-search" style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin:0.6rem 0 0.5rem">
+          <input type="text" id="cs-q-proposed" placeholder="Search companionships by name…" oninput="renderProposed()" style="flex:1;min-width:150px;padding:0.4rem 0.6rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem">
+          <select id="cs-mode-proposed" onchange="renderProposed()" style="padding:0.38rem;border:1px solid #ddd;border-radius:6px;font-size:0.82rem" title="Which side of the companionship to search">
+            <option value="any">Minister or ministered to</option><option value="minister">Minister</option><option value="served">Ministered to</option></select>
+          <span id="cs-count-proposed" style="font-size:0.78rem;color:#888"></span>
         </div>
         <div id="proposed-list"></div>
       </div>
@@ -637,6 +649,12 @@ tr:hover td{background:#fafbfc}
           <h2 style="margin:0;border:none;padding:0">Current Companionships</h2>
           <button class="btn btn-primary btn-sm rs-edit" onclick="openRSModal('currentRS')">+ Add</button>
         </div>
+        <div class="comp-search" style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin:0.6rem 0 0.5rem">
+          <input type="text" id="cs-q-currentRS" placeholder="Search companionships by name…" oninput="renderCurrentRS()" style="flex:1;min-width:150px;padding:0.4rem 0.6rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem">
+          <select id="cs-mode-currentRS" onchange="renderCurrentRS()" style="padding:0.38rem;border:1px solid #ddd;border-radius:6px;font-size:0.82rem" title="Which side of the companionship to search">
+            <option value="any">Minister or ministered to</option><option value="minister">Minister</option><option value="served">Ministered to</option></select>
+          <span id="cs-count-currentRS" style="font-size:0.78rem;color:#888"></span>
+        </div>
         <div id="currentRS-list"></div>
       </div>
       <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
@@ -663,6 +681,12 @@ tr:hover td{background:#fafbfc}
         <div class="flex-between">
           <h2 style="margin:0;border:none;padding:0">Draft Companionships</h2>
           <button class="btn btn-primary btn-sm rs-edit" onclick="openRSModal('proposedRS')">+ Add</button>
+        </div>
+        <div class="comp-search" style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin:0.6rem 0 0.5rem">
+          <input type="text" id="cs-q-proposedRS" placeholder="Search companionships by name…" oninput="renderProposedRS()" style="flex:1;min-width:150px;padding:0.4rem 0.6rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem">
+          <select id="cs-mode-proposedRS" onchange="renderProposedRS()" style="padding:0.38rem;border:1px solid #ddd;border-radius:6px;font-size:0.82rem" title="Which side of the companionship to search">
+            <option value="any">Minister or ministered to</option><option value="minister">Minister</option><option value="served">Ministered to</option></select>
+          <span id="cs-count-proposedRS" style="font-size:0.78rem;color:#888"></span>
         </div>
         <div id="proposedRS-list"></div>
       </div>
@@ -2712,7 +2736,7 @@ function renderCurrent() {
 
   document.getElementById('current-list').innerHTML = !list.length
     ? '<div class="empty-state"><div class="icon">🤝</div><p>No current assignments yet. Promote from Proposed or click "+ Add".</p></div>'
-    : list.map((c, i) => companionshipHTML(c.m1Name, c.m2Name, c.households, c.district, c.id, 'current', i, list.length)).join('');
+    : compSearchRender('current', list, (c, i) => companionshipHTML(c.m1Name, c.m2Name, c.households, c.district, c.id, 'current', i, list.length));
 
   const unDiv = document.getElementById('current-unassigned-list');
   if (unDiv) {
@@ -2876,7 +2900,7 @@ function renderProposed() {
 
   document.getElementById('proposed-list').innerHTML = !list.length
     ? '<div class="empty-state"><div class="icon">✏️</div><p>No proposals yet. Click "+ Add" to start.</p></div>'
-    : list.map((p, i) => companionshipHTML(p.m1Name, p.m2Name, p.households, '', p.id, 'proposed', i, list.length)).join('');
+    : compSearchRender('proposed', list, (p, i) => companionshipHTML(p.m1Name, p.m2Name, p.households, '', p.id, 'proposed', i, list.length));
 
   if (!unassigned.length) {
     document.getElementById('unassigned-list').innerHTML = bList.length === 0
@@ -7458,7 +7482,7 @@ function renderRSList(listKey, prefix) {
     <div class="stat-card"><div class="number">${pool.length - unMin.length}/${pool.length}</div><div class="label">Pool Sisters Ministering</div></div>
     <div class="stat-card"><div class="number">${hhPool.length - unHH.length}/${hhPool.length}</div><div class="label">RS Pool Households Assigned</div></div>
     <div class="stat-card"><div class="number">${recip.length - unRecip.length}/${recip.length}</div><div class="label">Receives-Pool Sisters Assigned</div></div>`;
-  document.getElementById(listKey + '-list').innerHTML = list.length ? list.map((c, i) => rsCompanionshipHTML(c, listKey, i, list.length)).join('')
+  document.getElementById(listKey + '-list').innerHTML = list.length ? compSearchRender(listKey, list, (c, i) => rsCompanionshipHTML(c, listKey, i, list.length))
     : `<div class="empty-state"><div class="icon">✏️</div><p>${listKey === 'currentRS' ? 'No current sister assignments yet — import them from LCR above.' : 'No draft yet. Click "+ Add", or copy Current to the draft.'}</p></div>`;
   const li = (inner) => `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">${inner}</li>`;
   document.getElementById(prefix + '-unassigned').innerHTML = !pool.length
@@ -7662,6 +7686,42 @@ async function applyMinPlan() {
   document.getElementById('min-review-' + f).innerHTML = '';
   const st = document.getElementById('min-status-' + f); st.style.color = '#155724'; st.textContent = '✓ Saved ' + done.join(' and ') + '.';
   renderCurrent(); renderCurrentRS(); renderBrothers(); renderSisters();
+}
+
+// ── Searching companionships (all four assignment tabs) ──
+// "Minister": any of the companions. "Ministered to": the households assigned
+// (by household name or the name of anyone living there), individual sisters
+// assigned, and LCR names not in Members. Matches each word of the search
+// anywhere in a name, so "Okafor" or "Ruth Okafor" both find "Okafor, Ruth".
+function compMinisterNames(c) { return [c.m1Name, c.m2Name, c.m3Name].filter(Boolean); }
+function compServedNames(c) {
+  const out = [];
+  (c.households || []).forEach(ref => {
+    const h = S.households.find(x => x.id === ref || norm(x.name) === norm(ref));
+    if (!h) { out.push(String(ref)); return; }
+    out.push(h.name, ...(h.members || []));
+    S.members.forEach(m => { if (m.householdId === h.id) out.push(m.name); });
+  });
+  (c.assignees || []).forEach(id => { const m = S.members.find(x => x.id === id); if (m) out.push(m.name); });
+  return out.concat(c.extraAssignees || []);
+}
+function compMatches(c, q, mode) {
+  const words = norm(q).replace(/,/g, ' ').split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hit = names => names.some(n => { const t = norm(n).replace(/,/g, ' '); return words.every(w => t.includes(w)); });
+  return (mode !== 'served' && hit(compMinisterNames(c))) || (mode !== 'minister' && hit(compServedNames(c)));
+}
+// Filters, keeps each card's real position (so ▲▼ still move it within the
+// whole list), and hides the move buttons while a search is narrowing it.
+function compSearchRender(key, list, cardFn) {
+  const q = document.getElementById('cs-q-' + key)?.value || '';
+  const mode = document.getElementById('cs-mode-' + key)?.value || 'any';
+  const cnt = document.getElementById('cs-count-' + key);
+  if (!q.trim()) { if (cnt) cnt.textContent = ''; return list.map((c, i) => cardFn(c, i)).join(''); }
+  const shown = list.map((c, i) => ({ c, i })).filter(x => compMatches(x.c, q, mode));
+  if (cnt) cnt.textContent = `${shown.length} of ${list.length}`;
+  return shown.length ? shown.map(x => cardFn(x.c, undefined)).join('')
+    : `<div class="empty-state" style="padding:1.2rem"><p>No companionship ${mode === 'minister' ? 'has a minister' : mode === 'served' ? 'ministers to anyone' : 'includes anyone'} matching “${esc(q)}”.</p></div>`;
 }
 
 // ── LCR report links ("Fetch/Print/Download") ─────────────────────

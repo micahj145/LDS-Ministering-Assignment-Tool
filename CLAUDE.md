@@ -361,6 +361,10 @@ sign-in, `stopPrivateListeners()` on sign-out).
   fields. Sister cards (`rsCompanionshipHTML`) show households 🏠 and individual sisters; edited in
   `#rs-modal` (ministers from `sisters()`, ★ pool / ☆ maybe; pickers = RS-pool households +
   receives-pool sisters, plus anything already selected).
+- **Search** (all four lists): `#cs-q-{key}` + `#cs-mode-{key}` (any / minister / served) above each
+  list, applied in `compSearchRender()`. Served = household names, everyone living in those
+  households, individual assignees and `extraAssignees`; every search word must appear in one name.
+  While filtering, cards get no ▲▼ (positions stay those of the full list).
 - **LCR import** (`parseMinisteringReport`, card on both Current tabs, `LCR_REPORT_URLS.ministering`):
   rows from the cells' stripe fills (shaded rows = fills, plain rows = gaps); a row that continues
   past a page break has no name and joins the previous one. Companionships: groups whose members
