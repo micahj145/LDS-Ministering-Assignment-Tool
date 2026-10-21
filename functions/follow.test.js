@@ -106,3 +106,9 @@ test('sister companionships notify household followers too', () => {
   const t = householdChanges(before, after).map(c => c.hhId + ':' + c.text + '|' + c.link);
   assert.ok(t.some(x => x.includes('h1:Whitfield, Daniel & Grace assigned to Ana + Eve (Current Sister Assignments)') && x.includes('#tab=currentRS')), t.join('\n'));
 });
+
+test('RS household pool changes reach followers', () => {
+  const h0 = { id: 'h1', name: 'Okafor, Ruth', notes: [] };
+  const t = householdChanges({ households: [h0], members: [] }, { households: [{ ...h0, rsPool: true }], members: [] }).map(c => c.text);
+  assert.ok(t.includes('Okafor, Ruth: RS ministering pool Out → In Pool'), t.join('\n'));
+});

@@ -349,8 +349,9 @@ sign-in, `stopPrivateListeners()` on sign-out).
   goToLink, move-out helpers, tags.js, follow.js) uses all four.
 - **Access**: everyone sees every tab (`hasFullAccess()` now always true). Roles on the profile:
   `council` | `eq` | `rs` (Admin tab select). `canEditEQ()` (role eq only — admin adds nothing) gates brother lists, the
-  Brothers pool and the **EQ household pool** (`hh.inPool`, also on Move Ins); `canEditRS()` (role rs
-  only) gates sister lists, both sister pools and the **RS household pool** (`hh.rsPool`). Static
+  Brothers pool and the **EQ household pool** (`hh.inPool`, also on Move Ins — `setMoveInPool`); `canEditRS()` (role rs
+  only) gates sister lists, both sister pools and the **RS household pool** (`hh.rsPool`, also on Move Ins —
+  `setMoveInRSPool`; follow.js notifies followers of either pool changing). Static
   controls carry `.eq-edit` / `.rs-edit` (hidden) and `.eq-viewonly` / `.rs-viewonly` notices,
   toggled in `applyAccessVisibility()`. Client-side only — the rules don't know roles.
 - **Pools**: brothers `m.inPool`; sisters `m.rsPool` (ministering) and `m.rsRecipient` (receives);

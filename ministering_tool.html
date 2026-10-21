@@ -4459,6 +4459,15 @@ function renderMoves() {
         <option value="maybe" ${pool === 'maybe' ? 'selected' : ''}>Maybe</option>
         <option value="out" ${pool === 'out' ? 'selected' : ''}>Out</option>
       </select>`;
+    // The RS household pool (hh.rsPool), same as the Households tab's RS Pool column.
+    const rsPool = !hh ? null : hh.rsPool === true ? 'in' : hh.rsPool === 'maybe' ? 'maybe' : 'out';
+    const rsSel = !hh ? '' : `
+      <select style="font-size:0.82rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px;font-weight:500;${poolColors[rsPool]}"
+        onchange="setMoveInRSPool('${hh.id}', this.value)" ${canEditRS() ? '' : 'disabled'} title="Whether this household is in the RS ministering pool — same setting as the Households tab (RS presidency changes it)">
+        <option value="in" ${rsPool === 'in' ? 'selected' : ''}>In Pool</option>
+        <option value="maybe" ${rsPool === 'maybe' ? 'selected' : ''}>Maybe</option>
+        <option value="out" ${rsPool === 'out' ? 'selected' : ''}>Out</option>
+      </select>`;
     const steps = e.nextSteps || [];
     const merged = groupMergedNotes(e);
     return `<tr>
@@ -4471,6 +4480,7 @@ function renderMoves() {
       </td>
       <td style="vertical-align:top">${statusSel}</td>
       <td style="vertical-align:top">${poolSel}</td>
+      <td style="vertical-align:top">${rsSel}</td>
       <td style="vertical-align:top">
         <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','movein','nextSteps')">${steps.length ? `Next Steps (${steps.length})` : 'Next Step'}</button>
         ${latestCommentHTML(steps.map(n => ({ n, source: null })))}
@@ -4488,11 +4498,12 @@ function renderMoves() {
 
   const body = list.length
     ? `<div style="overflow-x:auto"><table><thead><tr>
-         <th style="width:24%">Household</th>
-         <th style="width:15%">Status</th>
-         <th style="width:9%" title="The EQ household pool, same as the Households tab">EQ Pool</th>
-         <th style="width:22%">Next Step <span style="font-weight:400;color:#aaa">· most recent</span></th>
-         <th style="width:22%">Notes <span style="font-weight:400;color:#aaa">· most recent</span></th>
+         <th style="width:22%">Household</th>
+         <th style="width:14%">Status</th>
+         <th style="width:9%" title="The EQ household pool (ministering brothers), same as the Households tab">EQ Pool</th>
+         <th style="width:9%" title="The RS household pool (ministering sisters), same as the Households tab">RS Pool</th>
+         <th style="width:19%">Next Step <span style="font-weight:400;color:#aaa">· most recent</span></th>
+         <th style="width:19%">Notes <span style="font-weight:400;color:#aaa">· most recent</span></th>
          <th>Actions</th>
        </tr></thead><tbody>${rows}</tbody></table></div>`
     : `<div class="empty-state" style="padding:1.2rem"><p>No one here yet — import the Members Moved In report above.</p></div>`;
@@ -4578,6 +4589,16 @@ function setMoveInPool(householdId, value) {
   const hh = hhById(householdId);
   if (!hh) return;
   hh.inPool = value === 'in' ? true : value === 'maybe' ? 'maybe' : false;
+  dbUpsertHousehold(hh);
+  renderMoves();
+  renderHouseholds();
+}
+
+function setMoveInRSPool(householdId, value) {
+  if (!canEditRS()) { renderMoves(); return; }
+  const hh = hhById(householdId);
+  if (!hh) return;
+  hh.rsPool = value === 'in' ? true : value === 'maybe' ? 'maybe' : false;
   dbUpsertHousehold(hh);
   renderMoves();
   renderHouseholds();

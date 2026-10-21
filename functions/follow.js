@@ -38,6 +38,7 @@ function householdChanges(beforeDoc, afterDoc) {
     if (!o) return;                                  // brand-new household: nobody follows it yet
     newNotes(o.notes, h.notes).forEach(n => add(id, `${n.author || 'Someone'} added a note on ${h.name}`, `#open=household,${enc(id)}`));
     if (poolLabel(o.inPool) !== poolLabel(h.inPool)) add(id, `${h.name}: ministering pool ${poolLabel(o.inPool)} → ${poolLabel(h.inPool)}`, '#tab=households');
+    if (poolLabel(o.rsPool) !== poolLabel(h.rsPool)) add(id, `${h.name}: RS ministering pool ${poolLabel(o.rsPool)} → ${poolLabel(h.rsPool)}`, '#tab=households');
     if ((o.address || '') !== (h.address || '')) add(id, `${h.name}: address updated`, '#tab=households');
     if ((o.phone || '') !== (h.phone || '')) add(id, `${h.name}: phone updated`, '#tab=households');
   });
