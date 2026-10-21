@@ -5,6 +5,9 @@
 !/manifest.json
 !/firebase.json
 /*.csv
+# LCR report PDFs contain member PII; only the user guide is published.
+/*.pdf
+!/user_guide.pdf
 errors.txt
 supabase/seed.sql
 # Cloud Functions dependencies and CLI logs
