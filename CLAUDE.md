@@ -341,6 +341,13 @@ sign-in, `stopPrivateListeners()` on sign-out).
   `badgeCount()` = Notifications unread + Messages unread, used by every push.
 - `firebase.json` now includes `firestore.rules`, so `firebase deploy --only firestore:rules` works.
 
+### Find members nearby tab
+`renderNearby()` / `findNearby()`: origin = a household picked from the datalist (its stored
+lat/lng, no lookup) or any address via `geocodeAddress()` (Nominatim). Lists EQ-pool (`hh.inPool`)
+or RS-pool (`hh.rsPool`) households (optionally Maybe too) by `haversine()` distance, with an
+"Assigned (Current)" badge from `S.current` / `S.currentRS`; households without lat/lng listed
+alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved.
+
 ### Ministering: brothers and sisters, current and draft (Oct 2026)
 - **Tabs**: Brothers, Current / Draft Ministering Brother Assignments (`S.current` / `S.proposed`,
   tab ids `current` / `propose`), Sisters, Current / Draft Ministering Sister Assignments

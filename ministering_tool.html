@@ -215,6 +215,7 @@ tr:hover td{background:#fafbfc}
   <button id="nav-msg-btn" onclick="showTab('messages')">Messages <span id="msg-count"></span></button>
   <button onclick="showTab('members')">Members <span id="members-count"></span></button>
   <button onclick="showTab('households')">Households <span id="households-count"></span></button>
+  <button id="nav-nearby-btn" onclick="showTab('nearby')">Find members nearby</button>
   <button id="nav-brothers-btn" onclick="showTab('brothers')">Brothers <span id="brothers-count"></span></button>
   <button id="nav-current-btn" onclick="showTab('current')">Current Ministering Brother Assignments</button>
   <button id="nav-propose-btn" onclick="showTab('propose')">Draft Ministering Brother Assignments</button>
@@ -438,6 +439,30 @@ tr:hover td{background:#fafbfc}
     </div>
     <div id="households-table"></div>
   </div>
+</div>
+
+<!-- FIND MEMBERS NEARBY TAB -->
+<div id="tab-nearby" class="tab-content">
+  <div class="ident-legend-slot"></div>
+  <div class="card">
+    <h2 style="margin:0 0 0.6rem">Find members nearby</h2>
+    <p style="font-size:0.82rem;color:#888;margin:0 0 0.7rem">Enter an address (or pick a household) and choose a pool. In-pool households are listed nearest first,
+      by straight-line distance. Households whose address couldn't be placed on the map are listed separately below.</p>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+      <input type="text" id="nearby-addr" list="nearby-hh-list" placeholder="Street, city, state ZIP — or start typing a household name"
+        style="flex:1;min-width:240px;padding:0.45rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.88rem"
+        onkeydown="if(event.key==='Enter'){findNearby();return false}">
+      <datalist id="nearby-hh-list"></datalist>
+      <select id="nearby-pool" onchange="renderNearby()" style="padding:0.42rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem">
+        <option value="eq">EQ pool households (brothers)</option>
+        <option value="rs">RS pool households (sisters)</option>
+      </select>
+      <label style="font-weight:400;font-size:0.82rem;display:flex;align-items:center;gap:0.3rem"><input type="checkbox" id="nearby-maybe" style="width:auto" onchange="renderNearby()"> include Maybe</label>
+      <button class="btn btn-primary" id="nearby-go" onclick="findNearby()">Find</button>
+    </div>
+    <div id="nearby-status" style="margin-top:0.5rem;font-size:0.84rem;color:#555"></div>
+  </div>
+  <div id="nearby-results"></div>
 </div>
 
 <!-- BROTHERS TAB -->
@@ -1759,7 +1784,7 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   // Order must match the nav buttons in the DOM — the active-button lookup
   // below is by index, so inserting a tab means inserting it here too.
-  const tabs = ['import','notifications','messages','members','households','brothers','current','propose','sisters','currentRS','proposeRS','council','moves','idents','stats','admin'];
+  const tabs = ['import','notifications','messages','members','households','nearby','brothers','current','propose','sisters','currentRS','proposeRS','council','moves','idents','stats','admin'];
   document.querySelectorAll('nav button')[tabs.indexOf(name)].classList.add('active');
   if (name === 'members')    renderMembers();
   if (name === 'households') renderHouseholds();
@@ -1767,6 +1792,7 @@ function showTab(name) {
   if (name === 'current')    renderCurrent();
   if (name === 'propose')    renderProposed();
   if (name === 'sisters')    renderSisters();
+  if (name === 'nearby')     renderNearby();
   if (name === 'currentRS')  renderCurrentRS();
   if (name === 'proposeRS')  renderProposedRS();
   if (name === 'council')    renderCouncil();
@@ -7751,6 +7777,97 @@ function compSearchRender(key, list, cardFn) {
   if (cnt) cnt.textContent = `${shown.length} of ${list.length}`;
   return shown.length ? shown.map(x => cardFn(x.c, undefined)).join('')
     : `<div class="empty-state" style="padding:1.2rem"><p>No companionship ${mode === 'minister' ? 'has a minister' : mode === 'served' ? 'ministers to anyone' : 'includes anyone'} matching “${esc(q)}”.</p></div>`;
+}
+
+// ── Find members nearby ───────────────────────────────────────
+// Ranks the EQ-pool (hh.inPool) or RS-pool (hh.rsPool) households by
+// straight-line distance from an address. A household name typed in the box
+// uses that household's stored coordinates (no lookup); anything else is
+// geocoded with the same Nominatim lookup the distance tools use. The origin
+// is kept only in memory, never saved.
+let _nearbyOrigin = null;      // { lat, lng, label }
+
+function nearbyPool() {
+  const side = document.getElementById('nearby-pool')?.value || 'eq';
+  const maybe = !!document.getElementById('nearby-maybe')?.checked;
+  const key = side === 'rs' ? 'rsPool' : 'inPool';
+  return S.households.filter(h => h[key] === true || (maybe && h[key] === 'maybe'));
+}
+
+async function findNearby() {
+  const input = document.getElementById('nearby-addr');
+  const st = document.getElementById('nearby-status');
+  const q = (input.value || '').trim();
+  if (!q) { st.style.color = '#dc3545'; st.textContent = 'Enter an address first.'; return; }
+  // A household picked from the list (or typed exactly)?
+  const hh = S.households.find(h => norm(h.name) === norm(q) || norm(`${h.name} — ${h.address || ''}`) === norm(q) || (h.address && norm(h.address) === norm(q)));
+  if (hh && hh.lat != null && hh.lng != null) {
+    _nearbyOrigin = { lat: hh.lat, lng: hh.lng, label: `${hh.name}${hh.address ? ' — ' + hh.address : ''}`, hhId: hh.id };
+    st.style.color = '#555'; st.textContent = '';
+    renderNearby(); return;
+  }
+  const addr = hh?.address || q;
+  const btn = document.getElementById('nearby-go'); btn.disabled = true;
+  st.style.color = '#555'; st.textContent = 'Looking up that address…';
+  try {
+    const c = await geocodeAddress(addr);
+    if (!c) { st.style.color = '#dc3545'; st.textContent = `Couldn't find "${addr}" on the map. Try adding the city, state and ZIP, or leave out the apartment number.`; return; }
+    _nearbyOrigin = { lat: c.lat, lng: c.lng, label: addr, hhId: hh?.id || null };
+    st.textContent = '';
+    renderNearby();
+  } catch (e) {
+    st.style.color = '#dc3545'; st.textContent = 'Address lookup failed — check your connection and try again.';
+  } finally { btn.disabled = false; }
+}
+
+function renderNearby() {
+  const dl = document.getElementById('nearby-hh-list');
+  if (dl && dl.childElementCount !== S.households.length) {
+    dl.innerHTML = [...S.households].sort((a, b) => a.name.localeCompare(b.name))
+      .map(h => `<option value="${esc(h.name)}">${esc(h.address || '')}</option>`).join('');
+  }
+  const host = document.getElementById('nearby-results'); if (!host) return;
+  const side = document.getElementById('nearby-pool')?.value || 'eq';
+  const pool = nearbyPool();
+  const label = side === 'rs' ? 'RS pool' : 'EQ pool';
+  const assigned = new Set((side === 'rs' ? (S.currentRS || []) : (S.current || [])).flatMap(c => c.households || []));
+  const isAssigned = h => assigned.has(h.id) || assigned.has(h.name);
+  const placed = pool.filter(h => h.lat != null && h.lng != null && !isNaN(h.lat));
+  const unplaced = pool.filter(h => !placed.includes(h)).sort((a, b) => a.name.localeCompare(b.name));
+  const tag = h => isAssigned(h) ? '<span class="badge badge-green" style="font-size:0.68rem">Assigned (Current)</span>' : '<span class="badge badge-red" style="font-size:0.68rem">Not assigned</span>';
+  let top;
+  if (!pool.length) {
+    top = `<div class="card"><p style="color:#888;font-size:0.86rem">No households are in the ${label} yet. ${side === 'rs' ? 'The RS presidency sets the RS Pool' : 'The EQ presidency sets the EQ Pool'} on the Households tab.</p></div>`;
+  } else if (!_nearbyOrigin) {
+    top = `<div class="card"><p style="color:#888;font-size:0.86rem">${placed.length} of ${pool.length} ${label} households can be measured. Enter an address above and tap Find.</p></div>`;
+  } else {
+    const rows = placed.map(h => ({ h, d: haversine(_nearbyOrigin.lat, _nearbyOrigin.lng, h.lat, h.lng) }))
+      .filter(x => x.h.id !== _nearbyOrigin.hhId).sort((a, b) => a.d - b.d);
+    const col = d => d < 2 ? '#16a34a' : d < 4 ? '#d97706' : '#dc2626';
+    top = `<div class="card">
+      <div class="flex-between" style="flex-wrap:wrap;gap:0.4rem"><h2 style="margin:0">${label} households nearest to</h2>
+        <span style="font-size:0.8rem;color:#888">${rows.length} measured</span></div>
+      <div style="font-size:0.85rem;color:#1a3a5c;margin:0.2rem 0 0.7rem">📍 ${esc(_nearbyOrigin.label)}</div>
+      ${rows.length ? `<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Household</th><th>Address</th><th style="text-align:right">Distance</th><th>Current</th><th></th></tr></thead><tbody>
+        ${rows.map((x, i) => `<tr><td style="color:#999">${i + 1}</td><td><strong>${esc(x.h.name)}</strong>${identDotsHH(x.h)}</td>
+          <td style="font-size:0.82rem">${esc(x.h.address || '')}</td>
+          <td style="text-align:right;white-space:nowrap;font-weight:600;color:${col(x.d)}">${x.d < 0.1 ? '< 0.1' : x.d.toFixed(1)} mi</td>
+          <td>${tag(x.h)}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="openNotesModal('household','${x.h.id}')">${(x.h.notes || []).length ? `Notes (${x.h.notes.length})` : 'Notes'}</button></td></tr>`).join('')}
+        </tbody></table></div>
+        <div style="font-size:0.74rem;color:#999;margin-top:0.4rem">Straight-line distance; driving distance will be longer.</div>`
+      : '<p style="color:#888;font-size:0.86rem">None of these households has map coordinates yet.</p>'}
+    </div>`;
+  }
+  const bottom = unplaced.length ? `<div class="card">
+    <div class="flex-between"><h2 style="margin:0">Not on the map (${unplaced.length})</h2></div>
+    <p style="font-size:0.8rem;color:#888;margin:0.2rem 0 0.6rem">${label} households whose address is missing or couldn't be geocoded, so their distance couldn't be measured.
+      Fix the address with <strong>Edit</strong> on the Households tab, then use <strong>Calculate Distances</strong> on the Draft Ministering Brother Assignments tab.</p>
+    <div style="overflow-x:auto"><table><thead><tr><th>Household</th><th>Address on file</th><th>Current</th></tr></thead><tbody>
+      ${unplaced.map(h => `<tr><td><strong>${esc(h.name)}</strong>${identDotsHH(h)}</td>
+        <td style="font-size:0.82rem">${h.address ? esc(h.address) : '<span style="color:#aaa">No address</span>'}</td><td>${tag(h)}</td></tr>`).join('')}
+    </tbody></table></div></div>` : '';
+  host.innerHTML = top + bottom;
 }
 
 // ── LCR report links ("Fetch/Print/Download") ─────────────────────
