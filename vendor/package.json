@@ -1,0 +1,6 @@
+{
+  "name": "ministering-tool-firebase-bundle",
+  "private": true,
+  "description": "Builds vendor/firebase-12.18.0.js (see build.sh). Not needed to run the app.",
+  "devDependencies": { "firebase": "12.18.0", "esbuild": "0.25.10" }
+}

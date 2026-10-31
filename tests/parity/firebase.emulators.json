@@ -1,0 +1,11 @@
+{
+  "firestore": { "rules": "repo/firestore.rules" },
+  "functions": [{ "source": "repo/functions", "codebase": "default", "ignore": ["node_modules", "*.test.js"] }],
+  "emulators": {
+    "auth": { "host": "127.0.0.1", "port": 9099 },
+    "firestore": { "host": "127.0.0.1", "port": 8080 },
+    "functions": { "host": "127.0.0.1", "port": 5001 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}

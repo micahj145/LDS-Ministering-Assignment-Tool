@@ -34,10 +34,9 @@
   location.replace(location.pathname + '?' + ['v=' + Date.now()].concat(rest).join('&') + location.hash);
 })();
 </script>
-<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-messaging-compat.js"></script>
+<!-- Firebase modular SDK 12.18.0, bundled locally with a small compat-style
+     front (source: vendor/firebase-shim.src.js, build: vendor/build.sh). -->
+<script src="vendor/firebase-12.18.0.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f7fa;color:#333;min-height:100vh}

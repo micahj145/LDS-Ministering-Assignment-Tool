@@ -48,6 +48,22 @@ after a period of low activity**, which is exactly the usage pattern a ward-plan
 (bursty, not daily). Rather than pay for Supabase or fight the pausing, the app was rebuilt on
 Firebase, deliberately choosing a *simpler* data model than the Postgres one had.
 
+### Firebase SDK in the page (modular, bundled locally)
+- The page loads **`vendor/firebase-12.18.0.js`**, the *modular* SDK (needed for TOTP two-step
+  sign-in, which compat lacks) bundled with esbuild. Its source, `vendor/firebase-shim.src.js`,
+  sets `window.firebase` to a small compat-style front (`firebase.auth()`, `db.collection().doc()`,
+  `FieldValue`, `batch()`, `firebase.messaging()`), so app code still reads like compat. Only the
+  calls the app uses are there: **a new Firebase call needs adding to the shim + `cd vendor && ./build.sh`**.
+  Raw modular pieces for the MFA code are on `firebase.modular`.
+- Auth persistence is explicit (IndexedDB, then localStorage) — same storage key as compat, so
+  sessions carried over the upgrade (checked by the parity suite).
+- `sw.js` still uses the gstatic compat app + messaging scripts (a service worker can't share the
+  page bundle; it only needs `onBackgroundMessage`).
+- When rebuilding the bundle, bump its `?b=` / filename so browsers don't keep the old copy.
+- **`tests/parity/`**: emulator-backed regression suite (synthetic data). `run.sh <label> [appFile]`
+  then `node compare.js results-baseline.json results-<label>.json`. `results-baseline.json` is the
+  compat version; `results-modular.json` matched it with 0 differences.
+
 ### Why Firebase over Supabase (again)
 Per Firebase's own docs, the free **Spark** plan is purely usage-metered (daily read/write/
 storage quotas) with **no inactivity-based pausing or auto-deletion** — structurally different
@@ -462,7 +478,7 @@ Firebase CLI, deploy).
   `profiles/{uid}.fcmTokens` (allowed by the self-update rule). The token is also kept in
   localStorage only to know "on for this device"; `refreshPushToken()` swaps it if FCM rotates it.
 - **sw.js** imports the 12.18.0 compat app + messaging SDKs (keep the version in step with the
-  page) and shows the notification in `onBackgroundMessage`, sets the icon badge from `unread`,
+  page's bundled modular SDK) and shows the notification in `onBackgroundMessage`, sets the icon badge from `unread`,
   and on tap focuses an open window (postMessage → refresh + Notifications tab) or opens
   `…#notifications`. When the app is open and visible, FCM delivers to the page instead
   (`onMessage` → "You were tagged — Show me" banner). Still caches nothing.
