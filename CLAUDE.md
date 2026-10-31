@@ -18,8 +18,10 @@ within a minute or so — that's how the ward team gets updates.
 ## Architecture today
 
 - **State**: a single in-memory object `S` (`members`, `households`, `current`, `proposed`,
-  `activityLog`), synced as one whole document to a shared Firestore backend (see below) on
-  every mutation.
+  `currentRS`, `proposedRS`, `groups`, `users`, `identMeta`, `activityLog`), with every note
+  inside the record it belongs to. Saved to Firestore (see below) by `runSync()`, which writes
+  only what changed: the changed top-level keys of `wardData/shared` and the changed notes in
+  `notes/{id}`.
 - **Import**: CSV upload for Households, then Members (that order — households first means the
   member import can link people to a household immediately), with column-mapping UI. Re-imports
   are a non-destructive merge/sync (adds new, updates existing, confirms before removing anyone
@@ -54,15 +56,82 @@ Firebase, deliberately choosing a *simpler* data model than the Postgres one had
   sets `window.firebase` to a small compat-style front (`firebase.auth()`, `db.collection().doc()`,
   `FieldValue`, `batch()`, `firebase.messaging()`), so app code still reads like compat. Only the
   calls the app uses are there: **a new Firebase call needs adding to the shim + `cd vendor && ./build.sh`**.
-  Raw modular pieces for the MFA code are on `firebase.modular`.
+  Raw modular pieces for the MFA code are on `firebase.modular`; `firebase.functions().httpsCallable()`
+  for callables. Every refused read/write also dispatches `firebase-permission-denied` on window.
+  `window.__FIREBASE_EMULATORS__` (set only by the test suites) points it at the emulators.
 - Auth persistence is explicit (IndexedDB, then localStorage) — same storage key as compat, so
   sessions carried over the upgrade (checked by the parity suite).
 - `sw.js` still uses the gstatic compat app + messaging scripts (a service worker can't share the
   page bundle; it only needs `onBackgroundMessage`).
 - When rebuilding the bundle, bump its `?b=` / filename so browsers don't keep the old copy.
-- **`tests/parity/`**: emulator-backed regression suite (synthetic data). `run.sh <label> [appFile]`
-  then `node compare.js results-baseline.json results-<label>.json`. `results-baseline.json` is the
-  compat version; `results-modular.json` matched it with 0 differences.
+- **`tests/parity/`**: emulator-backed browser suite (synthetic data; Auth emulator texts the codes).
+  `run.sh <label> [appFile]` (`PHASE=final` for the final rules), then
+  `node compare.js results-A.json results-B.json`. Text hashes depend on the date, so compare runs
+  from the same day.
+
+### Security: two-step sign-in, allowed list, roles (Nov 2026)
+Rollout steps and console setup: **`SECURITY_ROLLOUT.md`**; manual checks: **`PHONE_TEST.md`**.
+- **Allowed list** `allowedUsers/{lowercase email}` `{ email, uid, role: eq|rs|council, admin }` —
+  admin-only writes (rules stop an admin dropping their own admin flag or deleting themselves);
+  each person reads their own. Default deny. Approve in the Admin tab writes it (role council);
+  Deny deletes it; the role select writes `role`; **Add all** (yellow box) copies approved
+  profiles with their old profile `role`/`isAdmin` (one-time fill). The app takes `_currentUserRole`
+  / `_currentUserIsAdmin` from it (`_myAccess`), falling back to the profile while it's not filled.
+  `profiles.role` is no longer written; the profile self-update rule now refuses `role` too.
+- **Two-step sign-in** (Identity Platform MFA): texted code (SMS) or authenticator app (TOTP,
+  QR via `vendor/qrcode-1.4.4.js`, loaded only on setup). `resolveAuthState()`: verified email →
+  approved → **no enrolled factor → `showMfaEnroll()`** → `sessionProblem()` (token lacks
+  `firebase.sign_in_second_factor`, or `authTime` > 14 days) → `signOutForSecurity()`. Sign-in:
+  `auth/multi-factor-auth-required` → `startMfaSignIn()` (resolver; authenticator app first if
+  enrolled, else texts the code; invisible reCAPTCHA per text). After enrolling, if the token
+  doesn't count the code step, the person signs in once more.
+- **"For security, please sign in again."** (`SECURITY_NOTICE`): the shim fires
+  `firebase-permission-denied` on any refused read/write; `isSecuritySignOut()` refreshes the
+  token and checks the allowed-list entry — stale / no code step / not allowed → sign out with
+  the notice; otherwise it's a plain role refusal reported normally. `signOutForSecurity()`
+  **reloads the page** (a save refused at sign-out never settles and would block `_syncQueue`;
+  reloading also drops the ward data from memory), carrying the notice in sessionStorage until
+  the next sign-in. Also checked on `visibilitychange` (tab left open past 14 days).
+- **Rules** (`firestore.rules`): `canUse()` = verified email + (allowed list + `recentMfaLogin()`
+  [second factor, `auth_time` within 14 d]) — or, in step 1 only, the old approved profile.
+  **`finalRules()`** is the step switch (false = transition, true = final). Final: `wardData/shared`
+  updates limited by `affectedKeys()` per role (`wardKeysFor`, `groupKeysFor`: council =
+  users/activityLog/stamps + groups new/returning/mission; eq/rs add members/households/identMeta
+  + groups movein/moveout; eq current/proposed; rs currentRS/proposedRS), `updatedByUid` must be the
+  caller, no deletes ever; `wardData/stats` presidency-only writes; notes own-only except presidency
+  (+ admin delete, + anyone deletes notes on new/returning/mission entries). `fromCurrentApp()`
+  refuses saves without `clientVersion >= 2` once the doc has it (old tabs can't re-embed notes).
+  Tests: **`tests/rules/`** (`./run.sh`, 61 cases, both steps).
+- **Roles in the app**: `canEditWard()` (eq or rs) for member/household/move-in/out/identifier/unit
+  data — `wardEditGuard()` at the top of every such entry point, `.ward-edit` controls hidden for
+  council. `canWriteKey()` / `canRemoveNote()` / `canWriteNote()` mirror the rules; `syncOnce()`
+  puts back (with an alert) anything the role can't save rather than sending a doomed batch.
+- **Before/after confirmation** (`confirmWardChanges()`, `#chg-modal`): changes to `members`,
+  `households`, `current`, `currentRS` (ignoring pools, `position`, lat/lng, notes) are listed
+  added / removed / field before → after and wait for **Save these changes**; Cancel reverts those
+  keys (`revertWardKeys()`), the rest of the save still goes. Drafts, groups, notes: no prompt.
+- **Notes collection** `notes/{id}` `{ …note, target: { type, id, group?, field }, migrated? }`.
+  `splitNotes()` / `insertNotes()` move them out of / back into records; `_synced` holds what the
+  cloud has (per key JSON + per note JSON) so `syncOnce()` diffs. **One-time move**: the first
+  load of this version finds notes inside the ward doc, marks them `migrated` (functions skip
+  those creates), and `moveNotesOut()` writes them out and rewrites the doc without them.
+  `legacyNoteId()` gives id-less old notes a stable id so a double run can't duplicate.
+- **Members with Callings** (Admin tab): `parseCallingsReport()` (header columns; rows anchored on
+  the Gender cell; wrapped cells join the nearest row), `callingNameMatch()` against approved
+  profiles, `roleForCallings()` (`CALLING_ROLES`: EQ president/counselors/secretary → eq; RS
+  president/counselors/secretary/ministering secretary → rs; else council). Stored as
+  `adminData/callings` `{ users: { email: { name, callings, expected } } }` — tool users only.
+  Mismatches are flagged in the user list with a one-click fix; nothing changes automatically.
+  Verified on the Oct 2026 PDF: 146 rows, 106 people, 4 EQ + 6 RS roles found.
+- **Functions**: every push/feed recipient must be approved **and** on the allowed list
+  (`mayReceive()`; profile alone until the list exists). `notifyNoteChange` (notes/{id}) places the
+  note into the ward doc before/after and reuses `newTags()` / `householdChanges()`.
+  `notifyRoleReview` / `notifyRoleChange` push admins "N people's roles need your review."
+  `resetTwoStep` (callable) clears a person's factors + revokes sessions; caller checked by
+  `callerProblem()` (same as rules) and must be an admin. Pure helpers in `functions/access.js`.
+- **App Check**: `APP_CHECK_SITE_KEY` (empty = off) → `firebase.initializeApp(config, { appCheckSiteKey })`
+  starts reCAPTCHA Enterprise App Check. Enforcement is a console switch; leave it on monitor
+  only until Micah says otherwise.
 
 ### Why Firebase over Supabase (again)
 Per Firebase's own docs, the free **Spark** plan is purely usage-metered (daily read/write/
@@ -87,10 +156,10 @@ collection), the whole ward dataset — `members`, `households`, `current`, `pro
 `activityLog` — lives in **one Firestore document**: `wardData/shared`. This is much closer to
 the *original* pre-Supabase architecture (a single in-memory `S` object), just auto-synced to the
 cloud instead of manually exported/emailed as a JSON file. Tradeoffs, both deliberate:
-- **Last-write-wins on the whole document**, same as the old Supabase RLS model ("single shared
-  ward dataset" — this was already the accepted model, not a new risk). Two people editing at
-  the literal same moment can still clobber each other; a manual "↻ Refresh" button next to Sign
-  Out lets anyone pull the latest before editing if that's a concern.
+- **Last-write-wins per top-level key** (it was the whole document until Nov 2026): saves send
+  only changed keys (and Covenant Path / Move In lists one by one), so two people editing
+  different parts no longer clobber each other; two editing the same list still can. "↻ Refresh"
+  pulls the latest. Notes are separate documents (`notes/{id}`), so they never collide.
 - **1 MiB Firestore document size limit.** Comfortably above the current dataset size; worth
   monitoring if notes accumulate heavily over years. If it's ever approached, the fix is
   splitting into a couple of documents — not a full redesign.
@@ -109,8 +178,8 @@ cloud instead of manually exported/emailed as a JSON file. Tradeoffs, both delib
 ### Auth
 Email/password sign-up and sign-in, an admin-approval gate (new signups start `pending` and see
 an "Awaiting Approval" screen), and an in-app Admin tab (admin-only) to approve/deny users, plus
-a client-side activity log. **No mandatory MFA** in this version (an earlier, never-committed
-draft had TOTP 2FA — it was superseded by this simpler flow, not retained). The bootstrap admin
+a client-side activity log. Two-step sign-in and the allowed list are described under
+"Security" above. The bootstrap admin
 email (`micahj145@gmail.com`) is hardcoded in both `ministering_tool.html` (`ADMIN_EMAIL`) and
 `firestore.rules` (`isBootstrapAdminEmail()`) — keep those two in sync if it's ever changed.
 
@@ -500,6 +569,9 @@ Firebase CLI, deploy).
 - Verified with Chrome DevTools Protocol: no installability or manifest errors.
 
 ### Roles: two ways the tool is used
+*(Historical — superseded by "Security" above: roles now live on the allowed list, there are
+three (eq / rs / council), and since step 2 the rules enforce them. Kept for the removal/
+re-request and email-verification details, which still apply.)*
 The app serves two audiences, controlled by a `role` field on the profile and applied in
 `applyAccessVisibility()` / `hasFullAccess()`:
 
@@ -569,6 +641,10 @@ Notes for anyone changing this:
   can create/update `profiles/{uid}` docs (with the self-approval/self-promotion guardrails).
 - `FIREBASE_SETUP.md` — step-by-step one-time console setup (project, Auth provider, Firestore
   database, deploying the rules, registering a web app for the config values).
+- `vendor/` — the bundled Firebase SDK + shim source + build script, and the QR-code library.
+- `functions/access.js` (+ test) — notes placement, caller checks, role flags for the functions.
+- `tests/parity/`, `tests/rules/` — emulator test suites (synthetic data only).
+- `SECURITY_ROLLOUT.md`, `PHONE_TEST.md` — the two-step rollout and the manual phone checks.
 - `migrations/`, `supabase_schema.sql` — **historical**, from the abandoned Supabase phase. Left
   in the repo for reference; not used by the current app.
 
@@ -587,7 +663,8 @@ Notes for anyone changing this:
   loose files in the project root, sort by actual file mtime, not filename — export filenames are
   date-stamped by day, not by exact time, so same-day exports need mtime to disambiguate.
 - Only `ministering_tool.html`, `index.html`, `firestore.rules`, `FIREBASE_SETUP.md`, this
-  file, the PWA files (`manifest.json`, `sw.js`, `icons/`), `NOTIFICATIONS_SETUP.md`, and the
-  push files (`firebase.json`, `.firebaserc`, `functions/` minus `node_modules`) should ever be
+  file, the PWA files (`manifest.json`, `sw.js`, `icons/`), `NOTIFICATIONS_SETUP.md`, the
+  push files (`firebase.json`, `.firebaserc`, `functions/` minus `node_modules`), `vendor/`,
+  `tests/` (minus `node_modules`), `SECURITY_ROLLOUT.md` and `PHONE_TEST.md` should ever be
   staged/committed — the project root otherwise accumulates loose data export
   files that must stay untracked.

@@ -1,54 +1,98 @@
 // ═══════════════════════════════════════════════════════════════
 // Ministering Assignment Tool — Firestore security rules
 //
-// Deploy via Firebase Console -> Firestore Database -> Rules -> paste
-// this in and Publish (or `firebase deploy --only firestore:rules` if
-// you're using the CLI).
+// Deploy: firebase deploy --only firestore:rules
 //
-// Model: four collections.
-//   - profiles/{uid}   one doc per user, gates access (mirrors the old
-//                       Supabase `profiles` table + admin-approval flow).
-//   - wardData/shared  ONE doc holding the entire ward dataset as JSON
-//                       (members/households/current/proposed/activityLog)
-//                       — the "single shared blob" design, replacing the
-//                       old per-table Postgres schema.
-//   - threads/{id} (+ messages)  direct messages, readable only by the
-//                       people in each conversation.
-//   - privateNotes/{id} restricted notes, readable only by the viewers the
-//                       author picked.
+// Who gets in (final rules — see finalRules() below):
+//   1. Their email is on the allowed list: allowedUsers/{lowercase email},
+//      which only an admin can change. Default: no entry, no access.
+//   2. They signed in with their password AND a code (text message or
+//      authenticator app) — request.auth.token.firebase.sign_in_second_factor.
+//   3. That sign-in was less than 14 days ago (auth_time).
+//   4. Their email is verified.
+// What they can change depends on their role on the allowed list:
+//   eq / rs (EQ or RS presidency): member, household, move-in/out, identifier
+//     and unit data; eq the brother assignment lists, rs the sister lists.
+//   council (everyone else): notes, goals, next steps, Covenant Path Progress
+//     (groups new / returning / mission), the tag directory, their own
+//     profile (following, notification settings), messages.
+//   Admin (admin: true on the allowed list) manages people; it adds no
+//     ward-data editing rights.
 //
-// There's no Cloud Functions trigger here (unlike the old Postgres
-// handle_new_user()) — the client creates its own profile doc right
-// after signup. Because of that, these rules carry the real security
-// weight for signup: a client MUST NOT be able to self-approve or
-// self-promote to admin. The `create` rule below enforces that by
-// pinning status/isAdmin to exactly what the app would assign, based
-// on whether the signup email matches ADMIN_EMAIL.
+// Two steps when switching this on:
+//   Step 1 (finalRules() returns false): the new app is deployed with these
+//     rules. People get in as before (approved profile) OR via the allowed
+//     list + code. The app makes everyone set up their code at their next
+//     sign-in, and moves notes into their own collection.
+//   Step 2 (finalRules() returns true, a few days later): only the allowed
+//     list + code + 14 days, and roles are enforced here.
 // ═══════════════════════════════════════════════════════════════
 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ── Switch: false = step 1 (transition), true = step 2 (final) ──
+    function finalRules() { return false; }
+
     function isSignedIn() { return request.auth != null; }
-
-    function myProfile() {
-      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
-    }
-
-    function isApproved() { return isSignedIn() && myProfile().status == 'approved'; }
-
-    // The sign-in account's email has been confirmed through the link Firebase
-    // emails at sign-up. Required for the ward data, so an approved account
-    // can't be used from an address nobody controls.
     function emailVerified() { return request.auth.token.email_verified == true; }
-    function isAdmin()    { return isSignedIn() && myProfile().isAdmin == true; }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function myProfile() { return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data; }
+    function allowPath() { return /databases/$(database)/documents/allowedUsers/$(myEmail()); }
+    function onAllowList() { return isSignedIn() && request.auth.token.email is string && exists(allowPath()); }
+    function access() { return get(allowPath()).data; }
+
+    // Signed in with a password and a code, less than 14 days ago.
+    function recentMfaLogin() {
+      return isSignedIn()
+        && ('sign_in_second_factor' in request.auth.token.firebase)
+        && request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(14, 'd');
+    }
+    function legacyApproved() { return isSignedIn() && myProfile().status == 'approved'; }
+
+    // May read the ward data and use the app at all.
+    function canUse() {
+      return isSignedIn() && emailVerified() && (
+        (onAllowList() && recentMfaLogin())
+        || (!finalRules() && legacyApproved()));
+    }
+    function role() { return access().get('role', 'council'); }
+    function presidency() { return finalRules() ? (onAllowList() && role() in ['eq', 'rs']) : true; }
+    function isAdmin() {
+      return isSignedIn() && (
+        finalRules() ? (canUse() && access().get('admin', false) == true)
+                     : ((onAllowList() && access().get('admin', false) == true) || myProfile().get('isAdmin', false) == true));
+    }
 
     // Keep this in sync with ADMIN_EMAIL in ministering_tool.html.
     function isBootstrapAdminEmail() {
       return request.auth.token.email.lower() == 'micahj145@gmail.com';
     }
 
+    // ── Allowed list ───────────────────────────────────────────
+    // allowedUsers/{lowercase email}: { email, uid, role: eq|rs|council, admin, updatedAt, updatedBy }
+    // You can read your own entry (the app takes your role from it); only an
+    // admin can write. An admin can't take their own admin flag away or delete
+    // themselves (that would lock everyone out of the Admin tab). The very
+    // first admin entry is made by hand in the Firebase console.
+    match /allowedUsers/{email} {
+      allow read: if (isSignedIn() && emailVerified() && request.auth.token.email is string && myEmail() == email) || isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.email == email
+        && request.resource.data.role in ['eq', 'rs', 'council']
+        && request.resource.data.admin is bool
+        && !(email == myEmail() && request.resource.data.admin != true);
+      allow delete: if isAdmin() && email != myEmail();
+    }
+
+    // adminData/callings: the Members with Callings check — names and callings
+    // of people with access only. Admins only.
+    match /adminData/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Profiles ───────────────────────────────────────────────
     match /profiles/{uid} {
       // You can read your own profile (even while pending/denied, so the
       // app can show you that status) — admins can read everyone's.
@@ -65,32 +109,79 @@ service cloud.firestore {
         && request.resource.data.status == (isBootstrapAdminEmail() ? 'approved' : 'pending')
         && request.resource.data.isAdmin == isBootstrapAdminEmail();
 
-      // You may update only your own first/last name — never your own
-      // status or isAdmin (that would be self-approval/self-promotion).
+      // Your own profile: names, following, notification settings — never
+      // your own status, admin flag, email or role.
       allow update: if isSignedIn() && request.auth.uid == uid
-        && request.resource.data.status  == resource.data.status
-        && request.resource.data.isAdmin == resource.data.isAdmin
-        && request.resource.data.email   == resource.data.email;
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'isAdmin', 'email', 'role']);
 
-      // Admins can update anyone's status/isAdmin (approve/deny/promote).
+      // Admins approve/deny and can remove a profile.
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
-    // The single shared ward-data document. Any approved user has full
-    // read/write — same "shared dataset, last-write-wins" model the old
-    // Postgres RLS policies used, just collapsed to one document instead
-    // of per-row access on five tables.
+    // ── The shared ward data ───────────────────────────────────
+    // An older copy of the app (one left open in a tab from before notes
+    // moved out) writes the whole document without clientVersion; once the
+    // new app has saved, those saves are refused.
+    function fromCurrentApp() {
+      return request.resource.data.get('clientVersion', 0) >= 2 || !('clientVersion' in resource.data);
+    }
+    function wardKeysFor(r) {
+      return ['users', 'activityLog', 'updatedAt', 'updatedBy', 'updatedByUid', 'clientVersion', 'groups']
+        .concat(r in ['eq', 'rs'] ? ['members', 'households', 'identMeta'] : [])
+        .concat(r == 'eq' ? ['current', 'proposed'] : [])
+        .concat(r == 'rs' ? ['currentRS', 'proposedRS'] : []);
+    }
+    function groupKeysFor(r) {
+      return r in ['eq', 'rs'] ? ['new', 'returning', 'mission', 'movein', 'moveout'] : ['new', 'returning', 'mission'];
+    }
+    function allowedWardChange() {
+      let r = role();
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let groups = request.resource.data.get('groups', {}).diff(resource.data.get('groups', {})).affectedKeys();
+      return changed.hasOnly(wardKeysFor(r))
+        && groups.hasOnly(groupKeysFor(r))
+        && request.resource.data.get('updatedByUid', '') == request.auth.uid;
+    }
     match /wardData/shared {
-      allow read, write: if isApproved() && emailVerified();
+      allow read: if canUse();
+      allow create: if canUse() && presidency();
+      allow update: if canUse() && fromCurrentApp() && (!finalRules() || allowedWardChange());
+      allow delete: if false;
     }
 
-    function canUse() { return isApproved() && emailVerified(); }
-
     // Unit Statistics tab: ward-level totals imported from LCR reports (no
-    // names). Same access as the shared ward data, kept in its own document.
+    // names). Everyone reads; the presidencies import.
     match /wardData/stats {
-      allow read, write: if canUse();
+      allow read: if canUse();
+      allow write: if canUse() && presidency();
+    }
+
+    // ── Notes, goals and next steps ────────────────────────────
+    // notes/{id}: { author, authorId, text, date, tags?, migrated?, target: { type, id, group?, field } }
+    // Anyone with access adds their own and changes their own. The
+    // presidencies may also change or remove others' (needed when a member or
+    // household is removed), an admin may remove any, and anyone may remove
+    // those on a Covenant Path Progress person (new / returning / mission),
+    // since anyone may take a person off those lists.
+    function validNote() {
+      let d = request.resource.data;
+      return d.text is string && d.text.size() <= 10000
+        && d.target is map
+        && d.target.type in ['member', 'household', 'current', 'proposed', 'currentRS', 'proposedRS', 'group']
+        && d.target.field in ['notes', 'goals', 'nextSteps'];
+    }
+    function noteAuthor() { return resource.data.get('authorId', ''); }
+    match /notes/{noteId} {
+      allow read: if canUse();
+      allow create: if canUse() && validNote()
+        && (!finalRules() || request.resource.data.get('authorId', '') == request.auth.uid || presidency());
+      allow update: if canUse() && validNote()
+        && request.resource.data.get('authorId', '') == noteAuthor()
+        && (!finalRules() || noteAuthor() == request.auth.uid || presidency());
+      allow delete: if canUse() && (!finalRules()
+        || noteAuthor() == '' || noteAuthor() == request.auth.uid || presidency() || isAdmin()
+        || (resource.data.target.type == 'group' && resource.data.target.get('group', '') in ['new', 'returning', 'mission']));
     }
 
     // ── Direct messages ──────────────────────────────────────────

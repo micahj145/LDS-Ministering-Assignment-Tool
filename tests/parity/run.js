@@ -36,7 +36,8 @@ function rec(group, name, pass, obs, kind = 'feature') {
 async function check(group, name, fn, kind) {
   if (process.env.ONLY && !new RegExp(process.env.ONLY).test(group)) return { pass: true };
   pushSince = Date.now();
-  try { const r = await fn(); rec(group, name, r.pass, r.obs, kind); return r; }
+  // A check that hangs fails after 2 minutes instead of stalling the whole run.
+  try { const r = await Promise.race([fn(), sleep(120000).then(() => { throw new Error('timed out after 2 minutes'); })]); rec(group, name, r.pass, r.obs, kind); return r; }
   catch (e) { rec(group, name, false, { error: e.message.split('\n')[0] }, kind); return { pass: false }; }
 }
 async function until(fn, ms = 15000) {
@@ -44,7 +45,11 @@ async function until(fn, ms = 15000) {
   while (Date.now() - t0 < ms) { v = await fn(); if (v) return v; await sleep(300); }
   return v;
 }
-const ward = async () => (await adb.doc('wardData/shared').get()).data();
+const wardRaw = async () => (await adb.doc('wardData/shared').get()).data();
+// The ward data with notes in place, wherever they're stored (inside the
+// document in the old version, notes/{id} in the new) — same shape for both.
+const { insertNotes } = require('../../functions/access');
+const ward = async () => insertNotes(await wardRaw(), (await adb.collection('notes').get()).docs.map(d => ({ ...d.data(), id: d.id })));
 const profile = async uid => (await adb.doc('profiles/' + uid).get()).data();
 let pushSince = 0;   // each check only looks at pushes sent after it started
 const pushesFor = async tok => (await adb.collection('__pushLog').get()).docs.map(d => d.data()).filter(p => p.tokens.includes(tok) && p.at >= pushSince);
@@ -65,28 +70,66 @@ async function open(email, opts = {}) {
     blocked.add(new URL(u).host); return r.abort();
   });
   // Read by the modular bundle (vendor/firebase-12.18.0.js); the compat build ignores it.
-  await ctx.addInitScript(() => { window.__FIREBASE_EMULATORS__ = { projectId: 'demo-parity', auth: 'http://127.0.0.1:9099', firestoreHost: '127.0.0.1', firestorePort: 8080 }; });
+  await ctx.addInitScript(() => { window.__FIREBASE_EMULATORS__ = { projectId: 'demo-parity', auth: 'http://127.0.0.1:9099', firestoreHost: '127.0.0.1', firestorePort: 8080, functionsHost: '127.0.0.1', functionsPort: 5001 }; });
+  // Answers "Save these changes?" automatically (yes, unless a check sets
+  // window.__confirmAnswer = 'no'), keeping what it showed in window.__lastConfirm.
+  await ctx.addInitScript(() => {
+    window.__confirmAnswer = 'yes'; window.__lastConfirm = null;
+    setInterval(() => {
+      const m = document.getElementById('chg-modal');
+      if (!m || !m.classList.contains('open')) return;
+      window.__lastConfirm = document.getElementById('chg-body').innerText;
+      document.getElementById(window.__confirmAnswer === 'no' ? 'chg-cancel' : 'chg-ok').click();
+    }, 50);
+  });
   const page = await ctx.newPage();
   const s = { ctx, page, errors: [], dialogs: [], email };
   page.on('pageerror', e => s.errors.push(e.message));
   page.on('dialog', d => { s.dialogs.push(d.type() + ': ' + d.message().slice(0, 120)); d.type() === 'prompt' ? d.dismiss() : d.accept(); });
   await page.goto(BASE + APP_FILE);
-  await page.waitForFunction(() => ['auth-screen', 'app-shell', 'pending-screen'].some(id => document.getElementById(id)?.style.display === 'block'), null, { timeout: 20000 });
+  await page.waitForFunction(ids => ids.some(id => document.getElementById(id)?.style.display === 'block'), SCREENS, { timeout: 20000 });
   if (email) await signIn(s, email, opts.password || PW);
   return s;
 }
-async function signIn(s, email, password) {
+// Screens the app can be on; the two-step ones exist only in the version with two-step sign-in.
+const SCREENS = ['auth-screen', 'app-shell', 'pending-screen', 'mfa-signin-screen', 'mfa-enroll-screen'];
+const waitScreen = (page, ids = SCREENS) => page.waitForFunction(ids => ids.some(id => document.getElementById(id)?.style.display === 'block')
+  || (document.getElementById('auth-error')?.textContent || '').length > 0, ids, { timeout: 20000 });
+// The newest code the Auth emulator "texted" to a phone number.
+async function smsCode(phone, after = 0) {
+  return until(async () => {
+    const r = await fetch('http://127.0.0.1:9099/emulator/v1/projects/demo-parity/verificationCodes').then(r => r.json());
+    const c = (r.verificationCodes || []).filter(v => v.phoneNumber === phone);
+    return c.length > after ? c[c.length - 1].code : null;
+  }, 10000);
+}
+async function codeCount(phone) {
+  const r = await fetch('http://127.0.0.1:9099/emulator/v1/projects/demo-parity/verificationCodes').then(r => r.json());
+  return (r.verificationCodes || []).filter(v => v.phoneNumber === phone).length;
+}
+const PHONES = { 'micahj145@gmail.com': '+15555550100', 'sam@example.com': '+15555550101', 'rita@example.com': '+15555550102', 'cora@example.com': '+15555550103' };
+async function signIn(s, email, password, { code = true } = {}) {
   const { page } = s;
+  const before = PHONES[email] ? await codeCount(PHONES[email]) : 0;
   await page.fill('#auth-email', email); await page.fill('#auth-password', password);
   await page.click('#auth-submit-btn');
-  await page.waitForFunction(() => document.getElementById('app-shell').style.display === 'block'
-    || document.getElementById('pending-screen').style.display === 'block'
-    || (document.getElementById('auth-error').textContent || '').length > 0, null, { timeout: 20000 });
+  await waitScreen(page, ['app-shell', 'pending-screen', 'mfa-signin-screen', 'mfa-enroll-screen']);
+  if (code && await screen(s) === 'mfa-signin-screen' && PHONES[email]) {
+    const c = await smsCode(PHONES[email], before);
+    await page.fill('#mfa-signin-code', c); await page.click('#mfa-signin-btn');
+    await waitScreen(page, ['app-shell', 'pending-screen', 'auth-screen', 'mfa-enroll-screen']);
+  }
   await sleep(500);
 }
 const ev = (s, fn, arg) => s.page.evaluate(fn, arg);
-const flush = s => ev(s, () => (typeof _syncTimer !== 'undefined' && _syncTimer) ? (clearTimeout(_syncTimer), runSync()) : null);
-const screen = s => ev(s, () => ['auth-screen', 'app-shell', 'pending-screen'].find(id => document.getElementById(id).style.display === 'block'));
+// Saves now, answering "Save these changes?" with yes (or no, with { confirm: false }).
+// What the confirmation showed (null if it didn't ask) is kept in s.lastConfirm.
+async function flush(s, { confirm = true } = {}) {
+  await ev(s, a => { window.__confirmAnswer = a; }, confirm ? 'yes' : 'no');
+  await ev(s, () => (typeof _syncTimer !== 'undefined' && _syncTimer) ? (clearTimeout(_syncTimer), runSync()) : null);
+  s.lastConfirm = await ev(s, () => { const c = window.__lastConfirm; window.__lastConfirm = null; window.__confirmAnswer = 'yes'; return c; });
+}
+const screen = s => ev(s, ids => ids.find(id => document.getElementById(id)?.style.display === 'block'), SCREENS);
 async function tryOp(s, code) {   // run a raw SDK call as this user; report allowed / denied
   return ev(s, async code => { try { await (new Function('return (async () => {' + code + '})()'))(); return 'allowed'; } catch (e) { return e.code || e.message; } }, code);
 }
@@ -389,6 +432,94 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
     return { pass: o.rows.length > 0, obs: { status: o.status, text: hash(o.rows) } };
   });
 
+
+  // ── Two-step sign-in, allowed list, roles, confirmations (new) ──
+  if (await ev(A, () => typeof sessionProblem === 'function')) {
+    await check('security', 'notes moved to their own collection on first open', async () => {
+      const notes = (await adb.collection('notes').get()).docs.map(d => d.data());
+      const w = await wardRaw();
+      const embedded = JSON.stringify(w).match(/"(notes|goals|nextSteps)":\[\{/g) || [];
+      return { pass: notes.length >= 4 && !embedded.length && w.clientVersion === 2 && notes.every(n => n.target && n.target.field),
+        obs: { notesInCollection: notes.length, migrated: notes.filter(n => n.migrated).length, embeddedLeft: embedded.length, clientVersion: w.clientVersion } };
+    });
+    await check('security', 'first sign-in: set up a texted code, then in', async () => {
+      const s = await open('finn@example.com', { }); const first = await screen(s);
+      await ev(s, () => mfaEnrollStep('phone'));
+      await s.page.fill('#mfa-enroll-phone', '555-555-0199'); await s.page.click('#mfa-enroll-send');
+      const c = await smsCode('+15555550199');
+      await s.page.waitForFunction(() => document.getElementById('mfa-step-code').style.display === 'block', null, { timeout: 10000 });
+      await s.page.fill('#mfa-enroll-code', c); await s.page.click('#mfa-enroll-confirm');
+      await waitScreen(s.page, ['app-shell', 'auth-screen']);
+      let after = await screen(s);
+      const notice = await ev(s, () => document.getElementById('auth-notice')?.innerText || '');
+      if (after === 'auth-screen') { await signIn(s, 'finn@example.com', PW, { code: false });
+        if (await screen(s) === 'mfa-signin-screen') { await s.page.fill('#mfa-signin-code', await smsCode('+15555550199', 1)); await s.page.click('#mfa-signin-btn'); await waitScreen(s.page, ['app-shell']); }
+        after = await screen(s); }
+      const u = await require('firebase-admin/auth').getAuth().getUser('uFresh');
+      await s.ctx.close();
+      return { pass: first === 'mfa-enroll-screen' && after === 'app-shell' && (u.multiFactor?.enrolledFactors || []).length === 1,
+        obs: { first, after, factors: (u.multiFactor?.enrolledFactors || []).map(f => f.factorId), signedInAgain: !!notice } };
+    });
+    await check('security', 'wrong code is refused, right code gets in', async () => {
+      const s = await open(null);
+      const before = await codeCount('+15555550103');
+      await s.page.fill('#auth-email', 'cora@example.com'); await s.page.fill('#auth-password', PW); await s.page.click('#auth-submit-btn');
+      await waitScreen(s.page, ['mfa-signin-screen']); await smsCode('+15555550103', before);
+      await s.page.fill('#mfa-signin-code', '000000'); await s.page.click('#mfa-signin-btn'); await sleep(1200);
+      const err = await ev(s, () => document.getElementById('mfa-signin-error').innerText); const still = await screen(s);
+      await s.page.fill('#mfa-signin-code', await smsCode('+15555550103', before)); await s.page.click('#mfa-signin-btn');
+      await waitScreen(s.page, ['app-shell']); const after = await screen(s);
+      const claims = await ev(s, async () => (await fbAuth.currentUser.getIdTokenResult()).claims.firebase.sign_in_second_factor);
+      await s.ctx.close();
+      return { pass: still === 'mfa-signin-screen' && !!err && after === 'app-shell' && claims === 'phone', obs: { err, after, secondFactor: claims } };
+    });
+    await check('security', 'wrong password never reaches the code step', async () => {
+      const s = await open(null); await signIn(s, 'cora@example.com', 'nope-nope', { code: false });
+      const sc = await screen(s); await s.ctx.close(); return { pass: sc === 'auth-screen', obs: sc };
+    });
+    await check('security', 'household change: before → after shown; Cancel puts it back', async () => {
+      await ev(E, () => { window.__lastConfirm = null; }); await ev(E, () => { const h = S.households.find(h => h.id === 'h6'); h.address = '99 New Rd, Palm Bay FL 32909'; dbUpsertHousehold(h); });
+      await flush(E, { confirm: false });
+      const shown = E.lastConfirm || '';
+      const cloud = (await ward()).households.find(h => h.id === 'h6').address;
+      const local = await ev(E, () => S.households.find(h => h.id === 'h6').address);
+      return { pass: /15 Fixture Ln/.test(shown) && /99 New Rd/.test(shown) && cloud.startsWith('15 Fixture') && local.startsWith('15 Fixture'),
+        obs: { shownBeforeAfter: /15 Fixture Ln/.test(shown) && /99 New Rd/.test(shown), cloud: cloud.slice(0, 9), local: local.slice(0, 9) } };
+    });
+    await check('security', 'household change: Save these changes saves it', async () => {
+      await ev(E, () => { const h = S.households.find(h => h.id === 'h6'); h.phone = '321-555-0000'; dbUpsertHousehold(h); });
+      await flush(E); const shown = E.lastConfirm || '';
+      const cloud = (await ward()).households.find(h => h.id === 'h6').phone;
+      return { pass: /Phone/.test(shown) && cloud === '321-555-0000', obs: { asked: !!shown, saved: cloud === '321-555-0000' } };
+    });
+    await check('security', 'pool toggles and notes save without asking', async () => {
+      await ev(E, () => { window.__lastConfirm = null; }); await ev(E, () => toggleHHPool('h7')); await flush(E); const a = E.lastConfirm;
+      await ev(E, () => { openNotesModal('household', 'h7'); document.getElementById('note-text').value = 'No confirm for notes'; addNote(); closeModal('notes-modal'); }); await flush(E); const b = E.lastConfirm;
+      const n = (await adb.collection('notes').get()).docs.map(d => d.data()).find(x => x.text === 'No confirm for notes');
+      return { pass: a === null && b === null && !!n && n.authorId === 'uEq' && n.target.type === 'household', obs: { askedForPool: a !== null, askedForNote: b !== null, noteStored: !!n } };
+    });
+    await check('security', 'draft assignment edits save without asking; Current asks', async () => {
+      await ev(E, () => { window.__lastConfirm = null; }); await ev(E, () => moveCompanionship('proposed', S.proposed[0].id, 1)); await flush(E); const a = E.lastConfirm;
+      await ev(E, () => { const c = S.current.find(c => c.id === 'c2'); c.households = [...c.households, 'h8']; dbUpsertCompanionship('current', c); }); await flush(E); const b = E.lastConfirm || '';
+      return { pass: a === null && /Delgado/.test(b), obs: { askedForDraft: a !== null, askedForCurrent: !!b } };
+    });
+    await check('security', 'council: member/household controls hidden, edits refused', async () => {
+      const o = await ev(C, () => { showTab('members'); const btn = [...document.querySelectorAll('#tab-members button')].find(b => /Add Member/.test(b.innerText));
+        return { hidden: !btn || btn.offsetParent === null, guard: (() => { const n = S.members.length; openAddMemberModal(); return !document.getElementById('new-member-modal')?.classList.contains('open') && S.members.length === n; })() }; });
+      await ev(C, () => { const m = S.members.find(m => m.id === 'm4'); m.age = 99; dbUpsertMember(m); }); await flush(C);
+      const age = (await ward()).members.find(m => m.id === 'm4').age;
+      const local = await ev(C, () => S.members.find(m => m.id === 'm4').age);
+      return { pass: o.hidden && o.guard && age === 28 && local === 28, obs: { ...o, cloudAge: age, localAge: local } };
+    });
+    await check('security', 'council: own notes yes, others\' notes no', async () => {
+      await ev(C, () => { openNotesModal('household', 'h5'); document.getElementById('note-text').value = 'Council note'; addNote(); closeModal('notes-modal'); }); await flush(C);
+      const mine = (await adb.collection('notes').get()).docs.map(d => d.data()).find(n => n.text === 'Council note');
+      await ev(C, () => refreshFromCloud()); await sleep(500);
+      const others = await ev(C, () => { openNotesModal('household', 'h7'); const t = getNotesTarget(_notesCtx); const i = t.notes.findIndex(n => n.text === 'No confirm for notes'); const n0 = t.notes.length; deleteNote(i); const n1 = t.notes.length; closeModal('notes-modal'); return { n0, n1 }; });
+      return { pass: !!mine && mine.authorId === 'uCouncil' && others.n0 === others.n1, obs: { mine: !!mine, othersDeleteBlocked: others.n0 === others.n1 } };
+    });
+  } else rec('security', 'two-step sign-in not in this version', true, null, 'info');
+
   // ── Admin panel ────────────────────────────────────────────
   await check('admin', 'approve pending user', async () => {
     await ev(A, () => showTab('admin')); await sleep(800);
@@ -397,12 +528,60 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
   });
   await check('admin', 'set role', async () => {
     await ev(A, () => setUserRole('uPending', 'rs')); await sleep(800);
-    return { pass: (await profile('uPending')).role === 'rs', obs: (await profile('uPending')).role };
+    // Roles live on the allowed list now (profiles/{uid}.role in the old version).
+    const a = (await adb.doc('allowedUsers/pete@example.com').get()).data();
+    const role = a ? a.role : (await profile('uPending')).role;
+    return { pass: role === 'rs', obs: role };
   });
   await check('admin', 'approved user now gets in', async () => {
-    const s = states['pete@example.com']; await s.page.reload(); await s.page.waitForFunction(() => document.getElementById('app-shell').style.display === 'block', null, { timeout: 20000 }).catch(() => {});
-    const sc = await screen(s); await s.ctx.close(); return { pass: sc === 'app-shell', obs: sc };
+    const s = states['pete@example.com']; await s.page.reload(); await s.page.waitForFunction(() => ['app-shell', 'mfa-enroll-screen'].some(id => document.getElementById(id)?.style.display === 'block'), null, { timeout: 20000 }).catch(() => {});
+    // With two-step sign-in, a newly approved person sets it up first.
+    const sc = await screen(s); await s.ctx.close(); return { pass: sc === 'app-shell' || sc === 'mfa-enroll-screen', obs: sc };
   });
+  if (await ev(A, () => typeof handleCallingsPdf === 'function')) {
+    await check('admin', 'approve puts them on the allowed list', async () => {
+      const a = (await adb.doc('allowedUsers/pete@example.com').get()).data();
+      return { pass: !!a && a.uid === 'uPending', obs: a ? { role: a.role, admin: a.admin } : null };
+    });
+    await check('admin', 'callings import flags roles that don\'t match + tells the admin', async () => {
+      const rows = [['Carter, Sam', 'M', '40', '1 Jan 1986', 'Elders Quorum', 'Elders Quorum President'],
+        ['Ames, Rita', 'F', '38', '2 Feb 1988', 'Relief Society', 'Relief Society Secretary'],
+        ['Lane, Cora', 'F', '45', '3 Mar 1981', 'Relief Society', 'Relief Society First Counselor'],
+        ['Lane, Cora', 'F', '45', '3 Mar 1981', 'Primary', 'Primary Teacher'],
+        ['Admin, Avery', 'M', '50', '4 Apr 1976', 'Elders Quorum', 'Elders Quorum First Counselor'],
+        ['Brandt, Hugo', 'M', '45', '5 May 1981', 'Sunday School', 'Sunday School Teacher']];
+      const pg = await browser.newPage();
+      await pg.setContent(`<style>body{font:10px Arial;margin:30px}td,th{padding:6px 8px;text-align:left;vertical-align:top}</style>
+        <div>Palm Bay Test Ward</div><div>Members with Callings</div><table><tr><th>Name</th><th>Gender</th><th>Age</th><th>Birth Date</th><th>Organization</th><th>Calling</th><th>Sustained</th><th>Set Apart</th></tr>
+        ${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}<td>1 Jan 2026</td><td>✔</td></tr>`).join('')}</table>`);
+      const f = path.join(__dirname, 'synthetic-callings.pdf'); await pg.pdf({ path: f, format: 'Letter' }); await pg.close();
+      await ev(A, () => showTab('admin')); await sleep(800);
+      await A.page.setInputFiles('#callings-file', f); await sleep(3000); fs.unlinkSync(f);
+      const st = await ev(A, () => document.getElementById('callings-status').innerText);
+      const flags = await ev(A, () => [...document.querySelectorAll('#tab-admin .role-flag')].map(e => e.innerText).filter(t => /suggests/.test(t)).length);
+      const doc = (await adb.doc('adminData/callings').get()).data();
+      const push = await until(async () => (await pushesFor('tok-uAdmin')).find(x => x.data.tag === 'ministering-roles'));
+      return { pass: doc?.users?.['cora@example.com']?.expected === 'rs' && doc?.users?.['sam@example.com']?.expected === 'eq' && flags >= 1 && !!push,
+        obs: { status: st.replace(/\d+ callings/, 'N callings'), flags, cora: doc?.users?.['cora@example.com']?.callings, push: push?.data?.body } };
+    });
+    await check('admin', '"Make RS Presidency" fixes the flagged role (then put back)', async () => {
+      await ev(A, () => setUserRole('uCouncil', 'rs')); await sleep(800);
+      const a = (await adb.doc('allowedUsers/cora@example.com').get()).data();
+      await ev(A, () => setUserRole('uCouncil', 'council')); await sleep(800);
+      return { pass: a.role === 'rs', obs: a.role };
+    });
+    await check('admin', 'reset two-step sign-in (lost phone)', async () => {
+      const before = ((await require('firebase-admin/auth').getAuth().getUser('uFresh')).multiFactor?.enrolledFactors || []).length;
+      await ev(A, () => resetTwoStep('uFresh')); await sleep(1500);
+      const after = ((await require('firebase-admin/auth').getAuth().getUser('uFresh')).multiFactor?.enrolledFactors || []).length;
+      const msg = A.dialogs.slice(-1)[0] || '';
+      return { pass: before === 1 && after === 0, obs: { before, after, msg: msg.slice(0, 40) } };
+    });
+    await check('admin', 'a non-admin can\'t call reset', async () => {
+      const r = await ev(E, async () => { try { await firebase.functions().httpsCallable('resetTwoStep')({ uid: 'uRs' }); return 'allowed'; } catch (e) { return e.code; } });
+      return { pass: r !== 'allowed', obs: r };
+    });
+  }
   await check('admin', 'non-admin cannot open admin tab', async () => ({ pass: (await ev(C, () => { showTab('admin'); return document.querySelector('.tab-content.active').id; })) !== 'tab-admin', obs: null }));
 
   // ── Sign out / back in ─────────────────────────────────────
@@ -487,6 +666,19 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
 
   // Last, since it wipes the shared doc: can a council member delete it?
   await check('rules-today', 'council deletes the whole ward doc', async () => ({ pass: true, obs: await tryOp(C2, `await db.doc('wardData/shared').delete()`) }), 'security');
+
+  // Taken off the allowed list while signed in: the next refused save signs them out (final rules only).
+  if (process.env.PHASE === 'final' && await ev(R, () => typeof sessionProblem === 'function')) {
+    await check('signout', 'removed from the allowed list → signed out with the notice', async () => {
+      await R.page.reload(); await waitScreen(R.page, ['app-shell']);
+      await adb.doc('allowedUsers/rita@example.com').delete();
+      await ev(R, () => toggleHHRSPool('h8'));
+      await flush(R).catch(() => {});          // the page reloads itself mid-save
+      await waitScreen(R.page, ['auth-screen']).catch(() => {}); await sleep(1000);
+      const sc = await screen(R), notice = await ev(R, () => document.getElementById('auth-notice').innerText);
+      return { pass: sc === 'auth-screen' && notice === 'For security, please sign in again.', obs: { screen: sc, notice } };
+    });
+  }
 
   // ── Wrap-up ────────────────────────────────────────────────
   const errs = {}; for (const [s, n] of [[A, 'admin'], [E, 'eq'], [R, 'rs'], [C, 'council']]) errs[n] = s.errors;

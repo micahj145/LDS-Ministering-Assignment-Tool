@@ -6,6 +6,14 @@
 //  notifyAccessRequest  a new profiles/{uid} with status 'pending' (a sign-up): tell the admins.
 //  notifyMessage        a new direct message: tell the other people in the conversation.
 //  notifyRestrictedNote a restricted note created or shared with more people: tell the new viewers.
+//  notifyNoteChange     a note, goal or next step added/changed (notes/{id}): tags + followers.
+//  notifyRoleReview     callings report imported or a role changed: tell admins about mismatches.
+//  resetTwoStep         (callable) an admin clears someone's two-step sign-in after a lost phone.
+//
+// Who gets anything: only people still allowed in — an approved profile and an
+// allowedUsers/{email} entry (until that list is first filled, the profile alone).
+// resetTwoStep checks its caller the way firestore.rules does: on the allowed
+// list as an admin, signed in with a code, within 14 days.
 //
 // Device tokens live on profiles/{uid}.fcmTokens, written by the app when someone
 // turns on phone notifications. The Admin SDK used here is not bound by
@@ -14,6 +22,8 @@
 // `link` (#notifications or #admin).
 
 const { onDocumentWritten, onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { getAuth } = require('firebase-admin/auth');
 const { logger } = require('firebase-functions');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
@@ -21,6 +31,7 @@ const { getMessaging } = require('firebase-admin/messaging');
 const { newTags, unreadCount, messageFor, accessRequestMessage } = require('./tags');
 const { householdChanges, followMessage } = require('./follow');
 const { dmMessage, restrictedMessage, newViewers, threadsUnread, restrictedUnread } = require('./private');
+const { insertNotes, callerProblem, roleFlags, roleReviewMessage } = require('./access');
 
 initializeApp();
 
@@ -29,6 +40,23 @@ const APP = 'https://micahj145.github.io/LDS-Ministering-Assignment-Tool/ministe
 const FEED_MAX = 500;                         // newest entries kept on each follower's profile
 const FOLLOW_PUSH_GAP_MS = 3 * 60 * 1000;     // at most one follow alert per person per 3 minutes
 const DEAD_TOKEN = new Set(['messaging/registration-token-not-registered', 'messaging/invalid-registration-token', 'messaging/invalid-argument']);
+
+// allowedUsers, keyed by lowercase email. Read once per run.
+async function allowedMap(db) {
+  const snap = await db.collection('allowedUsers').get();
+  return new Map(snap.docs.map(d => [d.id, d.data()]));
+}
+// May this profile still be told about anything?
+function mayReceive(p, allowed) {
+  if (!p || p.status !== 'approved') return false;
+  return allowed.size === 0 || allowed.has(String(p.email || '').toLowerCase());
+}
+// The ward document with every note from the notes collection put back in
+// place (the shape tags.js / follow.js / the unread counts expect).
+async function wardWithNotes(db, ward) {
+  const snap = await db.collection('notes').get();
+  return insertNotes(ward || {}, snap.docs.map(d => ({ ...d.data(), id: d.id })));
+}
 
 // Send one data message to every device on a profile, and drop tokens FCM
 // says are gone (app uninstalled, data cleared).
@@ -76,46 +104,35 @@ async function sendToProfile(ref, profile, data) {
   return { sent: res.successCount, failed: res.failureCount, removed: dead.length };
 }
 
-exports.notifyTagged = onDocumentWritten({ document: 'wardData/shared', region: REGION, maxInstances: 2 }, async (event) => {
-  const before = event.data?.before?.exists ? event.data.before.data() : {};
-  const after = event.data?.after?.exists ? event.data.after.data() : null;
-  if (!after) return;
-
-  const fresh = newTags(before, after);
+// Tag pushes, one per person, for (note, person) pairs in `fresh` (newTags()).
+// `merged` is the ward document with every note in place, for the badge count.
+async function pushTags(db, fresh, merged) {
   if (!fresh.length) return;
-
   const byUser = new Map();
   fresh.forEach(t => { if (!byUser.has(t.uid)) byUser.set(t.uid, []); byUser.get(t.uid).push(t); });
-
-  const db = getFirestore();
+  const allowed = await allowedMap(db);
   for (const [uid, tags] of byUser) {
     const ref = db.collection('profiles').doc(uid);
     const snap = await ref.get();
     if (!snap.exists) continue;
     const p = snap.data();
-    if (p.status !== 'approved') continue;
+    if (!mayReceive(p, allowed)) continue;
     const r = await sendToProfile(ref, p, {
       title: 'Ministering', body: messageFor(tags), tag: 'ministering-tagged',
-      unread: String(await badgeCount(db, after, uid, p)), link: `${APP}#notifications`,
+      unread: String(await badgeCount(db, merged, uid, p)), link: `${APP}#notifications`,
     });
     logger.info('notifyTagged', { uid, tags: tags.length, ...r });
   }
-});
+}
 
-exports.notifyFollowers = onDocumentWritten({ document: 'wardData/shared', region: REGION, maxInstances: 2 }, async (event) => {
-  const before = event.data?.before?.exists ? event.data.before.data() : null;
-  const after = event.data?.after?.exists ? event.data.after.data() : null;
-  if (!before || !after) return;                 // first write or a delete: nothing to compare
-
-  const changes = householdChanges(before, after);
+// Follower feed entries + throttled push for `changes` (householdChanges()).
+async function pushFollowers(db, changes, updaterUid, updater, merged) {
   if (!changes.length) return;
   const hhIds = [...new Set(changes.map(c => c.hhId))];
-  const updaterUid = after.updatedByUid || null;
-  const updater = after.updatedBy || 'Someone';
   const now = new Date();
+  const allowed = await allowedMap(db);
 
   // array-contains-any takes at most 30 values per query.
-  const db = getFirestore();
   const followers = new Map();
   for (let i = 0; i < hhIds.length; i += 30) {
     const snap = await db.collection('profiles').where('followHouseholds', 'array-contains-any', hhIds.slice(i, i + 30)).get();
@@ -124,7 +141,7 @@ exports.notifyFollowers = onDocumentWritten({ document: 'wardData/shared', regio
 
   for (const [uid, doc] of followers) {
     const p = doc.data();
-    if (p.status !== 'approved' || uid === updaterUid) continue;    // your own edits don't notify you
+    if (!mayReceive(p, allowed) || uid === updaterUid) continue;    // your own edits don't notify you
     const mine = new Set(p.followHouseholds || []);
     const events = changes.filter(c => mine.has(c.hhId))
       .map(c => ({ ...c, by: updater, ts: now.toISOString() }));
@@ -143,38 +160,131 @@ exports.notifyFollowers = onDocumentWritten({ document: 'wardData/shared', regio
 
     const r = await sendToProfile(doc.ref, { ...fresh, feed }, {
       title: 'Ministering', body: followMessage(updater, events.length), tag: 'ministering-follow',
-      unread: String(await badgeCount(db, after, uid, { ...fresh, feed })), link: `${APP}#notifications`,
+      unread: String(await badgeCount(db, merged, uid, { ...fresh, feed })), link: `${APP}#notifications`,
     });
     logger.info('notifyFollowers', { uid, events: events.length, ...r });
   }
+}
+
+// Saves of the ward document. Notes now live in notes/{id} (see
+// notifyNoteChange), so these mostly see pools, assignments and lists; notes
+// still inside the document (an app version from before the move) are handled
+// here as before. The one-time move strips them out, which adds nothing.
+exports.notifyTagged = onDocumentWritten({ document: 'wardData/shared', region: REGION, maxInstances: 2 }, async (event) => {
+  const before = event.data?.before?.exists ? event.data.before.data() : {};
+  const after = event.data?.after?.exists ? event.data.after.data() : null;
+  if (!after) return;
+  const fresh = newTags(before, after);
+  if (!fresh.length) return;
+  const db = getFirestore();
+  await pushTags(db, fresh, await wardWithNotes(db, after));
 });
+
+exports.notifyFollowers = onDocumentWritten({ document: 'wardData/shared', region: REGION, maxInstances: 2 }, async (event) => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null;
+  const after = event.data?.after?.exists ? event.data.after.data() : null;
+  if (!before || !after) return;                 // first write or a delete: nothing to compare
+  const changes = householdChanges(before, after);
+  if (!changes.length) return;
+  const db = getFirestore();
+  await pushFollowers(db, changes, after.updatedByUid || null, after.updatedBy || 'Someone', await wardWithNotes(db, after));
+});
+
+// A note, goal or next step added, changed or removed. The note is placed into
+// the current ward document before and after, so tags.js and follow.js see
+// exactly what they did when notes lived inside it. Notes copied over by the
+// one-time move (`migrated`) are old news and notify nobody.
+exports.notifyNoteChange = onDocumentWritten({ document: 'notes/{noteId}', region: REGION, maxInstances: 2 }, async (event) => {
+  const before = event.data?.before?.exists ? { ...event.data.before.data(), id: event.params.noteId } : null;
+  const after = event.data?.after?.exists ? { ...event.data.after.data(), id: event.params.noteId } : null;
+  if (!after) return;                             // removals tell nobody
+  if (!before && after.migrated) return;
+  const db = getFirestore();
+  const ward = (await db.doc('wardData/shared').get()).data() || {};
+  const base = insertNotes(ward, []);
+  const docBefore = insertNotes(base, before ? [before] : []);
+  const docAfter = insertNotes(base, [after]);
+  const merged = await wardWithNotes(db, ward);
+  await pushTags(db, newTags(docBefore, docAfter), merged);
+  await pushFollowers(db, householdChanges(docBefore, docAfter), after.authorId || null, after.author || 'Someone', merged);
+});
+
+// Admins: allowed-list admins once the list exists, otherwise profiles marked isAdmin.
+async function adminProfiles(db) {
+  const allowed = await allowedMap(db);
+  const emails = [...allowed].filter(([, a]) => a.admin === true).map(([e]) => e);
+  const docs = [];
+  if (allowed.size) {
+    for (let i = 0; i < emails.length; i += 30) {
+      const snap = await db.collection('profiles').where('email', 'in', emails.slice(i, i + 30)).get();
+      docs.push(...snap.docs);
+    }
+    // Profiles store the email as typed at sign-up; catch case differences too.
+    if (docs.length < emails.length) {
+      const all = await db.collection('profiles').where('status', '==', 'approved').get();
+      all.docs.forEach(d => { if (emails.includes(String(d.data().email || '').toLowerCase()) && !docs.some(x => x.id === d.id)) docs.push(d); });
+    }
+  } else {
+    docs.push(...(await db.collection('profiles').where('isAdmin', '==', true).get()).docs);
+  }
+  return docs.filter(d => d.data().status === 'approved');
+}
 
 exports.notifyAccessRequest = onDocumentCreated({ document: 'profiles/{uid}', region: REGION, maxInstances: 2 }, async (event) => {
   const p = event.data?.data();
   if (!p || p.status !== 'pending') return;      // the bootstrap admin signs up already approved
 
   const db = getFirestore();
-  const admins = await db.collection('profiles').where('isAdmin', '==', true).get();
-  for (const doc of admins.docs) {
-    const a = doc.data();
-    if (a.status !== 'approved' || doc.id === event.params.uid) continue;
-    const r = await sendToProfile(doc.ref, a, {
+  for (const doc of await adminProfiles(db)) {
+    if (doc.id === event.params.uid) continue;
+    const r = await sendToProfile(doc.ref, doc.data(), {
       title: 'Ministering', body: accessRequestMessage(p), tag: 'ministering-access', link: `${APP}#admin`,
     });
     logger.info('notifyAccessRequest', { admin: doc.id, requester: event.params.uid, ...r });
   }
 });
 
+// Callings report imported, or someone's allowed-list entry changed: if that
+// leaves anyone whose role doesn't match their callings (and wasn't flagged
+// before), tell the admins. Only a count — the details are in the Admin tab.
+async function roleReview(db, beforeFlags, afterFlags) {
+  const fresh = afterFlags.filter(e => !beforeFlags.includes(e));
+  if (!fresh.length) return;
+  for (const doc of await adminProfiles(db)) {
+    const r = await sendToProfile(doc.ref, doc.data(), {
+      title: 'Ministering', body: roleReviewMessage(afterFlags.length), tag: 'ministering-roles', link: `${APP}#admin`,
+    });
+    logger.info('notifyRoleReview', { admin: doc.id, flagged: afterFlags.length, ...r });
+  }
+}
+exports.notifyRoleReview = onDocumentWritten({ document: 'adminData/callings', region: REGION, maxInstances: 1 }, async (event) => {
+  const db = getFirestore();
+  const allowed = await allowedMap(db);
+  const before = event.data?.before?.exists ? event.data.before.data() : null;
+  const after = event.data?.after?.exists ? event.data.after.data() : null;
+  await roleReview(db, roleFlags(before, allowed), roleFlags(after, allowed));
+});
+exports.notifyRoleChange = onDocumentWritten({ document: 'allowedUsers/{email}', region: REGION, maxInstances: 1 }, async (event) => {
+  const db = getFirestore();
+  const callings = (await db.doc('adminData/callings').get()).data();
+  if (!callings) return;
+  const allowed = await allowedMap(db);
+  const was = new Map(allowed);
+  if (event.data?.before?.exists) was.set(event.params.email, event.data.before.data()); else was.delete(event.params.email);
+  await roleReview(db, roleFlags(callings, was), roleFlags(callings, allowed));
+});
+
 // Shared by both private triggers: push to each profile, with the icon badge.
 async function notifyUids(db, uids, data, label) {
   if (!uids.length) return;
-  const ward = (await db.doc('wardData/shared').get()).data() || {};
+  const ward = await wardWithNotes(db, (await db.doc('wardData/shared').get()).data() || {});
+  const allowed = await allowedMap(db);
   for (const uid of uids) {
     const ref = db.collection('profiles').doc(uid);
     const snap = await ref.get();
     if (!snap.exists) continue;
     const p = snap.data();
-    if (p.status !== 'approved') continue;
+    if (!mayReceive(p, allowed)) continue;
     const r = await sendToProfile(ref, p, { ...data, unread: String(await badgeCount(db, ward, uid, p)) });
     logger.info(label, { uid, ...r });
   }
@@ -200,4 +310,23 @@ exports.notifyRestrictedNote = onDocumentWritten({ document: 'privateNotes/{note
   await notifyUids(db, newViewers(before, after), {
     title: 'Ministering', body: restrictedMessage(after.authorName), tag: 'ministering-restricted', link: `${APP}#tab=messages`,
   }, 'notifyRestrictedNote');
+});
+
+// Lost or replaced phone: an admin clears someone's two-step sign-in so they
+// can set it up again at their next sign-in. The caller must pass the same
+// checks firestore.rules makes (allowed list, admin, code step, < 14 days),
+// and the person is signed out everywhere.
+exports.resetTwoStep = onCall({ region: REGION, maxInstances: 1 }, async (req) => {
+  const token = req.auth?.token;
+  const db = getFirestore();
+  const me = token?.email ? (await db.doc('allowedUsers/' + token.email.toLowerCase()).get()).data() : null;
+  const problem = callerProblem(token, me);
+  if (problem) throw new HttpsError('permission-denied', `Not allowed (${problem}). Sign in again and retry.`);
+  if (me.admin !== true) throw new HttpsError('permission-denied', 'Only an admin can reset two-step sign-in.');
+  const uid = req.data && typeof req.data.uid === 'string' ? req.data.uid : '';
+  if (!uid) throw new HttpsError('invalid-argument', 'Which person?');
+  await getAuth().updateUser(uid, { multiFactor: { enrolledFactors: null } });
+  await getAuth().revokeRefreshTokens(uid);
+  logger.info('resetTwoStep', { by: req.auth.uid, uid });
+  return { ok: true };
 });

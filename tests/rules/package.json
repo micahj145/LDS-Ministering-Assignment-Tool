@@ -1,0 +1,6 @@
+{
+  "name": "ministering-tool-rules-tests",
+  "private": true,
+  "description": "firestore.rules tests against the Firestore emulator. Run: ./run.sh",
+  "devDependencies": { "@firebase/rules-unit-testing": "5.0.2", "firebase": "12.18.0", "firebase-tools": "14.27.0" }
+}

@@ -1,0 +1,1490 @@
+{
+ "label": "env-check",
+ "app": "ministering_tool.html",
+ "at": "2026-10-31T12:59:53.723Z",
+ "results": [
+  {
+   "group": "auth",
+   "name": "signed-out shows sign-in",
+   "kind": "feature",
+   "pass": true,
+   "obs": "auth-screen"
+  },
+  {
+   "group": "auth",
+   "name": "wrong password shows error",
+   "kind": "feature",
+   "pass": true,
+   "obs": true
+  },
+  {
+   "group": "auth",
+   "name": "gate for pete",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "screen": "pending-screen",
+    "title": "Awaiting Approval",
+    "verify": false
+   }
+  },
+  {
+   "group": "auth",
+   "name": "gate for dale",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "screen": "pending-screen",
+    "title": "Access Denied",
+    "verify": false
+   }
+  },
+  {
+   "group": "auth",
+   "name": "gate for val",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "screen": "pending-screen",
+    "title": "Check Your Email",
+    "verify": true
+   }
+  },
+  {
+   "group": "auth",
+   "name": "sign-up creates pending profile + verify screen + admin push",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "verify": true,
+    "status": "pending",
+    "pushBody": "New access request: Nia Newby."
+   }
+  },
+  {
+   "group": "auth",
+   "name": "admin signs in to app",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "m": 12,
+    "h": 8,
+    "role": "eq",
+    "admin": true,
+    "adminNav": true,
+    "eq": true,
+    "rs": false
+   }
+  },
+  {
+   "group": "auth",
+   "name": "eq signs in to app",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "m": 12,
+    "h": 8,
+    "role": "eq",
+    "admin": false,
+    "adminNav": false,
+    "eq": true,
+    "rs": false
+   }
+  },
+  {
+   "group": "auth",
+   "name": "rs signs in to app",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "m": 12,
+    "h": 8,
+    "role": "rs",
+    "admin": false,
+    "adminNav": false,
+    "eq": false,
+    "rs": true
+   }
+  },
+  {
+   "group": "auth",
+   "name": "council signs in to app",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "m": 12,
+    "h": 8,
+    "role": "council",
+    "admin": false,
+    "adminNav": false,
+    "eq": false,
+    "rs": false
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "import",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-import",
+    "rows": 5,
+    "text": "6f2974122a",
+    "textLen": 844
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "notifications",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-notifications",
+    "rows": 2,
+    "text": "76ced42013",
+    "textLen": 733
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "messages",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-messages",
+    "rows": 2,
+    "text": "273a09a47a",
+    "textLen": 845
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "members",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-members",
+    "rows": 14,
+    "text": "364f41455b",
+    "textLen": 1422
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "households",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-households",
+    "rows": 10,
+    "text": "69e04acf25",
+    "textLen": 1285
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "nearby",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-nearby",
+    "rows": 2,
+    "text": "2aaa8782d1",
+    "textLen": 391
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "brothers",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-brothers",
+    "rows": 14,
+    "text": "5ea692d3e5",
+    "textLen": 864
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "current",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-current",
+    "rows": 5,
+    "text": "02e4e9356a",
+    "textLen": 1127
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "propose",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-propose",
+    "rows": 6,
+    "text": "ee79dbdacf",
+    "textLen": 991
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "sisters",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-sisters",
+    "rows": 8,
+    "text": "112371e5c4",
+    "textLen": 829
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "currentRS",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-currentRS",
+    "rows": 5,
+    "text": "2d0158ddde",
+    "textLen": 563
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "proposeRS",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-proposeRS",
+    "rows": 3,
+    "text": "9c96c3709f",
+    "textLen": 609
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "council",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-council",
+    "rows": 6,
+    "text": "c8fff80dc1",
+    "textLen": 1583
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "moves",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-moves",
+    "rows": 7,
+    "text": "e8938f8992",
+    "textLen": 2206
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "idents",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-idents",
+    "rows": 5,
+    "text": "c64b54b755",
+    "textLen": 1152
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "stats",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-stats",
+    "rows": 2,
+    "text": "242800f22d",
+    "textLen": 641
+   }
+  },
+  {
+   "group": "tabs:admin",
+   "name": "admin",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-admin",
+    "rows": 3,
+    "text": "4011e3ede6",
+    "textLen": 52
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "import",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-import",
+    "rows": 5,
+    "text": "4cb0f3dda5",
+    "textLen": 660
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "notifications",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-notifications",
+    "rows": 2,
+    "text": "70621023e8",
+    "textLen": 813
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "messages",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-messages",
+    "rows": 2,
+    "text": "273a09a47a",
+    "textLen": 845
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "members",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-members",
+    "rows": 14,
+    "text": "364f41455b",
+    "textLen": 1422
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "households",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-households",
+    "rows": 10,
+    "text": "69e04acf25",
+    "textLen": 1285
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "nearby",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-nearby",
+    "rows": 2,
+    "text": "2aaa8782d1",
+    "textLen": 391
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "brothers",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-brothers",
+    "rows": 14,
+    "text": "5ea692d3e5",
+    "textLen": 864
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "current",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-current",
+    "rows": 5,
+    "text": "308d7653e0",
+    "textLen": 715
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "propose",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-propose",
+    "rows": 6,
+    "text": "2e50beca57",
+    "textLen": 1028
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "sisters",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-sisters",
+    "rows": 8,
+    "text": "112371e5c4",
+    "textLen": 829
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "currentRS",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-currentRS",
+    "rows": 5,
+    "text": "2d0158ddde",
+    "textLen": 563
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "proposeRS",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-proposeRS",
+    "rows": 3,
+    "text": "9c96c3709f",
+    "textLen": 609
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "council",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-council",
+    "rows": 6,
+    "text": "c8fff80dc1",
+    "textLen": 1583
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "moves",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-moves",
+    "rows": 7,
+    "text": "712d789c63",
+    "textLen": 2281
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "idents",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-idents",
+    "rows": 5,
+    "text": "c64b54b755",
+    "textLen": 1152
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "stats",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-stats",
+    "rows": 2,
+    "text": "242800f22d",
+    "textLen": 641
+   }
+  },
+  {
+   "group": "tabs:council",
+   "name": "admin",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-import",
+    "rows": 5,
+    "text": "4cb0f3dda5",
+    "textLen": 660
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "import",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-import",
+    "rows": 5,
+    "text": "4cb0f3dda5",
+    "textLen": 660
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "notifications",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-notifications",
+    "rows": 2,
+    "text": "495faa20f8",
+    "textLen": 1205
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "messages",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-messages",
+    "rows": 2,
+    "text": "273a09a47a",
+    "textLen": 845
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "members",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-members",
+    "rows": 14,
+    "text": "364f41455b",
+    "textLen": 1422
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "households",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-households",
+    "rows": 10,
+    "text": "69e04acf25",
+    "textLen": 1285
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "nearby",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-nearby",
+    "rows": 2,
+    "text": "2aaa8782d1",
+    "textLen": 391
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "brothers",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-brothers",
+    "rows": 14,
+    "text": "5ea692d3e5",
+    "textLen": 864
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "current",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-current",
+    "rows": 5,
+    "text": "02e4e9356a",
+    "textLen": 1127
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "propose",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-propose",
+    "rows": 6,
+    "text": "ee79dbdacf",
+    "textLen": 991
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "sisters",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-sisters",
+    "rows": 8,
+    "text": "112371e5c4",
+    "textLen": 829
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "currentRS",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-currentRS",
+    "rows": 5,
+    "text": "2d0158ddde",
+    "textLen": 563
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "proposeRS",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-proposeRS",
+    "rows": 3,
+    "text": "9c96c3709f",
+    "textLen": 609
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "council",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-council",
+    "rows": 6,
+    "text": "37b03a1270",
+    "textLen": 1589
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "moves",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-moves",
+    "rows": 7,
+    "text": "c63e6cddfb",
+    "textLen": 2287
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "idents",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-idents",
+    "rows": 5,
+    "text": "c64b54b755",
+    "textLen": 1152
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "stats",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-stats",
+    "rows": 2,
+    "text": "242800f22d",
+    "textLen": 641
+   }
+  },
+  {
+   "group": "tabs:eq",
+   "name": "admin",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-import",
+    "rows": 5,
+    "text": "4cb0f3dda5",
+    "textLen": 660
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "import",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-import",
+    "rows": 5,
+    "text": "4cb0f3dda5",
+    "textLen": 660
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "notifications",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-notifications",
+    "rows": 2,
+    "text": "9f47fabf58",
+    "textLen": 813
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "messages",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-messages",
+    "rows": 2,
+    "text": "273a09a47a",
+    "textLen": 845
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "members",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-members",
+    "rows": 14,
+    "text": "364f41455b",
+    "textLen": 1422
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "households",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-households",
+    "rows": 10,
+    "text": "69e04acf25",
+    "textLen": 1285
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "nearby",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-nearby",
+    "rows": 2,
+    "text": "2aaa8782d1",
+    "textLen": 391
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "brothers",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-brothers",
+    "rows": 14,
+    "text": "5ea692d3e5",
+    "textLen": 864
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "current",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-current",
+    "rows": 5,
+    "text": "308d7653e0",
+    "textLen": 715
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "propose",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-propose",
+    "rows": 6,
+    "text": "2e50beca57",
+    "textLen": 1028
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "sisters",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-sisters",
+    "rows": 8,
+    "text": "112371e5c4",
+    "textLen": 829
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "currentRS",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-currentRS",
+    "rows": 5,
+    "text": "d712a2931c",
+    "textLen": 954
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "proposeRS",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-proposeRS",
+    "rows": 3,
+    "text": "e5dca55509",
+    "textLen": 551
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "council",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-council",
+    "rows": 6,
+    "text": "c8fff80dc1",
+    "textLen": 1583
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "moves",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-moves",
+    "rows": 7,
+    "text": "e8938f8992",
+    "textLen": 2206
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "idents",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-idents",
+    "rows": 5,
+    "text": "c64b54b755",
+    "textLen": 1152
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "stats",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-stats",
+    "rows": 2,
+    "text": "242800f22d",
+    "textLen": 641
+   }
+  },
+  {
+   "group": "tabs:rs",
+   "name": "admin",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "id": "tab-import",
+    "rows": 5,
+    "text": "4cb0f3dda5",
+    "textLen": 660
+   }
+  },
+  {
+   "group": "eq",
+   "name": "toggle household EQ pool",
+   "kind": "feature",
+   "pass": true,
+   "obs": true
+  },
+  {
+   "group": "eq",
+   "name": "toggle brother pool",
+   "kind": "feature",
+   "pass": true,
+   "obs": true
+  },
+  {
+   "group": "eq",
+   "name": "add draft companionship via modal",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "count": 2,
+    "m2": "m7",
+    "hh": [
+     "h1"
+    ]
+   }
+  },
+  {
+   "group": "eq",
+   "name": "edit draft companionship households",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "hh": [
+     "h5",
+     "h7"
+    ],
+    "keptMaybeHH": false
+   }
+  },
+  {
+   "group": "eq",
+   "name": "reorder draft companionship",
+   "kind": "feature",
+   "pass": true,
+   "obs": [
+    "other",
+    "moved"
+   ]
+  },
+  {
+   "group": "eq",
+   "name": "delete draft companionship",
+   "kind": "feature",
+   "pass": true,
+   "obs": 1
+  },
+  {
+   "group": "eq",
+   "name": "copy current → draft",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "current": 2,
+    "proposed": 2
+   }
+  },
+  {
+   "group": "eq",
+   "name": "add note with tag → tagged person gets push",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "tags": [
+     "uRs"
+    ],
+    "push": "Sam Carter tagged you on a note."
+   }
+  },
+  {
+   "group": "eq",
+   "name": "delete own note",
+   "kind": "feature",
+   "pass": true,
+   "obs": 0
+  },
+  {
+   "group": "eq",
+   "name": "move-in status change",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "status": "contacted",
+    "by": "Sam Carter"
+   }
+  },
+  {
+   "group": "eq",
+   "name": "move-in EQ pool select",
+   "kind": "feature",
+   "pass": true,
+   "obs": true
+  },
+  {
+   "group": "eq",
+   "name": "add member",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "gender": "Male",
+    "count": 13
+   }
+  },
+  {
+   "group": "eq",
+   "name": "delete member",
+   "kind": "feature",
+   "pass": true,
+   "obs": 12
+  },
+  {
+   "group": "eq",
+   "name": "add + delete household",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "added": true,
+    "deleted": true,
+    "fields": [
+     "nhh-name",
+     "nhh-addr"
+    ]
+   }
+  },
+  {
+   "group": "eq",
+   "name": "cannot change RS household pool",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "changed": false,
+    "alert": "alert: The Relief Society presidency sets the RS household pool."
+   }
+  },
+  {
+   "group": "eq",
+   "name": "cannot edit sister lists",
+   "kind": "feature",
+   "pass": true,
+   "obs": [
+    true,
+    true,
+    false,
+    false
+   ]
+  },
+  {
+   "group": "rs",
+   "name": "toggle RS household pool",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "before": null,
+    "after": true
+   }
+  },
+  {
+   "group": "rs",
+   "name": "toggle sister pool + recipient",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "pool": true,
+    "recipient": false
+   }
+  },
+  {
+   "group": "rs",
+   "name": "move-in RS pool select",
+   "kind": "feature",
+   "pass": true,
+   "obs": true
+  },
+  {
+   "group": "rs",
+   "name": "add draft sister companionship",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "count": 1,
+    "m2": "m10",
+    "hh": [
+     "h5"
+    ],
+    "as": [
+     "m12"
+    ]
+   }
+  },
+  {
+   "group": "rs",
+   "name": "copy current → draft (sisters)",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "cur": 1,
+    "draft": 1
+   }
+  },
+  {
+   "group": "rs",
+   "name": "cannot change EQ household pool",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "changed": false
+   }
+  },
+  {
+   "group": "council",
+   "name": "cannot change pools",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "changed": false
+   }
+  },
+  {
+   "group": "council",
+   "name": "follow household → feed + push when EQ edits it",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "feedText": "Brandt, Hugo & Ilse: ministering pool In Pool → Maybe",
+    "push": "Sam Carter updated a household you follow."
+   }
+  },
+  {
+   "group": "council",
+   "name": "feed shows in Notifications + clear",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "shown": true,
+    "left": 0
+   }
+  },
+  {
+   "group": "council",
+   "name": "covenant path: add person + goal note",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "added": true,
+    "picked": true
+   }
+  },
+  {
+   "group": "council",
+   "name": "covenant path: remove person",
+   "kind": "feature",
+   "pass": true,
+   "obs": null
+  },
+  {
+   "group": "council",
+   "name": "move-in next step note",
+   "kind": "feature",
+   "pass": true,
+   "obs": 2
+  },
+  {
+   "group": "notifications",
+   "name": "tagged notes listed for EQ user",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "n": 4,
+    "unread": 0
+   }
+  },
+  {
+   "group": "notifications",
+   "name": "clear one + clear all tags",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "one": 1,
+    "all": 4,
+    "vis": 0
+   }
+  },
+  {
+   "group": "messages",
+   "name": "DM: start thread + send, recipient sees it + push",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "boxCleared": true,
+    "seen": true,
+    "unread": 1,
+    "push": "New message from Sam Carter."
+   }
+  },
+  {
+   "group": "messages",
+   "name": "DM: reply + delete own message",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "afterDelete": 1
+   }
+  },
+  {
+   "group": "messages",
+   "name": "restricted note visible to chosen viewer only",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "rita": true,
+    "cora": false,
+    "push": "Sam Carter shared a restricted note with you."
+   }
+  },
+  {
+   "group": "messages",
+   "name": "restricted note delete",
+   "kind": "feature",
+   "pass": true,
+   "obs": null
+  },
+  {
+   "group": "search",
+   "name": "companionship search (minister / served / either)",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "minister:Whitfield": "1 of 2",
+    "served:Tanaka": "1 of 2",
+    "either:Okafor": "1 of 2",
+    "either:zzz": "0 of 2"
+   }
+  },
+  {
+   "group": "search",
+   "name": "find nearby (household name, EQ pool)",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "status": "",
+    "text": "573f42e7ed"
+   }
+  },
+  {
+   "group": "admin",
+   "name": "approve pending user",
+   "kind": "feature",
+   "pass": true,
+   "obs": "approved"
+  },
+  {
+   "group": "admin",
+   "name": "set role",
+   "kind": "feature",
+   "pass": true,
+   "obs": "rs"
+  },
+  {
+   "group": "admin",
+   "name": "approved user now gets in",
+   "kind": "feature",
+   "pass": true,
+   "obs": "app-shell"
+  },
+  {
+   "group": "admin",
+   "name": "non-admin cannot open admin tab",
+   "kind": "feature",
+   "pass": true,
+   "obs": null
+  },
+  {
+   "group": "auth",
+   "name": "sign out returns to sign-in",
+   "kind": "feature",
+   "pass": true,
+   "obs": "auth-screen"
+  },
+  {
+   "group": "auth",
+   "name": "session persists across reload",
+   "kind": "feature",
+   "pass": true,
+   "obs": "app-shell"
+  },
+  {
+   "group": "rules-today",
+   "name": "denied user reads ward data",
+   "kind": "security",
+   "pass": true,
+   "obs": "permission-denied"
+  },
+  {
+   "group": "rules-today",
+   "name": "unverified user reads ward data",
+   "kind": "security",
+   "pass": true,
+   "obs": "permission-denied"
+  },
+  {
+   "group": "rules-today",
+   "name": "council reads ward data",
+   "kind": "security",
+   "pass": true,
+   "obs": "allowed"
+  },
+  {
+   "group": "rules-today",
+   "name": "council overwrites members list",
+   "kind": "security",
+   "pass": true,
+   "obs": "allowed"
+  },
+  {
+   "group": "rules-today",
+   "name": "council edits a household field",
+   "kind": "security",
+   "pass": true,
+   "obs": "allowed"
+  },
+  {
+   "group": "rules-today",
+   "name": "council creates another wardData doc",
+   "kind": "security",
+   "pass": true,
+   "obs": "permission-denied"
+  },
+  {
+   "group": "rules-today",
+   "name": "council sets own role to eq",
+   "kind": "security",
+   "pass": true,
+   "obs": "allowed"
+  },
+  {
+   "group": "rules-today",
+   "name": "council sets own isAdmin",
+   "kind": "security",
+   "pass": true,
+   "obs": "permission-denied"
+  },
+  {
+   "group": "rules-today",
+   "name": "council reads another profile",
+   "kind": "security",
+   "pass": true,
+   "obs": "permission-denied"
+  },
+  {
+   "group": "rules-today",
+   "name": "council writes unit stats",
+   "kind": "security",
+   "pass": true,
+   "obs": "allowed"
+  },
+  {
+   "group": "rules-today",
+   "name": "council reads restricted note not shared with them",
+   "kind": "security",
+   "pass": true,
+   "obs": "permission-denied"
+  },
+  {
+   "group": "rules-today",
+   "name": "council reads a thread they are not in",
+   "kind": "security",
+   "pass": true,
+   "obs": "permission-denied"
+  },
+  {
+   "group": "rules-today",
+   "name": "denied user writes profile status approved",
+   "kind": "security",
+   "pass": true,
+   "obs": "permission-denied"
+  },
+  {
+   "group": "import",
+   "name": "real-PDF imports skipped (set REAL_PDF_DIR)",
+   "kind": "info",
+   "pass": true,
+   "obs": null
+  },
+  {
+   "group": "rules-today",
+   "name": "council deletes the whole ward doc",
+   "kind": "security",
+   "pass": true,
+   "obs": "allowed"
+  },
+  {
+   "group": "health",
+   "name": "no uncaught page errors",
+   "kind": "feature",
+   "pass": true,
+   "obs": {
+    "admin": [],
+    "eq": [],
+    "rs": [],
+    "council": []
+   }
+  },
+  {
+   "group": "health",
+   "name": "blocked outside hosts",
+   "kind": "info",
+   "pass": true,
+   "obs": []
+  },
+  {
+   "group": "health",
+   "name": "SDK",
+   "kind": "info",
+   "pass": true,
+   "obs": {
+    "version": "12.18.0-modular",
+    "modular": true
+   }
+  },
+  {
+   "group": "health",
+   "name": "alerts shown",
+   "kind": "info",
+   "pass": true,
+   "obs": {
+    "admin": [],
+    "eq": [
+     "alert: The Relief Society presidency sets the RS household pool."
+    ],
+    "rs": [
+     "alert: The EQ presidency sets the EQ household pool."
+    ],
+    "council": [
+     "alert: The EQ presidency sets the EQ household pool.",
+     "alert: The Relief Society presidency sets the RS household pool.",
+     "alert: The EQ presidency sets the brothers pool."
+    ]
+   }
+  }
+ ]
+}

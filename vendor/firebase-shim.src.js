@@ -14,8 +14,10 @@ import { initializeApp as _initializeApp } from 'firebase/app';
 import * as A from 'firebase/auth';
 import * as F from 'firebase/firestore';
 import * as M from 'firebase/messaging';
+import * as FN from 'firebase/functions';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 
-let app = null, auth = null, db = null, messaging = null;
+let app = null, auth = null, db = null, messaging = null, functions = null;
 
 // Test hook: the parity suite (tests/parity) sets this before the page loads
 // to point the app at the local emulators. Nothing sets it in normal use.
@@ -51,6 +53,16 @@ const authApi = {
 };
 
 // ── Firestore ─────────────────────────────────────────────────
+// Any read or write refused by firestore.rules also fires a
+// 'firebase-permission-denied' event on window, so the app can tell when the
+// refusal is really an expired sign-in (see isSecuritySignOut in the app).
+function signalDenied(e) {
+  if (e && e.code === 'permission-denied' && typeof window !== 'undefined') {
+    try { window.dispatchEvent(new CustomEvent('firebase-permission-denied', { detail: e })); } catch (x) {}
+  }
+}
+const pd = p => p.catch(e => { signalDenied(e); throw e; });
+const pdErr = error => e => { signalDenied(e); if (error) error(e); else console.warn(e); };
 function wrapDocSnap(s) {
   return { id: s.id, ref: wrapDoc(s.ref), get exists() { return s.exists(); }, data: () => s.data(), _delegate: s };
 }
@@ -62,11 +74,11 @@ function wrapDoc(ref) {
   return {
     id: ref.id, path: ref.path,
     collection: p => wrapQuery(F.collection(ref, p)),
-    get: () => F.getDoc(ref).then(wrapDocSnap),
-    set: (data, opts) => F.setDoc(ref, data, opts || {}),
-    update: data => F.updateDoc(ref, data),
-    delete: () => F.deleteDoc(ref),
-    onSnapshot: (next, error) => F.onSnapshot(ref, s => next(wrapDocSnap(s)), error),
+    get: () => pd(F.getDoc(ref)).then(wrapDocSnap),
+    set: (data, opts) => pd(F.setDoc(ref, data, opts || {})),
+    update: data => pd(F.updateDoc(ref, data)),
+    delete: () => pd(F.deleteDoc(ref)),
+    onSnapshot: (next, error) => F.onSnapshot(ref, s => next(wrapDocSnap(s)), pdErr(error)),
     _delegate: ref,
   };
 }
@@ -76,12 +88,12 @@ function wrapQuery(q) {
   return {
     get id() { return q.id; }, get path() { return q.path; },
     doc: id => wrapDoc(id === undefined ? F.doc(q) : F.doc(q, id)),
-    add: data => F.addDoc(q, data).then(wrapDoc),
+    add: data => pd(F.addDoc(q, data)).then(wrapDoc),
     where: (f, op, v) => wrapQuery(F.query(q, F.where(f, op, v))),
     orderBy: (f, dir) => wrapQuery(F.query(q, F.orderBy(f, dir))),
     limit: n => wrapQuery(F.query(q, F.limit(n))),
-    get: () => F.getDocs(q).then(wrapQuerySnap),
-    onSnapshot: (next, error) => F.onSnapshot(q, s => next(wrapQuerySnap(s)), error),
+    get: () => pd(F.getDocs(q)).then(wrapQuerySnap),
+    onSnapshot: (next, error) => F.onSnapshot(q, s => next(wrapQuerySnap(s)), pdErr(error)),
     _delegate: q,
   };
 }
@@ -95,7 +107,7 @@ const firestoreApi = {
       set: (r, d, o) => (b.set(ref(r), d, o || {}), w),
       update: (r, d) => (b.update(ref(r), d), w),
       delete: r => (b.delete(ref(r)), w),
-      commit: () => b.commit(),
+      commit: () => pd(b.commit()),
     };
     return w;
   },
@@ -128,11 +140,29 @@ function messagingApi() {
 }
 messagingApi.isSupported = messagingSupported;
 
+// ── Cloud Functions (callable) ────────────────────────────────
+function functionsApi() {
+  needApp();
+  if (!functions) {
+    functions = FN.getFunctions(app, 'us-central1');
+    if (EMU && EMU.functionsHost) FN.connectFunctionsEmulator(functions, EMU.functionsHost, EMU.functionsPort);
+  }
+  return { httpsCallable: name => FN.httpsCallable(functions, name) };
+}
+
 // ── window.firebase ───────────────────────────────────────────
-function initializeApp(config) {
+// opts.appCheckSiteKey: a reCAPTCHA Enterprise site key turns on App Check
+// (attests that requests come from this site). Whether Firebase *enforces* it
+// is a console setting; until then it only records (monitor mode).
+function initializeApp(config, opts) {
   if (app) return app;
   const cfg = EMU ? { ...config, projectId: EMU.projectId, apiKey: 'demo-key', authDomain: '127.0.0.1' } : config;
   app = _initializeApp(cfg);
+  const siteKey = opts && typeof opts === 'object' ? opts.appCheckSiteKey : '';
+  if (siteKey && !EMU) {
+    try { initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(siteKey), isTokenAutoRefreshEnabled: true }); }
+    catch (e) { console.warn('App Check not started:', e && e.message); }
+  }
   // Signed-in sessions are kept on the device (IndexedDB, falling back to
   // localStorage) — the same as the compat SDK did by default, under the same
   // storage key, so people stay signed in across this upgrade.
@@ -141,6 +171,7 @@ function initializeApp(config) {
   if (EMU) {
     A.connectAuthEmulator(auth, EMU.auth, { disableWarnings: true });
     F.connectFirestoreEmulator(db, EMU.firestoreHost, EMU.firestorePort);
+    auth.settings.appVerificationDisabledForTesting = true;   // emulator: no real reCAPTCHA for text-message codes
   }
   return app;
 }
@@ -155,6 +186,7 @@ window.firebase = {
   auth: authFn,
   firestore: firestoreFn,
   messaging: messagingApi,
+  functions: functionsApi,
   // Direct modular access for the two-step sign-in code. Listed one by one
   // (not the whole SDK) so the bundle only carries what's used.
   modular: {

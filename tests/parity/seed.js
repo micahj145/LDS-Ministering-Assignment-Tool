@@ -18,7 +18,12 @@ const USERS = [
   { uid: 'uPending', email: 'pete@example.com', firstName: 'Pete', lastName: 'Moss', status: 'pending', isAdmin: false },
   { uid: 'uDenied', email: 'dale@example.com', firstName: 'Dale', lastName: 'Nope', status: 'denied', isAdmin: false },
   { uid: 'uUnverified', email: 'val@example.com', firstName: 'Val', lastName: 'Unver', status: 'approved', isAdmin: false, unverified: true },
+  // Approved and on the allowed list, but hasn't set up two-step sign-in yet.
+  { uid: 'uFresh', email: 'finn@example.com', firstName: 'Finn', lastName: 'Fresh', status: 'approved', isAdmin: false, role: 'council', noMfa: true },
 ];
+// Everyone approved and verified has a phone set up for two-step sign-in
+// (the emulator hands out the texted codes over its REST API).
+const PHONE = { uAdmin: '+15555550100', uEq: '+15555550101', uRs: '+15555550102', uCouncil: '+15555550103' };
 const tag = u => ({ uid: u.uid, name: u.firstName + ' ' + u.lastName });
 const [ADM, EQ, RS, CO] = USERS;
 
@@ -70,14 +75,29 @@ const ward = {
 
 (async () => {
   for (const u of USERS) {
-    await auth.createUser({ uid: u.uid, email: u.email, password: PW, emailVerified: !u.unverified, displayName: u.firstName + ' ' + u.lastName });
+    const mfa = PHONE[u.uid] ? { multiFactor: { enrolledFactors: [{ phoneNumber: PHONE[u.uid], displayName: 'Phone', factorId: 'phone' }] } } : {};
+    await auth.createUser({ uid: u.uid, email: u.email, password: PW, emailVerified: !u.unverified, displayName: u.firstName + ' ' + u.lastName, ...mfa });
+    if (u.status === 'approved' && !u.unverified)
+      await db.doc('allowedUsers/' + u.email.toLowerCase()).set({ email: u.email.toLowerCase(), uid: u.uid, role: u.role || 'council', admin: !!u.isAdmin });
     const p = { email: u.email, firstName: u.firstName, lastName: u.lastName, status: u.status, isAdmin: u.isAdmin, createdAt: new Date(), emailVerified: !u.unverified };
     if (u.role) p.role = u.role;
     if (u.uid === 'uEq') { p.notifSeenAt = hrs(30); p.fcmTokens = ['tok-eq']; }
     if (u.uid === 'uRs' || u.uid === 'uCouncil' || u.uid === 'uAdmin') p.fcmTokens = ['tok-' + u.uid];
     await db.doc('profiles/' + u.uid).set(p);
   }
+  if (process.env.PHASE === 'final') {
+    // By step 2 the notes have long since moved out: store them the new way.
+    const { NOTE_FIELDS } = require('../../functions/access');
+    const holders = [...ward.members.map(o => [o, { type: 'member', id: o.id }]), ...ward.households.map(o => [o, { type: 'household', id: o.id }]),
+      ...['current', 'proposed', 'currentRS', 'proposedRS'].flatMap(k => ward[k].map(o => [o, { type: k, id: o.id }])),
+      ...Object.entries(ward.groups).flatMap(([g, l]) => l.map(o => [o, { type: 'group', group: g, id: o.id }]))];
+    for (const [o, t] of holders) for (const f of NOTE_FIELDS) {
+      for (const n of o[f] || []) await db.doc('notes/' + n.id).set({ ...n, target: { ...t, field: f }, migrated: true });
+      delete o[f];
+    }
+    ward.clientVersion = 2; ward.notesMigrated = true;
+  }
   await db.doc('wardData/shared').set(ward);
   console.log('seeded', USERS.length, 'users,', members.length, 'members,', households.length, 'households');
 })().catch(e => { console.error(e); process.exit(1); });
-module.exports = { USERS, PW };
+module.exports = { USERS, PW, PHONE };

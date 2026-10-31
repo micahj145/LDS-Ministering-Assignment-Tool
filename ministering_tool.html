@@ -36,7 +36,7 @@
 </script>
 <!-- Firebase modular SDK 12.18.0, bundled locally with a small compat-style
      front (source: vendor/firebase-shim.src.js, build: vendor/build.sh). -->
-<script src="vendor/firebase-12.18.0.js"></script>
+<script src="vendor/firebase-12.18.0.js?b=3"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f7fa;color:#333;min-height:100vh}
@@ -146,6 +146,13 @@ tr:hover td{background:#fafbfc}
   nav{padding:0 0.5rem}
   .modal{width:94%;padding:1.25rem}}
 @media print{nav,header p,button{display:none}.container{padding:0}.card{box-shadow:none;border:1px solid #ddd}}
+.chg-sub{font-size:0.78rem;color:#666;margin:0.25rem 0 0.15rem}
+.chg-list{margin:0 0 0.3rem 1.1rem;padding:0}
+.chg-list li{margin-bottom:0.25rem}
+.chg-field{font-size:0.8rem;color:#444;margin-left:0.4rem}
+.chg-before{color:#a12b2b;text-decoration:line-through}
+.chg-after{color:#17643a}
+.role-flag{background:#fff8e1;border:1px solid #f0d58a;border-radius:6px;padding:0.45rem 0.6rem;font-size:0.8rem;color:#6b5000;margin-top:0.4rem}
 </style>
 </head>
 <body>
@@ -167,6 +174,7 @@ tr:hover td{background:#fafbfc}
 
 <div id="auth-screen" class="container" style="display:none;max-width:420px">
   <div class="card">
+    <div id="auth-notice" style="display:none;background:#e8f1fb;color:#1a3a5c;border-radius:6px;padding:0.6rem 0.8rem;font-size:0.88rem;margin-bottom:0.8rem"></div>
     <h2 id="auth-title">Sign In</h2>
     <div id="auth-name-fields" style="display:none">
       <div class="form-group"><label>First Name</label><input type="text" id="auth-first-name" autocomplete="given-name"></div>
@@ -184,6 +192,58 @@ tr:hover td{background:#fafbfc}
       <button onclick="toggleAuthMode()" id="auth-toggle-btn"
         style="background:none;border:none;color:#1a3a5c;text-decoration:underline;cursor:pointer;font-size:0.85rem">Sign Up</button>
     </div>
+  </div>
+</div>
+
+<div id="mfa-signin-screen" class="container" style="display:none;max-width:420px">
+  <div class="card">
+    <h2>Enter your code</h2>
+    <div id="mfa-signin-choose"></div>
+    <p id="mfa-signin-prompt" style="font-size:0.9rem;color:#555;margin-bottom:0.7rem"></p>
+    <div class="form-group"><input type="text" id="mfa-signin-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456"
+      style="font-size:1.3rem;letter-spacing:0.25em;text-align:center" onkeydown="if (event.key === 'Enter') submitMfaSignIn()"></div>
+    <div id="mfa-signin-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em;margin-bottom:0.5rem"></div>
+    <button class="btn btn-primary" id="mfa-signin-btn" onclick="submitMfaSignIn()" style="width:100%">Sign In</button>
+    <div style="display:flex;justify-content:space-between;margin-top:0.7rem;font-size:0.82rem">
+      <button id="mfa-signin-resend" onclick="sendMfaSignInCode()" style="background:none;border:none;color:#1a3a5c;text-decoration:underline;cursor:pointer">Text me a new code</button>
+      <button onclick="cancelMfaSignIn()" style="background:none;border:none;color:#1a3a5c;text-decoration:underline;cursor:pointer">Cancel</button>
+    </div>
+    <div id="mfa-signin-recaptcha"></div>
+  </div>
+</div>
+
+<div id="mfa-enroll-screen" class="container" style="display:none;max-width:480px">
+  <div class="card">
+    <h2>Set up two-step sign-in</h2>
+    <p style="font-size:0.88rem;color:#555;margin-bottom:0.9rem">To protect members' information, signing in takes your password <b>and</b> a 6-digit code. You'll be asked at most once every 14 days on each device.</p>
+    <div id="mfa-step-choose">
+      <button class="btn btn-primary" style="width:100%;margin-bottom:0.5rem" onclick="mfaEnrollStep('phone')">Text the code to my phone</button>
+      <button class="btn btn-secondary" style="width:100%" onclick="enrollTotpStart()">Use an authenticator app (Duo, Google Authenticator…)</button>
+    </div>
+    <div id="mfa-step-phone" style="display:none">
+      <div class="form-group"><label>Mobile number</label><input type="tel" id="mfa-enroll-phone" autocomplete="tel" placeholder="321-555-0123" onkeydown="if (event.key === 'Enter') enrollPhoneSend()"></div>
+      <button class="btn btn-primary" id="mfa-enroll-send" style="width:100%" onclick="enrollPhoneSend()">Text me a code</button>
+      <div style="font-size:0.75rem;color:#888;margin-top:0.4rem">Standard text rates may apply.</div>
+    </div>
+    <div id="mfa-step-totp" style="display:none;text-align:center">
+      <p style="font-size:0.85rem;color:#555;text-align:left">In your authenticator app, add an account and scan this code:</p>
+      <div id="mfa-enroll-qr" style="margin:0.6rem auto;width:max-content;background:#fff"></div>
+      <p style="font-size:0.8rem;color:#555;text-align:left">Can't scan? Choose "enter a key" in the app and type:</p>
+      <div id="mfa-enroll-key" style="font-family:monospace;font-size:1rem;background:#f4f6f9;border-radius:6px;padding:0.5rem;margin:0.3rem 0 0.8rem;word-break:break-all;user-select:all"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="enrollTotpNext()">I've added it — next</button>
+    </div>
+    <div id="mfa-step-code" style="display:none">
+      <p id="mfa-enroll-code-prompt" style="font-size:0.88rem;color:#555;margin-bottom:0.6rem"></p>
+      <div class="form-group"><input type="text" id="mfa-enroll-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456"
+        style="font-size:1.3rem;letter-spacing:0.25em;text-align:center" onkeydown="if (event.key === 'Enter') enrollConfirm()"></div>
+      <button class="btn btn-primary" id="mfa-enroll-confirm" style="width:100%" onclick="enrollConfirm()">Finish setup</button>
+    </div>
+    <div id="mfa-enroll-error" style="font-size:0.82rem;color:#dc3545;min-height:1.2em;margin-top:0.5rem"></div>
+    <div style="display:flex;justify-content:space-between;margin-top:0.5rem;font-size:0.82rem">
+      <button onclick="mfaEnrollStep('choose')" style="background:none;border:none;color:#1a3a5c;text-decoration:underline;cursor:pointer">Start over</button>
+      <button onclick="signOut()" style="background:none;border:none;color:#1a3a5c;text-decoration:underline;cursor:pointer">Sign out</button>
+    </div>
+    <div id="mfa-enroll-recaptcha"></div>
   </div>
 </div>
 
@@ -296,7 +356,7 @@ tr:hover td{background:#fafbfc}
     <!-- Households -->
     <div class="card">
       <h2>1. Households CSV</h2>
-      <div class="drop-zone" id="hh-drop" onclick="document.getElementById('hh-file').click()">
+      <div class="drop-zone ward-edit" id="hh-drop" onclick="document.getElementById('hh-file').click()">
         <input type="file" id="hh-file" accept=".csv" onchange="handleHouseholdsFile(this.files[0])">
         <div class="icon">🏠</div>
         <strong>Click or drag to upload</strong>
@@ -326,7 +386,7 @@ tr:hover td{background:#fafbfc}
     <!-- Members -->
     <div class="card">
       <h2>2. Members CSV</h2>
-      <div class="drop-zone" id="member-drop" onclick="document.getElementById('member-file').click()">
+      <div class="drop-zone ward-edit" id="member-drop" onclick="document.getElementById('member-file').click()">
         <input type="file" id="member-file" accept=".csv" onchange="handleMemberFile(this.files[0])">
         <div class="icon">👤</div>
         <strong>Click or drag to upload</strong>
@@ -409,7 +469,7 @@ tr:hover td{background:#fafbfc}
         <option value="id-partMember">In a part-member household</option>
         <option value="id-bday">Birthday in the next 2 weeks</option>
       </select>
-      <button class="btn btn-primary btn-sm" onclick="openAddMemberModal()">+ Add Member</button>
+      <button class="ward-edit btn btn-primary btn-sm" onclick="openAddMemberModal()">+ Add Member</button>
     </div>
     <div id="members-table"></div>
   </div>
@@ -434,7 +494,7 @@ tr:hover td{background:#fafbfc}
         <option value="no-addr">No Address</option>
         <option value="geocoded">Geocoded</option>
       </select>
-      <button class="btn btn-primary btn-sm" onclick="openAddHouseholdModal()">+ Add Household</button>
+      <button class="ward-edit btn btn-primary btn-sm" onclick="openAddHouseholdModal()">+ Add Household</button>
     </div>
     <div id="households-table"></div>
   </div>
@@ -555,11 +615,11 @@ tr:hover td{background:#fafbfc}
 
   <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
     <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-      <button class="btn btn-secondary btn-sm" onclick="calculateDistances()">Calculate Distances</button>
+      <button class="ward-edit btn btn-secondary btn-sm" onclick="calculateDistances()">Calculate Distances</button>
       <div id="geo-status" style="font-size:0.85rem;color:#666"></div>
       <button class="btn btn-secondary btn-sm" onclick="saveGeoFile()">Save Coords</button>
-      <label class="btn btn-secondary btn-sm" style="cursor:pointer">Load Coords<input type="file" accept=".json" style="display:none" onchange="loadGeoFile(this.files[0])"></label>
-      <button class="btn btn-secondary btn-sm" onclick="clearGeoCache()" style="margin-left:auto">Clear Cache</button>
+      <label class="ward-edit btn btn-secondary btn-sm" style="cursor:pointer">Load Coords<input type="file" accept=".json" style="display:none" onchange="loadGeoFile(this.files[0])"></label>
+      <button class="ward-edit btn btn-secondary btn-sm" onclick="clearGeoCache()" style="margin-left:auto">Clear Cache</button>
     </div>
     <div id="geo-progress" style="display:none;margin-top:0.6rem">
       <div style="background:#e0e6ed;border-radius:4px;height:5px">
@@ -804,7 +864,7 @@ tr:hover td{background:#fafbfc}
       <div>
         <input type="file" id="movein-file" accept=".pdf,application/pdf" style="display:none" onchange="handleMoveInPdf(this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="in" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('movein-file').click()">Import</button>
+        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('movein-file').click()">Import</button>
       </div>
     </div>
     <p style="font-size:0.82rem;color:#888;margin:0.4rem 0 0">Tap <strong>Fetch/Print/Download</strong> to open the Members Moved In report in LCR (sign in if asked) and print or save it as a PDF (on Android: Share → Print → Save as PDF), then tap <strong>Import</strong> and pick that file. The PDF is read in your
@@ -819,7 +879,7 @@ tr:hover td{background:#fafbfc}
       <div>
         <input type="file" id="moveout-file" accept=".pdf,application/pdf" style="display:none" onchange="handleMoveOutPdf(this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="out" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('moveout-file').click()">Import</button>
+        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('moveout-file').click()">Import</button>
       </div>
     </div>
     <p style="font-size:0.82rem;color:#888;margin:0.4rem 0 0">Tap <strong>Fetch/Print/Download</strong> to open the Members Moved Out report in LCR and save it as a PDF, then tap <strong>Import</strong>. Everyone in it is matched to
@@ -844,28 +904,28 @@ tr:hover td{background:#fafbfc}
         <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Members Without Callings</div>
         <input type="file" id="ident-file-noCalling" accept=".pdf,application/pdf" style="display:none" onchange="handleIdentPdf('noCalling', this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="id-noCalling" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('ident-file-noCalling').click()">Import</button>
+        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('ident-file-noCalling').click()">Import</button>
         <div id="ident-last-noCalling" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
       </div>
       <div style="flex:1;min-width:170px">
         <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Part-Member Households</div>
         <input type="file" id="ident-file-partMember" accept=".pdf,application/pdf" style="display:none" onchange="handleIdentPdf('partMember', this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="id-partMember" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('ident-file-partMember').click()">Import</button>
+        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('ident-file-partMember').click()">Import</button>
         <div id="ident-last-partMember" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
       </div>
       <div style="flex:1;min-width:170px">
         <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Young Single Adults</div>
         <input type="file" id="ident-file-ysa" accept=".pdf,application/pdf" style="display:none" onchange="handleIdentPdf('ysa', this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="id-ysa" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('ident-file-ysa').click()">Import</button>
+        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('ident-file-ysa').click()">Import</button>
         <div id="ident-last-ysa" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
       </div>
       <div style="flex:1;min-width:170px">
         <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Birthdays</div>
         <input type="file" id="ident-file-bday" accept=".pdf,application/pdf" style="display:none" onchange="handleIdentPdf('bday', this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="id-bday" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('ident-file-bday').click()">Import</button>
+        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('ident-file-bday').click()">Import</button>
         <div id="ident-last-bday" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
       </div>
     </div>
@@ -888,28 +948,28 @@ tr:hover td{background:#fafbfc}
         <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Unit Statistics</div>
         <input type="file" id="stats-file-us" accept=".pdf,application/pdf" style="display:none" onchange="handleStatsPdf('us', this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="st-us" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('stats-file-us').click()">Import</button>
+        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('stats-file-us').click()">Import</button>
         <div id="stats-last-us" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
       </div>
       <div style="flex:1;min-width:170px">
         <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Quarterly Report</div>
         <input type="file" id="stats-file-qr" accept=".pdf,application/pdf" style="display:none" onchange="handleStatsPdf('qr', this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="st-qr" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('stats-file-qr').click()">Import</button>
+        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('stats-file-qr').click()">Import</button>
         <div id="stats-last-qr" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
       </div>
       <div style="flex:1;min-width:170px">
         <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Key Indicators</div>
         <input type="file" id="stats-file-ki" accept=".pdf,application/pdf" style="display:none" onchange="handleStatsPdf('ki', this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="st-ki" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('stats-file-ki').click()">Import</button>
+        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('stats-file-ki').click()">Import</button>
         <div id="stats-last-ki" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
       </div>
       <div style="flex:1;min-width:170px">
         <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Family History Activity</div>
         <input type="file" id="stats-file-fh" accept=".pdf,application/pdf" style="display:none" onchange="handleStatsPdf('fh', this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="st-fh" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('stats-file-fh').click()">Import</button>
+        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('stats-file-fh').click()">Import</button>
         <div id="stats-last-fh" style="font-size:0.72rem;color:#999;margin-top:0.3rem"></div>
       </div>
     </div>
@@ -926,7 +986,21 @@ tr:hover td{background:#fafbfc}
   </div>
   <div class="card">
     <h2>All Users</h2>
+    <div id="admin-allow-missing"></div>
     <div id="admin-all-list"></div>
+  </div>
+  <div class="card">
+    <h2>Check Roles Against Callings</h2>
+    <p style="font-size:0.85rem;color:#666;margin-bottom:0.6rem">Import LCR's <b>Members with Callings</b> report. Each person with access is matched to their callings and flagged above if their role here doesn't fit:
+      EQ Presidency for the Elders Quorum president, counselors and secretary; RS Presidency for the Relief Society president, counselors, secretary and ministering secretary; Ward Council for everyone else.
+      Nothing changes until you choose.</p>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+      <a class="btn btn-secondary btn-sm" href="https://lcr.churchofjesuschrist.org/mlt/report/member-callings?lang=eng" target="_blank" rel="noopener">Open the report in LCR</a>
+      <label class="btn btn-primary btn-sm" style="cursor:pointer">Import the PDF<input type="file" id="callings-file" accept=".pdf" style="display:none" onchange="handleCallingsPdf(this.files[0])"></label>
+      <span id="callings-summary" style="font-size:0.8rem;color:#888"></span>
+    </div>
+    <div style="font-size:0.75rem;color:#888;margin-top:0.35rem">In LCR, open the report, then Print → Save as PDF.</div>
+    <div id="callings-status" style="font-size:0.85rem;margin-top:0.5rem"></div>
   </div>
   <div class="card">
     <h2>Activity Log</h2>
@@ -1011,7 +1085,11 @@ const firebaseConfig = {
   messagingSenderId: "633648985018",
   appId: "1:633648985018:web:8030ffa71391aa7da32383",
 };
-firebase.initializeApp(firebaseConfig);
+// App Check (reCAPTCHA Enterprise): paste the site key from Firebase console →
+// App Check to turn it on. Empty = off. Firebase only *enforces* it once that's
+// switched on in the console; until then it just records (monitor mode).
+const APP_CHECK_SITE_KEY = '';
+firebase.initializeApp(firebaseConfig, { appCheckSiteKey: APP_CHECK_SITE_KEY });
 const fbAuth = firebase.auth();
 const db = firebase.firestore();
 const WARD_DOC = db.collection('wardData').doc('shared');
@@ -1073,18 +1151,101 @@ function normalizeGroups(raw) {
 }
 
 // ── Cloud persistence layer (single shared document) ────────────
-// The whole ward dataset lives in one Firestore document (wardData/shared)
-// instead of separate tables. Every mutation function elsewhere in this
-// file still calls the same dbUpsert*/dbDelete*/dbReplace* helpers as
-// before — they now all funnel into one debounced whole-document write,
-// since S is already the source of truth for members/households/current/
-// proposed by the time any of them run (the same pattern the original
-// localStorage-only save() used, before either backend existed). That
-// keeps every call site elsewhere in the file working unchanged.
+// The ward dataset lives in wardData/shared (members, households, the four
+// assignment lists, ward council groups, …) — except notes, goals and next
+// steps, which are one document each in the `notes` collection so the rules
+// can let ward council members write them without being able to change
+// member or household data. In memory nothing changed: S still carries every
+// note inside the record it belongs to (m.notes, entry.nextSteps, …), and
+// every mutation function still calls the same dbUpsert*/dbDelete* helpers.
+// They all funnel into one debounced save, runSync(), which compares S with
+// what was last loaded/saved and writes only what changed: the top-level
+// keys that differ (Covenant Path / Move In lists one by one, as groups.<key>)
+// and the notes added, changed or removed. Two people editing different
+// parts at the same time no longer overwrite each other.
 function dbFail(error) {
   console.error('Firestore sync error:', error);
   alert('A save to the cloud failed: ' + (error?.message || 'unknown error') +
         '\nYour change may not be visible to other users — try again or reload.');
+}
+
+// ── Notes, split out of the ward document ─────────────────────
+const NOTE_FIELDS = ['notes', 'goals', 'nextSteps'];
+const WARD_KEYS = ['members', 'households', 'current', 'proposed', 'currentRS', 'proposedRS', 'users', 'identMeta'];
+// Bumped when the stored format changes. firestore.rules refuses saves from an
+// older copy of the app (one left open in a tab), which would otherwise put
+// notes back into the ward document.
+const CLIENT_VERSION = 2;
+
+// Calls fn(record, target) for every record that can carry notes.
+function forEachNoteHolder(d, fn) {
+  (d.members || []).forEach(m => m && fn(m, { type: 'member', id: m.id }));
+  (d.households || []).forEach(h => h && fn(h, { type: 'household', id: h.id }));
+  ['current', 'proposed', 'currentRS', 'proposedRS'].forEach(k => (d[k] || []).forEach(c => c && fn(c, { type: k, id: c.id })));
+  Object.entries(d.groups || {}).forEach(([g, list]) => (Array.isArray(list) ? list : []).forEach(e => e && fn(e, { type: 'group', id: e.id, group: g })));
+}
+const holderKey = t => `${t.type}|${t.group || ''}|${t.id}`;
+
+// Notes written before ids existed get one derived from what they say, so
+// running the move twice (two people opening the app at once) can't duplicate them.
+function legacyNoteId(t, field, n) {
+  const s = [holderKey(t), field, n.date || '', n.author || '', n.text || ''].join('\u0001');
+  let h1 = 0x811c9dc5, h2 = 0x01000193;
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 ^ c, 2246822519) >>> 0; }
+  return 'L' + h1.toString(36) + h2.toString(36);
+}
+
+// Removes every notes/goals/nextSteps array from `d` (a plain copy) and
+// returns the notes as a Map id → note document ({ …note, target }).
+function splitNotes(d) {
+  const out = new Map();
+  forEachNoteHolder(d, (o, t) => NOTE_FIELDS.forEach(f => {
+    if (!(f in o)) return;
+    (Array.isArray(o[f]) ? o[f] : []).forEach(n => {
+      if (!n || typeof n !== 'object') return;
+      let id = n.id || legacyNoteId(t, f, n);
+      if (out.has(id)) id = legacyNoteId(t, f, n) + '_' + out.size;   // same id in two places: keep both
+      out.set(id, { ...n, id, target: { ...t, field: f } });
+    });
+    delete o[f];
+  }));
+  return out;
+}
+
+// Puts notes back into the records they belong to (oldest first). Notes whose
+// record no longer exists are returned, not placed.
+function insertNotes(d, notes) {
+  const idx = new Map();
+  forEachNoteHolder(d, (o, t) => idx.set(holderKey(t), o));
+  const orphans = [];
+  [...notes].sort((a, b) => (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0) || String(a.id).localeCompare(String(b.id)))
+    .forEach(n => {
+      const t = n.target || {}, o = idx.get(holderKey(t));
+      if (!o || !NOTE_FIELDS.includes(t.field)) { orphans.push(n); return; }
+      const { target, ...note } = n;   // `migrated` stays on the note, so re-saving it never re-notifies
+      (o[t.field] = Array.isArray(o[t.field]) ? o[t.field] : []).push(note);
+    });
+  return orphans;
+}
+
+// What the cloud holds, as of the last load or successful save.
+//   ward:  key → JSON of that key (groups as 'groups.<key>'), notes removed
+//   notes: id  → JSON of the note document
+let _synced = { exists: false, ward: {}, notes: new Map() };
+
+// The ward data as stored: S without notes, plus the notes on their own.
+function cloudShape() {
+  const d = JSON.parse(JSON.stringify({
+    members: S.members, households: S.households, current: S.current, proposed: S.proposed,
+    currentRS: S.currentRS || [], proposedRS: S.proposedRS || [],
+    groups: normalizeGroups(S.groups), users: S.users || [], identMeta: S.identMeta || {},
+  }));
+  const notes = splitNotes(d);
+  const ward = {};
+  WARD_KEYS.forEach(k => { ward[k] = JSON.stringify(d[k]); });
+  Object.keys(d.groups).forEach(g => { ward['groups.' + g] = JSON.stringify(d.groups[g]); });
+  const noteJson = new Map([...notes].map(([id, n]) => [id, JSON.stringify(n)]));
+  return { d, ward, notes, noteJson };
 }
 
 let _syncTimer = null;
@@ -1106,47 +1267,116 @@ function scheduleSync() {
   return _syncPromise;
 }
 
-async function runSync() {
+// One save at a time: a second save waits while the first is still asking
+// "Save these changes?" or writing, then compares against what that one saved.
+let _syncQueue = Promise.resolve();
+function runSync() {
   const resolve = _resolveSync;
   _syncTimer = null; _syncPromise = null; _resolveSync = null;
+  const p = _syncQueue.then(syncOnce).finally(() => { if (resolve) resolve(); });
+  _syncQueue = p.catch(() => {});
+  return p;
+}
+async function syncOnce() {
   const who = _currentUserName || _currentUserEmail || 'unknown';
-  const log = (S.activityLog || []).concat([{ ts: Date.now(), user: who }]).slice(-200);
   try {
-    // Firestore's set() throws on any `undefined` field value anywhere in
-    // the object tree (unlike localStorage/Postgres, which never cared).
-    // Various pre-existing mutation functions elsewhere in this file can
-    // legitimately produce `undefined` for an unset optional field (e.g.
-    // district, inPool). Rather than chase down every call site, round-
-    // trip the plain-data part through JSON — its native behavior drops
-    // `undefined` object keys and turns `undefined` array entries into
-    // `null`, which is exactly what we want, and is far more robust
-    // against a *future* function doing the same thing. serverTimestamp()
-    // is a special sentinel, not plain data, so it's added after the
-    // round-trip rather than being part of what gets stringified.
-    const payload = JSON.parse(JSON.stringify({
-      members: S.members, households: S.households, current: S.current, proposed: S.proposed,
-      currentRS: S.currentRS || [], proposedRS: S.proposedRS || [],
-      groups: normalizeGroups(S.groups), users: S.users || [], activityLog: log,
-      identMeta: S.identMeta || {},
-    }));
-    payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-    payload.updatedBy = who;
-    payload.updatedByUid = _currentUserId || null;   // lets notifyFollowers skip your own edits
-    await WARD_DOC.set(payload);
+    let now = cloudShape();
+    const diff = () => ({
+      keys: Object.keys(now.ward).filter(k => now.ward[k] !== _synced.ward[k]),
+      upserts: [...now.noteJson].filter(([id, j]) => _synced.notes.get(id) !== j).map(([id]) => id),
+      removed: [..._synced.notes.keys()].filter(id => !now.noteJson.has(id)),
+    });
+    let { keys, upserts, removed } = diff();
+    // Anything this person's role can't change is put back rather than sent
+    // (firestore.rules would refuse the whole save). The app hides those
+    // controls, so this is only a safety net.
+    if (!_confirmBypass) {
+      const badKeys = keys.filter(k => !canWriteKey(k));
+      const badNotes = [...removed.filter(id => !canRemoveNote(JSON.parse(_synced.notes.get(id)))),
+                        ...upserts.filter(id => !canWriteNote(now.notes.get(id), _synced.notes.has(id)))];
+      if (badKeys.length || badNotes.length) {
+        if (badKeys.length) revertWardKeys(badKeys);
+        if (badNotes.length) restoreNotes(badNotes);
+        alert(badKeys.length ? 'Only the EQ or RS presidency can change member, household, move-in/out, identifier and assignment data, so that part was not saved.'
+                             : 'You can remove or change only your own notes, so that was put back.');
+        now = cloudShape(); ({ keys, upserts, removed } = diff());
+      }
+    }
+    // Member, household and Current-assignment changes are shown before and
+    // after, and wait for a yes (see confirmWardChanges). No → those are put
+    // back; anything else in the same save (a note, a pool toggle elsewhere) still saves.
+    if (!(await confirmWardChanges(keys, now))) {
+      revertWardKeys(keys.filter(k => CONFIRM_KEYS[k]));
+      now = cloudShape(); ({ keys, upserts, removed } = diff());
+    }
+    if (!keys.length && !upserts.length && !removed.length && _synced.exists) { _lastSyncOk = true; return; }
+
+    // Notes first (in chunks — a batch takes 500 writes), the ward document
+    // last, so a note never points at a record the cloud doesn't have yet.
+    const ops = [
+      ...upserts.map(id => b => b.set(db.collection('notes').doc(id), now.notes.get(id))),
+      ...removed.map(id => b => b.delete(db.collection('notes').doc(id))),
+    ];
+    for (let i = 0; i < ops.length; i += 450) {
+      const b = db.batch(); ops.slice(i, i + 450).forEach(op => op(b)); await b.commit();
+    }
+    const log = (S.activityLog || []).concat([{ ts: Date.now(), user: who }]).slice(-200);
+    const stamp = { activityLog: log, updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: who, updatedByUid: _currentUserId || null, clientVersion: CLIENT_VERSION };
+    if (!_synced.exists) {
+      await WARD_DOC.set({ ...now.d, ...stamp, notesMigrated: true });
+    } else {
+      const upd = { ...stamp };
+      keys.forEach(k => { upd[k] = k.startsWith('groups.') ? now.d.groups[k.slice(7)] : now.d[k]; });
+      await WARD_DOC.update(upd);
+    }
     S.activityLog = log;
+    _synced.exists = true;
+    keys.forEach(k => { _synced.ward[k] = now.ward[k]; });
+    upserts.forEach(id => _synced.notes.set(id, now.noteJson.get(id)));
+    removed.forEach(id => _synced.notes.delete(id));
     _lastSyncOk = true;
   } catch (error) {
     _lastSyncOk = false;
-    dbFail(error);
-  } finally {
-    if (resolve) resolve();
+    if (_quietSyncFail) console.warn('Save failed:', error?.message);
+    else if (!(await isSecuritySignOut(error))) dbFail(error);
   }
 }
 
-// Best-effort flush if the tab closes right after an edit, before the
-// debounce timer fires — not guaranteed (browsers can kill async work
-// mid-unload), but better than nothing.
-window.addEventListener('beforeunload', () => { if (_syncTimer) { clearTimeout(_syncTimer); runSync(); } });
+// Replaces every note in S with `notes` (Map id → note document).
+function setNotesInS(notes) {
+  forEachNoteHolder(S, o => NOTE_FIELDS.forEach(f => { delete o[f]; }));
+  insertNotes(S, notes.values());
+  S.groups = normalizeGroups(S.groups);
+}
+
+// Puts keys back to what the cloud has (after a "No" at the confirmation, or a
+// change this person's role can't make). Notes on those records come back too.
+function revertWardKeys(keys) {
+  const notes = cloudShape().notes;
+  keys.forEach(k => {
+    const raw = String(_synced.ward[k] ?? 'null').replace(/#embedded$/, '');
+    const v = JSON.parse(raw);
+    if (k.startsWith('groups.')) { S.groups = S.groups || {}; S.groups[k.slice(7)] = v || []; }
+    else S[k] = v ?? (k === 'identMeta' ? {} : []);
+  });
+  S.groups = normalizeGroups(S.groups);
+  const sub = { groups: {} };
+  keys.forEach(k => { if (k.startsWith('groups.')) sub.groups[k.slice(7)] = S.groups[k.slice(7)]; else sub[k] = S[k]; });
+  const back = new Set(); forEachNoteHolder(sub, (o, t) => back.add(holderKey(t)));
+  _synced.notes.forEach((j, id) => { if (notes.has(id)) return; const n = JSON.parse(j); if (back.has(holderKey(n.target || {}))) notes.set(id, n); });
+  setNotesInS(notes);
+  try { showTab(currentTabName()); } catch (e) {}
+}
+
+// Undoes note changes this person can't make (someone else's note removed or
+// edited): those notes go back to what the cloud has.
+function restoreNotes(ids) {
+  const notes = cloudShape().notes;
+  ids.forEach(id => { const j = _synced.notes.get(id); if (j) notes.set(id, JSON.parse(j)); else notes.delete(id); });
+  setNotesInS(notes);
+  try { showTab(currentTabName()); } catch (e) {}
+}
 
 async function dbUpsertMembers(_members)              { return scheduleSync(); }
 function  dbUpsertMember(_m)                          { return scheduleSync(); }
@@ -1163,7 +1393,7 @@ async function dbReplaceAll(_all)                     { return scheduleSync(); }
 function  dbUpsertGroups()                            { return scheduleSync(); }
 
 async function loadAllData() {
-  const snap = await WARD_DOC.get();
+  const [snap, nsnap] = await Promise.all([WARD_DOC.get(), db.collection('notes').get()]);
   const data = snap.exists ? snap.data() : {};
   S.members     = data.members     || [];
   S.households  = data.households  || [];
@@ -1175,10 +1405,132 @@ async function loadAllData() {
   S.groups      = normalizeGroups(data.groups);
   S.users       = Array.isArray(data.users) ? data.users : [];
   S.identMeta   = data.identMeta && typeof data.identMeta === 'object' ? data.identMeta : {};
+
+  // Notes still inside the ward document (written by the app before notes had
+  // their own collection) are taken out here; the collection's copy wins.
+  const embedded = splitNotes(S);
+  const stored = new Map(nsnap.docs.map(d => [d.id, { ...d.data(), id: d.id }]));
+  const all = new Map([...embedded].map(([id, n]) => [id, { ...n, migrated: true }]));
+  stored.forEach((n, id) => all.set(id, n));
+  S.groups = normalizeGroups(S.groups);
+  const orphans = insertNotes(S, all.values());
+  S.groups = normalizeGroups(S.groups);
+
+  // What the cloud holds. Notes only in the ward document aren't "in the
+  // collection" yet, so the next save writes them there — see moveNotesOut().
+  const shape = cloudShape();
+  _synced = { exists: snap.exists, ward: { ...shape.ward }, notes: new Map() };
+  shape.notes.forEach((n, id) => { if (stored.has(id)) _synced.notes.set(id, shape.noteJson.get(id)); });
+  if (embedded.size) {
+    // Make the next save rewrite every key that still carries notes, without them.
+    const raw = JSON.parse(JSON.stringify({ ...data, groups: normalizeGroups(data.groups) }));
+    WARD_KEYS.forEach(k => { _synced.ward[k] = JSON.stringify(raw[k] ?? null) + '#embedded'; });
+    Object.keys(raw.groups).forEach(g => { _synced.ward['groups.' + g] = JSON.stringify(raw.groups[g]) + '#embedded'; });
+  }
+  _notesToMove = embedded.size;
+  if (orphans.length) console.warn(`${orphans.length} note(s) belong to records that no longer exist; left in the cloud, not shown.`);
   pruneMoveOutLog();
   // Normalize addresses from older imports that may have embedded newlines or ZIP+4
   S.households.forEach(hh => { if (hh.address) hh.address = normalizeAddress(hh.address); });
 }
+
+// One-time move of notes out of the ward document, done by the first person to
+// open this version of the app. Notes written there by the old app are copied
+// to the notes collection (marked `migrated` so nobody is re-notified about
+// old tags) and the ward document is rewritten without them.
+let _notesToMove = 0;
+async function moveNotesOut() {
+  if (!_notesToMove) return;
+  const n = _notesToMove; _notesToMove = 0;
+  _confirmBypass = true; _quietSyncFail = true;   // nothing the person changed: no before/after, no alert
+  try { await runSync(); } finally { _confirmBypass = false; _quietSyncFail = false; }
+  if (_lastSyncOk) { console.info(`Moved ${n} note(s) to their own collection.`); return; }
+  // Not allowed to (the final rules are on and this role can't rewrite every
+  // part): leave the notes where they are and carry on, so this person's own
+  // saves aren't held up by a move they can't make.
+  console.warn('Notes could not be moved out of the ward document; leaving them there.');
+  const shape = cloudShape();
+  Object.keys(_synced.ward).forEach(k => { if (/#embedded$/.test(_synced.ward[k])) _synced.ward[k] = shape.ward[k]; });
+  shape.noteJson.forEach((j, id) => { if (!_synced.notes.has(id)) _synced.notes.set(id, j); });
+}
+let _quietSyncFail = false;
+
+// ── Before/after confirmation ──────────────────────────────────
+// Changes to members, households and the Current assignment lists are shown
+// as before → after and wait for one "Save these changes". Pool toggles,
+// ordering, map coordinates, and notes/goals/next steps save without asking.
+// Draft lists and Covenant Path / Move In lists save without asking too.
+const CONFIRM_KEYS = { members: 'Members', households: 'Households', current: 'Current Ministering Brother Assignments', currentRS: 'Current Ministering Sister Assignments' };
+const CONFIRM_IGNORE = new Set(['inPool', 'rsPool', 'rsRecipient', 'position', 'lat', 'lng', 'notes', 'goals', 'nextSteps']);
+let _confirmBypass = false;
+
+function recordLabel(key, r) {
+  if (!r) return '';
+  if (key === 'current' || key === 'currentRS') return [r.m1Name, r.m2Name, r.m3Name].filter(Boolean).join(' + ') || 'Companionship';
+  return r.name || r.id || '';
+}
+function fmtVal(key, field, v) {
+  if (v === undefined || v === null || v === '') return '—';
+  if (field === 'households' && Array.isArray(v)) return v.map(h => hhById(h)?.name || h).join('; ') || '—';
+  if ((field === 'assignees') && Array.isArray(v)) return v.map(id => S.members.find(m => m.id === id)?.name || id).join('; ') || '—';
+  if (field === 'householdId') return hhById(v)?.name || v;
+  if (Array.isArray(v)) return v.map(x => typeof x === 'object' ? JSON.stringify(x) : x).join('; ') || '—';
+  if (typeof v === 'object') return Object.entries(v).map(([k, x]) => `${k}: ${typeof x === 'object' ? JSON.stringify(x) : x}`).join(', ') || '—';
+  return String(v);
+}
+// Per key: { added: [label], removed: [label], changed: [{ label, fields: [{ field, before, after }] }] }
+function wardDiff(keys, now) {
+  const out = {};
+  keys.filter(k => CONFIRM_KEYS[k]).forEach(k => {
+    const raw = _synced.ward[k];
+    if (raw === undefined || /#embedded$/.test(raw)) return;
+    const before = new Map((JSON.parse(raw) || []).map(r => [r.id, r]));
+    const after = new Map((now.d[k] || []).map(r => [r.id, r]));
+    const d = { added: [], removed: [], changed: [] };
+    after.forEach((r, id) => {
+      const o = before.get(id);
+      if (!o) { d.added.push(recordLabel(k, r)); return; }
+      const fields = [...new Set([...Object.keys(o), ...Object.keys(r)])].filter(f => !CONFIRM_IGNORE.has(f)
+        && JSON.stringify(o[f] ?? null) !== JSON.stringify(r[f] ?? null)
+        && !(Array.isArray(o[f] ?? []) && Array.isArray(r[f] ?? []) && !(o[f] || []).length && !(r[f] || []).length));
+      if (fields.length) d.changed.push({ label: recordLabel(k, r), fields: fields.map(f => ({ field: f, before: fmtVal(k, f, o[f]), after: fmtVal(k, f, r[f]) })) });
+    });
+    before.forEach((o, id) => { if (!after.has(id)) d.removed.push(recordLabel(k, o)); });
+    if (d.added.length || d.removed.length || d.changed.length) out[k] = d;
+  });
+  return out;
+}
+
+const FIELD_LABEL = { name: 'Name', gender: 'Gender', age: 'Age', phone: 'Phone', email: 'Email', address: 'Address', householdId: 'Household',
+  members: 'People', head: 'Head', m1Name: 'Minister 1', m2Name: 'Minister 2', m3Name: 'Minister 3', m1Id: 'Minister 1 (link)', m2Id: 'Minister 2 (link)',
+  m3Id: 'Minister 3 (link)', households: 'Households', assignees: 'Individuals', extraAssignees: 'Others (not in Members)', ident: 'Identifiers',
+  partMember: 'Part-member household', isBrother: 'Brother', moveInDate: 'Move-in date' };
+
+function confirmWardChanges(keys, now) {
+  if (_confirmBypass) return Promise.resolve(true);
+  const diff = wardDiff(keys, now);
+  if (!Object.keys(diff).length) return Promise.resolve(true);
+  const MAX = 25;
+  const list = (items, fn) => items.slice(0, MAX).map(fn).join('') + (items.length > MAX ? `<li style="color:#888">…and ${items.length - MAX} more</li>` : '');
+  const html = Object.entries(diff).map(([k, d]) => `
+    <div style="margin-bottom:0.9rem">
+      <div style="font-weight:600;margin-bottom:0.3rem">${esc(CONFIRM_KEYS[k])}</div>
+      ${d.added.length ? `<div class="chg-sub">Adding ${d.added.length}</div><ul class="chg-list">${list(d.added, l => `<li><span class="chg-after">+ ${esc(l)}</span></li>`)}</ul>` : ''}
+      ${d.removed.length ? `<div class="chg-sub">Removing ${d.removed.length}</div><ul class="chg-list">${list(d.removed, l => `<li><span class="chg-before">− ${esc(l)}</span></li>`)}</ul>` : ''}
+      ${d.changed.length ? `<div class="chg-sub">Changing ${d.changed.length}</div><ul class="chg-list">${list(d.changed, c => `<li><b>${esc(c.label)}</b>${c.fields.map(f =>
+        `<div class="chg-field">${esc(FIELD_LABEL[f.field] || f.field)}: <span class="chg-before">${esc(f.before)}</span> → <span class="chg-after">${esc(f.after)}</span></div>`).join('')}</li>`)}</ul>` : ''}
+    </div>`).join('');
+  document.getElementById('chg-body').innerHTML = html;
+  const modal = document.getElementById('chg-modal');
+  modal.classList.add('open');
+  return new Promise(res => {
+    const done = ok => { modal.classList.remove('open'); _chgResolve = null; res(ok); };
+    _chgResolve = done;
+    document.getElementById('chg-ok').onclick = () => done(true);
+    document.getElementById('chg-cancel').onclick = () => done(false);
+  });
+}
+let _chgResolve = null;
 
 // Manual pull of the latest cloud state — no live/realtime sync by design
 // (decided against it: not necessary for this group's usage pattern).
@@ -1384,6 +1736,7 @@ async function handleAuthSubmit() {
   errEl.style.color = '#dc3545';
   errEl.textContent = '';
   if (!email || !password) { errEl.textContent = 'Email and password are required.'; return; }
+  _authNotice = ''; try { sessionStorage.removeItem('authNotice'); } catch (e) {} showAuthNotice();
   if (_authMode === 'signup' && (!firstName || !lastName)) {
     errEl.textContent = 'First and last name are required.'; return;
   }
@@ -1405,6 +1758,7 @@ async function handleAuthSubmit() {
     }
   } catch (error) {
     _signingUp = false;
+    if (error?.code === 'auth/multi-factor-auth-required') { _authNotice = ''; showAuthNotice(); await startMfaSignIn(error); return; }
     errEl.textContent = error?.code === 'auth/email-already-in-use'
       ? 'That email already has an account. Use Sign In instead. If your access was removed, you can request it again after signing in, and "Forgot password?" will help if you don\'t remember the password.'
       : error.message;
@@ -1416,6 +1770,7 @@ async function handleAuthSubmit() {
 }
 
 async function signOut() {
+  _authNotice = ''; try { sessionStorage.removeItem('authNotice'); } catch (e) {}
   await fbAuth.signOut();
   await resolveAuthState();
 }
@@ -1447,35 +1802,58 @@ async function saveMyName() {
 // its confirm prompt. Looked up by id rather than passed through the inline
 // onclick, which would break on a name containing an apostrophe.
 let _adminProfiles = [];
+// allowedUsers, keyed by lowercase email: who may use the app at all, with
+// their role and whether they're an admin. Only an admin can change it.
+let _adminAllowed = new Map();
 
 async function renderAdminPanel() {
-  const snap = await db.collection('profiles').orderBy('createdAt', 'asc').get();
+  const [snap, asnap] = await Promise.all([
+    db.collection('profiles').orderBy('createdAt', 'asc').get(),
+    db.collection('allowedUsers').get().catch(() => ({ docs: [] })),
+    loadCallingsDoc(),
+  ]);
   const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   _adminProfiles = list;
+  _adminAllowed = new Map(asnap.docs.map(d => [d.id, d.data()]));
   syncUserDirectory(list);
   const row = p => {
     const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
     const isSelf = p.id === _currentUserId;
-    const isEq = p.role === 'eq', isRs = p.role === 'rs';
+    const a = _adminAllowed.get(emailKey(p.email));
+    const role = roleOf(a?.role);
+    const chk = a ? callingsCheck(p) : null;
+    const flag = chk && !chk.ok
+      ? `<div class="role-flag">Callings report: ${chk.name ? esc(chk.callings.join(', ') || 'no calling') : chk.ambiguous ? 'more than one possible match' : 'name not found'}
+          → suggests <b>${ROLE_LABEL[chk.expected]}</b>, but their role here is <b>${ROLE_LABEL[chk.current]}</b>.
+          ${chk.name ? `<button class="btn btn-primary btn-sm" style="margin-left:0.4rem" onclick="setUserRole('${p.id}','${chk.expected}')">Make ${ROLE_LABEL[chk.expected]}</button>` : ''}</div>` : '';
     return `
-    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f0f0f0;padding:0.5rem 0;gap:0.6rem">
+    <div style="border-bottom:1px solid #f0f0f0;padding:0.5rem 0">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:0.6rem;flex-wrap:wrap">
       <div><div style="font-weight:500">${name ? esc(name) + ' — ' : ''}${esc(p.email)}${isSelf ? ' <span style="font-weight:400;color:#888">(you)</span>' : ''}</div>
-      <div style="font-size:0.78rem;color:#888">${p.status} · ${isEq ? 'EQ presidency' : isRs ? 'RS presidency' : 'ward council'}${p.isAdmin ? ' · admin' : ''} · ${p.emailVerified ? '<span style="color:#155724">email verified</span>' : '<span style="color:#856404">email not verified yet</span>'}</div></div>
-      <div style="display:flex;gap:0.4rem;align-items:center;flex-shrink:0">
-        <select style="font-size:0.8rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px" onchange="setUserRole('${p.id}', this.value)" title="Which ministering lists this person can change (everyone can see them all)">
-          <option value="council" ${isEq || isRs ? '' : 'selected'}>Ward Council</option>
-          <option value="eq" ${isEq ? 'selected' : ''}>EQ Presidency</option>
-          <option value="rs" ${isRs ? 'selected' : ''}>RS Presidency</option>
-        </select>
-        ${p.status !== 'approved' ? `<button class="btn btn-primary btn-sm" onclick="setUserStatus('${p.id}','approved')">Approve</button>` : ''}
+      <div style="font-size:0.78rem;color:#888">${p.status} · ${a ? ROLE_LABEL[role] + (a.admin ? ' · admin' : '') : '<span style="color:#856404">not on the allowed list</span>'} · ${p.emailVerified ? '<span style="color:#155724">email verified</span>' : '<span style="color:#856404">email not verified yet</span>'}${chk && chk.ok ? ' · <span style="color:#155724">role matches callings</span>' : ''}</div></div>
+      <div style="display:flex;gap:0.4rem;align-items:center;flex-shrink:0;flex-wrap:wrap">
+        ${a ? `<select style="font-size:0.8rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px" onchange="setUserRole('${p.id}', this.value)" title="Which ministering lists this person can change (everyone can see them all)">
+          <option value="council" ${role === 'council' ? 'selected' : ''}>Ward Council</option>
+          <option value="eq" ${role === 'eq' ? 'selected' : ''}>EQ Presidency</option>
+          <option value="rs" ${role === 'rs' ? 'selected' : ''}>RS Presidency</option>
+        </select>` : ''}
+        ${p.status !== 'approved' || !a ? `<button class="btn btn-primary btn-sm" onclick="setUserStatus('${p.id}','approved')">Approve</button>` : ''}
+        ${a && p.status === 'approved' ? `<button class="btn btn-secondary btn-sm" onclick="resetTwoStep('${p.id}')" title="For a lost or replaced phone: they set up two-step sign-in again next time they sign in">Reset two-step</button>` : ''}
         ${p.status !== 'denied' && !isSelf ? `<button class="btn btn-danger btn-sm" onclick="setUserStatus('${p.id}','denied')">Deny</button>` : ''}
         ${p.status === 'denied' && !isSelf ? `<button class="btn btn-secondary btn-sm" onclick="removeUserProfile('${p.id}')" title="Delete this person's profile so they no longer appear here">Remove</button>` : ''}
-      </div></div>`;
+      </div></div>${flag}</div>`;
   };
   const pending = list.filter(p => p.status === 'pending');
   setAdminPendingCount(pending.length);
   document.getElementById('admin-pending-list').innerHTML = pending.length ? pending.map(row).join('') : '<div class="empty-state">No pending requests.</div>';
   document.getElementById('admin-all-list').innerHTML = list.filter(p => p.status !== 'pending').map(row).join('');
+  const missing = list.filter(p => p.status === 'approved' && !_adminAllowed.has(emailKey(p.email)));
+  document.getElementById('admin-allow-missing').innerHTML = missing.length
+    ? `<div class="role-flag" style="margin-bottom:0.6rem">${missing.length} approved ${missing.length === 1 ? 'person isn\'t' : 'people aren\'t'} on the allowed list yet, so ${missing.length === 1 ? 'they' : 'they'} will lose access once the final security rules are on.
+        <button class="btn btn-primary btn-sm" style="margin-left:0.4rem" onclick="addApprovedToAllowList()">Add ${missing.length === 1 ? 'them' : 'all ' + missing.length}</button></div>` : '';
+  const cd = _callingsDoc;
+  document.getElementById('callings-summary').textContent = cd
+    ? `Last imported ${new Date(cd.importedAt).toLocaleDateString()} by ${cd.importedBy || 'admin'} (${cd.rows} callings).` : 'Not imported yet.';
 
   const fromEl = document.getElementById('audit-from');
   const toEl   = document.getElementById('audit-to');
@@ -1503,17 +1881,24 @@ async function updateAdminPendingCount() {
   } catch (e) { console.warn('Could not count pending requests:', e?.message); }
 }
 
+function allowEntry(p, role, admin) {
+  return { email: emailKey(p.email), uid: p.id, role: roleOf(role), admin: !!admin,
+    updatedAt: new Date().toISOString(), updatedBy: _currentUserEmail || '' };
+}
+
 async function setUserRole(id, role) {
   if (!_currentUserIsAdmin) { alert('Only an admin can change roles.'); renderAdminPanel(); return; }
   const p = _adminProfiles.find(x => x.id === id) || {};
+  const a = _adminAllowed.get(emailKey(p.email));
+  if (!a) { alert('Approve this person first.'); renderAdminPanel(); return; }
   const who = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'this user';
-  const detail = role === 'eq' ? 'They can change the ministering brother lists (Brothers pool, Current and Draft brother assignments). Everyone can see all the lists.'
-    : role === 'rs' ? 'They can change the ministering sister lists (Sisters pool, Current and Draft sister assignments). Everyone can see all the lists.'
-    : 'They can see every tab, including all the ministering lists, but not change the assignment lists.';
+  const detail = role === 'eq' ? 'They can change member, household, move-in/out and unit data, and the ministering brother lists. Everyone can see all the lists.'
+    : role === 'rs' ? 'They can change member, household, move-in/out and unit data, and the ministering sister lists. Everyone can see all the lists.'
+    : 'They can see every tab, add notes, tags and next steps, and keep Covenant Path Progress — but not change member, household or assignment data.';
   // Cancelling re-renders so the dropdown snaps back to the stored value.
-  if (!confirm(`Set ${who} to ${{ eq: 'EQ Presidency', rs: 'RS Presidency' }[role] || 'Ward Council'}?\n\n${detail}`)) { renderAdminPanel(); return; }
+  if (!confirm(`Set ${who} to ${ROLE_LABEL[roleOf(role)]}?\n\n${detail}`)) { renderAdminPanel(); return; }
   try {
-    await db.collection('profiles').doc(id).update({ role });
+    await db.collection('allowedUsers').doc(emailKey(p.email)).set(allowEntry(p, role, a.admin));
   } catch (error) { alert('Failed to update: ' + error.message); renderAdminPanel(); return; }
   // Changing your own role should take effect now, not at the next reload.
   if (id === _currentUserId) { _currentUserRole = roleOf(role); applyAccessVisibility(); }
@@ -1528,8 +1913,8 @@ async function setUserStatus(id, status) {
 
   // Denying yourself is refused outright rather than merely confirmed. It
   // takes away the Admin tab, which is the only place to undo it — recovery
-  // means editing the profile document by hand in the Firebase console. A
-  // confirm can't help once someone has clicked through it.
+  // means editing the database by hand in the Firebase console. A confirm
+  // can't help once someone has clicked through it.
   if (status === 'denied' && id === _currentUserId) {
     alert('You cannot deny your own account — it would lock you out of the Admin tab, ' +
           'and undoing it would mean editing the database directly in the Firebase console.');
@@ -1538,18 +1923,53 @@ async function setUserStatus(id, status) {
 
   const msg = status === 'approved'
     ? `Approve ${who}?\n\n` +
-      `They will be able to see and edit all ward data — names, addresses, phone numbers, ` +
-      `and every note on members, households and companionships.`
+      `They will be able to see all ward data — names, addresses, phone numbers, and every note — ` +
+      `and will start as Ward Council (you can change their role after). They set up two-step sign-in the next time they sign in.`
     : `Deny ${who}?\n\n` +
       (p.isAdmin ? `${who} is an admin.\n\n` : '') +
-      `They will be locked out the next time they load the page, and cannot read or change ` +
-      `ward data from that moment on. You can approve them again later.`;
+      `They are taken off the allowed list and lose access straight away. You can approve them again later.`;
   if (!confirm(msg)) return;
 
   try {
-    await db.collection('profiles').doc(id).update({ status });
+    const b = db.batch();
+    b.update(db.collection('profiles').doc(id), { status });
+    const ref = db.collection('allowedUsers').doc(emailKey(p.email));
+    const a = _adminAllowed.get(emailKey(p.email));
+    if (status === 'approved') { if (!a) b.set(ref, allowEntry(p, 'council', false)); }
+    else if (a) b.delete(ref);
+    await b.commit();
   } catch (error) { alert('Failed to update: ' + error.message); return; }
   renderAdminPanel();
+}
+
+// One-time, when the allowed list is first set up: everyone already approved
+// goes on it with the role and admin flag you had already given them.
+async function addApprovedToAllowList() {
+  const missing = _adminProfiles.filter(p => p.status === 'approved' && !_adminAllowed.has(emailKey(p.email)));
+  if (!missing.length) return;
+  if (!confirm(`Add ${missing.length} approved ${missing.length === 1 ? 'person' : 'people'} to the allowed list, keeping the roles you've already set?\n\n` +
+      missing.map(p => `  • ${[p.firstName, p.lastName].filter(Boolean).join(' ') || p.email} — ${ROLE_LABEL[roleOf(p.role)]}${p.isAdmin ? ', admin' : ''}`).join('\n'))) return;
+  try {
+    const b = db.batch();
+    missing.forEach(p => b.set(db.collection('allowedUsers').doc(emailKey(p.email)), allowEntry(p, p.role, p.isAdmin === true)));
+    await b.commit();
+  } catch (error) { alert('Failed to update: ' + error.message); return; }
+  renderAdminPanel();
+}
+
+// Lost or replaced phone: clears their two-step setup (a Cloud Function does
+// it — only the server can). They choose a new method at their next sign-in.
+async function resetTwoStep(id) {
+  if (!_currentUserIsAdmin) return;
+  const p = _adminProfiles.find(x => x.id === id) || {};
+  const who = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'this user';
+  if (!confirm(`Reset two-step sign-in for ${who}?\n\nDo this only if they've lost or replaced their phone and asked you to. They'll be signed out everywhere, and the next time they sign in with their password they'll set up a new code method.`)) return;
+  try {
+    await firebase.functions().httpsCallable('resetTwoStep')({ uid: id });
+    alert(`Done. ${who} will set up two-step sign-in again at their next sign-in.`);
+  } catch (e) {
+    alert('Could not reset: ' + (e?.message || 'unknown error'));
+  }
 }
 
 // Removing is only offered for someone already denied, so it always takes two
@@ -1574,6 +1994,123 @@ async function removeUserProfile(id) {
   renderAdminPanel();
 }
 
+// ── Members with Callings → role check ─────────────────────────
+// The admin imports LCR's "Members with Callings" report (printed to PDF) on
+// the Admin tab. Each person with access is matched to their callings; their
+// role here should be EQ presidency for an Elders Quorum president, counselor
+// or secretary, RS presidency for a Relief Society president, counselor,
+// secretary or ministering secretary, and Ward Council otherwise. Nothing is
+// changed automatically: a role that doesn't match is flagged for the admin
+// (here and by a phone notification) to decide. Only the matches for people
+// with access are kept (adminData/callings, admin-only), not the ward's list.
+const CALLING_ROLES = {
+  eq: ['Elders Quorum President', 'Elders Quorum First Counselor', 'Elders Quorum Second Counselor', 'Elders Quorum Secretary'],
+  rs: ['Relief Society President', 'Relief Society First Counselor', 'Relief Society Second Counselor', 'Relief Society Secretary', 'Relief Society Ministering Secretary'],
+};
+const ROLE_LABEL = { eq: 'EQ Presidency', rs: 'RS Presidency', council: 'Ward Council' };
+const callingNorm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+function roleForCallings(callings) {
+  const set = new Set((callings || []).map(callingNorm));
+  if (CALLING_ROLES.eq.some(c => set.has(callingNorm(c)))) return 'eq';
+  if (CALLING_ROLES.rs.some(c => set.has(callingNorm(c)))) return 'rs';
+  return 'council';
+}
+
+// Rows of the report: { name, org, calling }. Columns come from the header
+// line (Name | Gender | Age | Birth Date | Organization | Calling | …); a row
+// is anchored on its Gender cell, and name / calling pieces that wrapped onto
+// the next line join the nearest row.
+function parseCallingsReport(pages) {
+  const rows = [];
+  pages.forEach(P => {
+    const items = P.items.filter(i => String(i.s).trim());
+    const lines = statLines({ items });
+    const hdr = lines.find(l => l.items.some(i => /^Name$/i.test(i.s.trim())) && l.items.some(i => /^Calling$/i.test(i.s.trim())));
+    if (!hdr) return;
+    const hs = hdr.items.slice().sort((a, b) => a.x - b.x);
+    const col = re => { const k = hs.findIndex(i => re.test(i.s.trim())); return k < 0 ? null : { x0: hs[k].x - 4, x1: hs[k + 1] ? hs[k + 1].x - 4 : 9999 }; };
+    const cName = col(/^Name$/i), cGender = col(/^Gender$/i), cOrg = col(/^Organization$/i), cCall = col(/^Calling$/i);
+    if (!cName || !cGender || !cCall) return;
+    const inCol = (c, i) => c && i.x >= c.x0 && i.x < c.x1;
+    const body = items.filter(i => i.y < hdr.y - 2 && !/For Church Use|Intellectual Reserve|©|^Count:/i.test(i.s));
+    const anchors = body.filter(i => inCol(cGender, i) && /^(M|F|Male|Female)$/i.test(i.s.trim())).map(i => i.y).sort((a, b) => b - a);
+    if (!anchors.length) return;
+    const gaps = anchors.slice(1).map((y, k) => anchors[k] - y).sort((a, b) => a - b);
+    const pitch = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 24;
+    const groups = anchors.map(y => ({ y, name: [], org: [], call: [] }));
+    body.forEach(i => {
+      const key = inCol(cName, i) ? 'name' : inCol(cOrg, i) ? 'org' : inCol(cCall, i) ? 'call' : null;
+      if (!key) return;
+      const g = groups.reduce((b, c) => Math.abs(c.y - i.y) < Math.abs(b.y - i.y) ? c : b);
+      if (Math.abs(g.y - i.y) <= pitch * 0.75) g[key].push(i);
+    });
+    const join = parts => parts.sort((a, b) => b.y - a.y || a.x - b.x).map(p => p.s.trim()).join(' ').replace(/\s+/g, ' ').trim();
+    groups.forEach(g => { const name = join(g.name); if (name) rows.push({ name, org: join(g.org), calling: join(g.call) }); });
+  });
+  return rows;
+}
+
+// "Last, First Middle" (report) against a person's first + last name.
+function callingNameMatch(reportName, first, last) {
+  const [l, f = ''] = String(reportName).split(',').map(s => identNorm(s));
+  const L = identNorm(last), F = identNorm(first);
+  if (!L || !F || !l) return 0;
+  const lastOk = l === L || l.split(' ').includes(L) || L.split(' ').includes(l);
+  if (!lastOk) return 0;
+  const ft = f.split(' ').filter(Boolean);
+  if (ft[0] === F) return 3;
+  if (ft.includes(F)) return 2;
+  if (ft[0] && (ft[0].startsWith(F) || F.startsWith(ft[0]))) return 1;
+  return 0;
+}
+
+let _callingsDoc = null;      // adminData/callings
+async function loadCallingsDoc() {
+  try { const d = await db.collection('adminData').doc('callings').get(); _callingsDoc = d.exists ? d.data() : null; }
+  catch (e) { _callingsDoc = null; }
+  return _callingsDoc;
+}
+
+async function handleCallingsPdf(file) {
+  const st = document.getElementById('callings-status');
+  document.getElementById('callings-file').value = '';
+  if (!file || !_currentUserIsAdmin) return;
+  st.style.color = '#555'; st.textContent = `Reading ${file.name}…`;
+  try {
+    const rows = parseCallingsReport(await readPdfPages(file, await loadPdfJs()));
+    if (!rows.length) { st.style.color = '#dc3545'; st.textContent = `No callings found in ${file.name}. Is it LCR's Members with Callings report, printed to PDF?`; return; }
+    const byName = new Map();
+    rows.forEach(r => { if (!byName.has(r.name)) byName.set(r.name, []); if (r.calling) byName.get(r.name).push(r.calling); });
+    const users = {};
+    _adminProfiles.filter(p => p.status === 'approved').forEach(p => {
+      const scored = [...byName.keys()].map(n => ({ n, s: callingNameMatch(n, p.firstName, p.lastName) })).filter(x => x.s).sort((a, b) => b.s - a.s);
+      const best = scored[0], tie = scored[1] && scored[1].s === best?.s;
+      const name = best && !tie ? best.n : null;
+      const callings = name ? byName.get(name) : [];
+      users[emailKey(p.email)] = { uid: p.id, name, callings, expected: roleForCallings(callings), ambiguous: !!tie };
+    });
+    const doc = { importedAt: new Date().toISOString(), importedBy: _currentUserName || _currentUserEmail, rows: rows.length, users };
+    await db.collection('adminData').doc('callings').set(doc);
+    _callingsDoc = doc;
+    const n = Object.keys(users).length, flagged = Object.values(users).filter(u => u.expected !== roleOfAccess(u.uid)).length;
+    st.style.color = '#155724';
+    st.textContent = `✓ Read ${rows.length} callings. Checked ${n} people with access — ${flagged ? flagged + ' need your review below.' : 'every role matches.'}`;
+    renderAdminPanel();
+  } catch (e) { console.error(e); st.style.color = '#dc3545'; st.textContent = 'Could not read that file: ' + (e?.message || e); }
+}
+
+// The role someone has here (their allowed-list entry), for comparison.
+function roleOfAccess(uid) {
+  const p = _adminProfiles.find(x => x.id === uid); if (!p) return 'council';
+  const a = _adminAllowed.get(emailKey(p.email));
+  return roleOf(a?.role);
+}
+function callingsCheck(p) {
+  const c = _callingsDoc?.users?.[emailKey(p.email)];
+  if (!c) return null;
+  return { ...c, current: roleOfAccess(p.id), ok: c.expected === roleOfAccess(p.id) };
+}
+
 // Reads from S.activityLog (part of the shared document) instead of a
 // separate audit table — one entry per saved batch of changes ("Micah
 // saved changes"), not a per-field trail like the old Postgres trigger
@@ -1596,6 +2133,235 @@ function loadAuditLog() {
   `).join('');
 }
 
+// ── Two-step sign-in ──────────────────────────────────────────
+// Everyone with access signs in with their password plus a 6-digit code:
+// texted to their phone, or from an authenticator app (Duo, Google
+// Authenticator, …). A sign-in lasts 14 days on a device; after that, or
+// whenever firestore.rules refuses a read or write because the sign-in is
+// too old, lacks the code step, or the person was taken off the allowed list,
+// they are signed out with SECURITY_NOTICE. firestore.rules enforces the same
+// things; these checks just make the app say so plainly instead of failing.
+const MAX_SESSION_MS = 14 * 24 * 3600 * 1000;
+const SECURITY_NOTICE = 'For security, please sign in again.';
+let _authNotice = '';
+let _mfaResolver = null, _mfaHint = null, _mfaVerificationId = null;
+let _enroll = null;          // { kind: 'phone', verificationId } | { kind: 'totp', secret }
+let _recaptcha = null;
+const MF = () => firebase.modular;
+const emailKey = e => String(e || '').trim().toLowerCase();
+
+// A fresh invisible reCAPTCHA for each text message (Firebase requires one
+// for SMS; it normally passes without anyone seeing it).
+function freshRecaptcha(boxId) {
+  if (_recaptcha) { try { _recaptcha.clear(); } catch (e) {} _recaptcha = null; }
+  const box = document.getElementById(boxId);
+  box.innerHTML = '<div></div>';
+  _recaptcha = new (MF().RecaptchaVerifier)(MF().auth, box.firstChild, { size: 'invisible' });
+  return _recaptcha;
+}
+
+function mfaErrorText(e) {
+  const c = e?.code || '';
+  if (/invalid-verification-code|invalid-verification-id|missing-code|totp/.test(c)) return "That code didn't work. Check the digits and try again.";
+  if (/code-expired/.test(c)) return 'That code has expired. Send a new one.';
+  if (/too-many-requests|quota-exceeded/.test(c)) return 'Too many tries for now. Wait a few minutes, then try again.';
+  if (/invalid-phone-number|missing-phone-number/.test(c)) return "That phone number doesn't look right. Enter a 10-digit US number, like 321-555-0123.";
+  if (/second-factor-already-in-use|already-enrolled/.test(c)) return 'That phone is already set up for this account.';
+  if (/operation-not-allowed|admin-restricted-operation|unsupported-first-factor/.test(c)) return "Two-step sign-in isn't switched on for this site yet. Please tell the site admin.";
+  if (/unverified-email/.test(c)) return 'Confirm your email address first, then try again.';
+  if (/network-request-failed/.test(c)) return "Couldn't reach the server. Check your connection and try again.";
+  if (/captcha/.test(c)) return 'The security check failed. Reload the page and try again.';
+  return e?.message || 'Something went wrong. Try again.';
+}
+function normalizePhone(raw) {
+  const t = String(raw || '').trim();
+  if (t.startsWith('+')) return '+' + t.replace(/\D/g, '');
+  const d = t.replace(/\D/g, '');
+  if (d.length === 10) return '+1' + d;
+  if (d.length === 11 && d[0] === '1') return '+' + d;
+  return t;
+}
+const codeOf = id => (document.getElementById(id).value || '').replace(/\D/g, '');
+
+// Why this sign-in can't be used any more, or null if it's fine.
+async function sessionProblem(force) {
+  const u = fbAuth.currentUser; if (!u) return 'signed-out';
+  let r; try { r = await u.getIdTokenResult(force); } catch (e) { return 'token'; }
+  if (!(r.claims.firebase || {}).sign_in_second_factor) return 'no-second-step';
+  if (Date.now() - (Date.parse(r.authTime) || 0) > MAX_SESSION_MS) return 'too-old';
+  return null;
+}
+// Signs out and reloads the page, so nothing from the session stays in memory
+// (ward data, a save that was refused and would otherwise never finish); the
+// notice is carried across the reload in sessionStorage.
+async function signOutForSecurity() {
+  _authNotice = SECURITY_NOTICE;
+  try { sessionStorage.setItem('authNotice', SECURITY_NOTICE); } catch (e) {}
+  try { stopPrivateListeners(); } catch (e) {}
+  try { await fbAuth.signOut(); } catch (e) {}
+  location.reload();
+  await new Promise(() => {});      // the reload takes over
+}
+// Called when a read or write was refused. True when it was handled by
+// signing out (the sign-in is too old, has no code step, or the person is no
+// longer on the allowed list); false when it's a plain "your role can't do
+// that", which the caller reports as usual.
+let _securityCheck = null;
+function isSecuritySignOut(error) {
+  if (error?.code !== 'permission-denied' || !fbAuth.currentUser) return Promise.resolve(false);
+  if (!_securityCheck) _securityCheck = (async () => {
+    let why = await sessionProblem(true);
+    if (!why) {
+      try { const a = await db.collection('allowedUsers').doc(emailKey(fbAuth.currentUser.email)).get(); if (!a.exists) why = 'not-allowed'; }
+      catch (e) { why = 'not-allowed'; }
+    }
+    if (why && fbAuth.currentUser) { console.warn('Signing out:', why); await signOutForSecurity(); return true; }
+    return false;
+  })().finally(() => { setTimeout(() => { _securityCheck = null; }, 3000); });
+  return _securityCheck;
+}
+window.addEventListener('firebase-permission-denied', e => { if (fbAuth.currentUser && _currentUserId) isSecuritySignOut(e.detail); });
+// A tab left open past the 14 days: catch it when it's looked at again.
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden || !_currentUserId || document.getElementById('app-shell').style.display !== 'block') return;
+  const why = await sessionProblem(false);
+  if (why === 'too-old') signOutForSecurity();
+});
+
+function showAuthNotice() {
+  try { const n = sessionStorage.getItem('authNotice'); if (n) _authNotice = n; } catch (e) {}   // cleared on the next sign-in
+  const el = document.getElementById('auth-notice');
+  el.textContent = _authNotice; el.style.display = _authNotice ? 'block' : 'none';
+}
+
+// ── Sign-in: the code step ──
+async function startMfaSignIn(error) {
+  _mfaResolver = MF().getMultiFactorResolver(MF().auth, error);
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('mfa-signin-screen').style.display = 'block';
+  document.getElementById('mfa-signin-error').textContent = '';
+  const hints = _mfaResolver.hints;
+  const pick = document.getElementById('mfa-signin-choose');
+  pick.innerHTML = hints.length > 1 ? '<div style="font-size:0.85rem;color:#555;margin-bottom:0.4rem">Get your code by:</div>' + hints.map((h, i) =>
+    `<button class="btn btn-secondary btn-sm" style="margin:0 0.3rem 0.3rem 0" onclick="pickMfaHint(${i})">${h.factorId === 'phone' ? 'Text to ' + esc(h.phoneNumber || 'phone') : 'Authenticator app'}</button>`).join('') : '';
+  const app = hints.findIndex(h => h.factorId === 'totp');   // an authenticator app costs nothing to use, so it goes first
+  await pickMfaHint(app >= 0 ? app : 0);
+}
+async function pickMfaHint(i) {
+  _mfaHint = _mfaResolver.hints[i];
+  const phone = _mfaHint.factorId === 'phone';
+  const err = document.getElementById('mfa-signin-error'); err.textContent = '';
+  document.getElementById('mfa-signin-resend').style.display = phone ? '' : 'none';
+  document.getElementById('mfa-signin-code').value = '';
+  document.getElementById('mfa-signin-prompt').textContent = phone
+    ? `Sending a 6-digit code by text to ${_mfaHint.phoneNumber || 'your phone'}…`
+    : 'Enter the 6-digit code from your authenticator app (Duo, Google Authenticator, …).';
+  if (phone) await sendMfaSignInCode();
+  document.getElementById('mfa-signin-code').focus();
+}
+async function sendMfaSignInCode() {
+  const err = document.getElementById('mfa-signin-error');
+  try {
+    const provider = new (MF().PhoneAuthProvider)(MF().auth);
+    _mfaVerificationId = await provider.verifyPhoneNumber({ multiFactorHint: _mfaHint, session: _mfaResolver.session }, freshRecaptcha('mfa-signin-recaptcha'));
+    document.getElementById('mfa-signin-prompt').textContent = `Enter the 6-digit code we texted to ${_mfaHint.phoneNumber || 'your phone'}.`;
+  } catch (e) { err.textContent = mfaErrorText(e); }
+}
+async function submitMfaSignIn() {
+  const err = document.getElementById('mfa-signin-error'); err.textContent = '';
+  const code = codeOf('mfa-signin-code');
+  if (code.length !== 6) { err.textContent = 'Enter all 6 digits.'; return; }
+  const btn = document.getElementById('mfa-signin-btn'); btn.disabled = true;
+  try {
+    const assertion = _mfaHint.factorId === 'phone'
+      ? MF().PhoneMultiFactorGenerator.assertion(MF().PhoneAuthProvider.credential(_mfaVerificationId, code))
+      : MF().TotpMultiFactorGenerator.assertionForSignIn(_mfaHint.uid, code);
+    await _mfaResolver.resolveSignIn(assertion);
+    _mfaResolver = null; _authNotice = '';
+    document.getElementById('mfa-signin-screen').style.display = 'none';
+    await resolveAuthState();
+  } catch (e) { err.textContent = mfaErrorText(e); }
+  finally { btn.disabled = false; }
+}
+function cancelMfaSignIn() {
+  _mfaResolver = null;
+  document.getElementById('mfa-signin-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'block';
+}
+
+// ── First time: setting up the code step ──
+function showMfaEnroll() {
+  document.getElementById('auth-loading').style.display = 'none';
+  document.getElementById('mfa-enroll-screen').style.display = 'block';
+  mfaEnrollStep('choose');
+}
+function mfaEnrollStep(step) {
+  ['choose', 'phone', 'totp', 'code'].forEach(s => { document.getElementById('mfa-step-' + s).style.display = s === step ? 'block' : 'none'; });
+  document.getElementById('mfa-enroll-error').textContent = '';
+  if (step === 'choose') _enroll = null;
+}
+async function mfaSession() { return MF().multiFactor(MF().auth.currentUser).getSession(); }
+async function enrollPhoneSend() {
+  const err = document.getElementById('mfa-enroll-error'); err.textContent = '';
+  const phoneNumber = normalizePhone(document.getElementById('mfa-enroll-phone').value);
+  if (!/^\+\d{8,15}$/.test(phoneNumber)) { err.textContent = mfaErrorText({ code: 'auth/invalid-phone-number' }); return; }
+  const btn = document.getElementById('mfa-enroll-send'); btn.disabled = true;
+  try {
+    const provider = new (MF().PhoneAuthProvider)(MF().auth);
+    const verificationId = await provider.verifyPhoneNumber({ phoneNumber, session: await mfaSession() }, freshRecaptcha('mfa-enroll-recaptcha'));
+    _enroll = { kind: 'phone', verificationId, phoneNumber };
+    mfaEnrollStep('code');
+    document.getElementById('mfa-enroll-code-prompt').textContent = `Enter the 6-digit code we just texted to ${phoneNumber}.`;
+    document.getElementById('mfa-enroll-code').value = '';
+    document.getElementById('mfa-enroll-code').focus();
+  } catch (e) { await enrollError(e); }
+  finally { btn.disabled = false; }
+}
+async function enrollTotpStart() {
+  const err = document.getElementById('mfa-enroll-error'); err.textContent = '';
+  try {
+    if (typeof qrcode === 'undefined') await loadScript('vendor/qrcode-1.4.4.js');
+    const secret = await MF().TotpMultiFactorGenerator.generateSecret(await mfaSession());
+    const url = secret.generateQrCodeUrl(fbAuth.currentUser.email, 'Ward Ministering Tool');
+    const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
+    document.getElementById('mfa-enroll-qr').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2 });
+    document.getElementById('mfa-enroll-key').textContent = secret.secretKey.replace(/(.{4})/g, '$1 ').trim();
+    _enroll = { kind: 'totp', secret };
+    mfaEnrollStep('totp');
+  } catch (e) { await enrollError(e); }
+}
+function enrollTotpNext() {
+  mfaEnrollStep('code');
+  document.getElementById('mfa-enroll-code-prompt').textContent = 'Enter the 6-digit code your authenticator app now shows for "Ward Ministering Tool".';
+  document.getElementById('mfa-enroll-code').value = '';
+  document.getElementById('mfa-enroll-code').focus();
+}
+async function enrollConfirm() {
+  const err = document.getElementById('mfa-enroll-error'); err.textContent = '';
+  const code = codeOf('mfa-enroll-code');
+  if (code.length !== 6) { err.textContent = 'Enter all 6 digits.'; return; }
+  const btn = document.getElementById('mfa-enroll-confirm'); btn.disabled = true;
+  try {
+    const assertion = _enroll.kind === 'phone'
+      ? MF().PhoneMultiFactorGenerator.assertion(MF().PhoneAuthProvider.credential(_enroll.verificationId, code))
+      : MF().TotpMultiFactorGenerator.assertionForEnrollment(_enroll.secret, code);
+    await MF().multiFactor(MF().auth.currentUser).enroll(assertion, _enroll.kind === 'phone' ? 'Phone' : 'Authenticator app');
+    _enroll = null;
+    document.getElementById('mfa-enroll-screen').style.display = 'none';
+    // Normally this sign-in now counts as done with a code. If it doesn't,
+    // sign in once more (with the new code step).
+    if (await sessionProblem(true)) { _authNotice = 'Two-step sign-in is set up. Please sign in again — this time you\'ll also enter a code.'; await fbAuth.signOut(); }
+    await resolveAuthState();
+  } catch (e) { await enrollError(e); }
+  finally { btn.disabled = false; }
+}
+async function enrollError(e) {
+  if (e?.code === 'auth/requires-recent-login' || e?.code === 'auth/user-token-expired') {
+    _authNotice = SECURITY_NOTICE; await fbAuth.signOut(); await resolveAuthState(); return;
+  }
+  document.getElementById('mfa-enroll-error').textContent = mfaErrorText(e);
+}
+
 // ── Init ─────────────────────────────────────────────────────
 let _currentUserId = null;
 let _currentUserEmail = null;
@@ -1603,6 +2369,7 @@ let _currentUserName = null;
 let _currentUserFirstName = '';
 let _currentUserLastName = '';
 let _currentUserIsAdmin = false;
+let _myAccess = null;            // allowedUsers/{email} for the signed-in person (role, admin)
 // 'eq' = Elders Quorum presidency, the full ministering tool.
 // 'council' = ward council member: Import, Members, Households and Ward
 // Council Collaboration, without the ministering assignment tabs.
@@ -1635,6 +2402,34 @@ let _currentUserRole = 'council';
 function hasFullAccess() { return true; }
 function canEditEQ() { return _currentUserRole === 'eq'; }
 function canEditRS() { return _currentUserRole === 'rs'; }
+// Member, household, move-in/out, identifier and unit data is the EQ and RS
+// presidencies' to change; ward council members add notes, tags and next
+// steps and keep Covenant Path Progress. firestore.rules enforces the same.
+function canEditWard() { return _currentUserRole === 'eq' || _currentUserRole === 'rs'; }
+function wardEditGuard() {
+  if (canEditWard()) return true;
+  alert('Only the EQ or RS presidency can change member, household, move-in/out, identifier and unit data.');
+  return false;
+}
+const COUNCIL_GROUPS = ['new', 'returning', 'mission'];
+// Which parts of wardData/shared this person may save (see firestore.rules).
+function canWriteKey(k) {
+  if (k === 'users') return true;
+  if (k.startsWith('groups.')) return COUNCIL_GROUPS.includes(k.slice(7)) || canEditWard();
+  if (k === 'current' || k === 'proposed') return canEditEQ();
+  if (k === 'currentRS' || k === 'proposedRS') return canEditRS();
+  return canEditWard();     // members, households, identMeta
+}
+// Notes: anyone writes their own; the presidencies (and an admin) may also
+// remove others' — needed when a member or household is removed — and anyone
+// may remove those on a Covenant Path Progress person they take off the list.
+function canRemoveNote(n) {
+  return !n.authorId || n.authorId === _currentUserId || canEditWard() || _currentUserIsAdmin
+    || (n.target?.type === 'group' && COUNCIL_GROUPS.includes(n.target.group));
+}
+function canWriteNote(n, existed) {
+  return existed ? (n.authorId === _currentUserId || canEditWard()) : (n.authorId === _currentUserId || n.migrated === true || canEditWard());
+}
 const LISTS = {
   current:    { min: 'eq', tab: 'current',   label: 'Current Ministering Brother Assignments' },
   proposed:   { min: 'eq', tab: 'propose',   label: 'Draft Ministering Brother Assignments' },
@@ -1655,6 +2450,9 @@ function applyAccessVisibility() {
   document.querySelectorAll('.rs-edit').forEach(el => { el.style.display = canEditRS() ? '' : 'none'; });
   document.querySelectorAll('.eq-viewonly').forEach(el => { el.style.display = canEditEQ() ? 'none' : ''; });
   document.querySelectorAll('.rs-viewonly').forEach(el => { el.style.display = canEditRS() ? 'none' : ''; });
+  // Member, household, move-in/out, identifier and unit data: EQ or RS presidency.
+  document.querySelectorAll('.ward-edit').forEach(el => { el.style.display = canEditWard() ? '' : 'none'; });
+  document.querySelectorAll('.ward-viewonly').forEach(el => { el.style.display = canEditWard() ? 'none' : ''; });
 }
 
 async function resolveAuthState() {
@@ -1663,6 +2461,8 @@ async function resolveAuthState() {
   document.getElementById('pending-screen').style.display = 'none';
   document.getElementById('app-shell').style.display = 'none';
   document.getElementById('user-menu').style.display = 'none';
+  document.getElementById('mfa-enroll-screen').style.display = 'none';
+  if (_mfaResolver) return;      // mid sign-in, on the code step
 
   const user = fbAuth.currentUser;
   if (!user) {
@@ -1673,6 +2473,7 @@ async function resolveAuthState() {
     applyAccessVisibility();
     document.getElementById('auth-loading').style.display = 'none';
     document.getElementById('auth-screen').style.display = 'block';
+    showAuthNotice();
     return;
   }
   _currentUserId = user.uid;
@@ -1723,8 +2524,19 @@ async function resolveAuthState() {
   _currentUserFirstName = profile.firstName || '';
   _currentUserLastName = profile.lastName || '';
   _currentUserName = [_currentUserFirstName, _currentUserLastName].filter(Boolean).join(' ') || _currentUserEmail;
-  _currentUserIsAdmin = profile.isAdmin === true;
-  _currentUserRole = roleOf(profile.role);
+  // Two-step sign-in: set it up the first time; after that this sign-in must
+  // have used it, and be under 14 days old.
+  if (!MF().multiFactor(MF().auth.currentUser).enrolledFactors.length) { showMfaEnroll(); return; }
+  if (await sessionProblem(false)) { await signOutForSecurity(); return; }
+
+  // Admin and role come from allowedUsers/{email}, which only an admin can
+  // change. Before someone is on that list (while it's first being filled),
+  // the profile's values are used.
+  let access = null;
+  try { const a = await db.collection('allowedUsers').doc(emailKey(user.email)).get(); access = a.exists ? a.data() : null; } catch (e) {}
+  _myAccess = access;
+  _currentUserIsAdmin = access ? access.admin === true : profile.isAdmin === true;
+  _currentUserRole = roleOf(access ? access.role : profile.role);
   _notifSeenAt = Date.parse(profile.notifSeenAt) || 0;
   applyFollowState(profile);
   applyPrivateSeenState(profile);
@@ -1732,7 +2544,19 @@ async function resolveAuthState() {
   // A council member landing on a tab they can't use (e.g. the page was left
   // on Proposed before their role changed) gets sent back to Import.
   if (!hasFullAccess() && ['brothers','current','propose'].includes(currentTabName())) showTab('import');
-  await loadAllData();
+  try { await loadAllData(); }
+  catch (e) {
+    if (await isSecuritySignOut(e)) return;
+    document.getElementById('auth-loading').style.display = 'none';
+    document.getElementById('pending-title').textContent = "Couldn't Load Ward Data";
+    document.getElementById('pending-message').textContent = e?.code === 'permission-denied'
+      ? 'Your account is signed in but not yet allowed to see the ward data. Ask the site admin to check your access.'
+      : 'The ward data could not be loaded — you may be offline. Reload to try again.';
+    ['rerequest-wrap', 'verify-wrap'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+    document.getElementById('pending-screen').style.display = 'block';
+    return;
+  }
+  moveNotesOut();
   registerSelfInDirectory();
   startPrivateListeners();
   updateMovesNavBadge();
@@ -1879,6 +2703,7 @@ function readFile(file, cb) {
 
 // ── Member Import ─────────────────────────────────────────────
 function handleMemberFile(file) {
+  if (!wardEditGuard()) return;
   readFile(file, text => {
     const parsed = parseCSV(text);
     S.rawMembers = parsed;
@@ -1902,6 +2727,7 @@ function autoMemberCols(headers) {
 }
 
 function importMembers() {
+  if (!wardEditGuard()) return;
   if (!S.rawMembers) return;
   const nameCol = document.getElementById('map-name').value;
   if (!nameCol) { alert('Map the Name column first.'); return; }
@@ -1983,6 +2809,7 @@ function isMale(g) {
 
 // ── Households Import ─────────────────────────────────────────
 function handleHouseholdsFile(file) {
+  if (!wardEditGuard()) return;
   readFile(file, text => {
     const parsed = parseCSV(text);
     S.rawHouseholds = parsed;
@@ -2011,6 +2838,7 @@ function autoHouseholdCols(headers) {
 }
 
 function importHouseholds() {
+  if (!wardEditGuard()) return;
   if (!S.rawHouseholds) return;
   const nameCol    = document.getElementById('map-hh-name').value;
   if (!nameCol) { alert('Map the Household Name column first.'); return; }
@@ -2486,6 +3314,7 @@ function renderMembers() {
 }
 
 function openLinkModal(memberId) {
+  if (!wardEditGuard()) return;
   const m = S.members.find(x => x.id === memberId);
   if (!m) return;
   document.getElementById('link-member-id').value = memberId;
@@ -2514,6 +3343,7 @@ function renderLinkHHSelect() {
 }
 
 function saveMemberLink(clear) {
+  if (!wardEditGuard()) return;
   const memberId = document.getElementById('link-member-id').value;
   const m = S.members.find(x => x.id === memberId);
   if (!m) return;
@@ -2528,6 +3358,7 @@ function saveMemberLink(clear) {
 }
 
 function openAddMemberModal() {
+  if (!wardEditGuard()) return;
   document.getElementById('nmem-name').value = '';
   document.getElementById('nmem-gender').value = '';
   document.getElementById('nmem-age').value = '';
@@ -2546,6 +3377,7 @@ function openAddMemberModal() {
 }
 
 function saveNewMember() {
+  if (!wardEditGuard()) return;
   const name = document.getElementById('nmem-name').value.trim();
   if (!name) { document.getElementById('nmem-error').textContent = 'Name is required.'; return; }
   const gender      = document.getElementById('nmem-gender').value;
@@ -2560,6 +3392,7 @@ function saveNewMember() {
 }
 
 function deleteMember(id) {
+  if (!wardEditGuard()) return;
   const m = S.members.find(x => x.id === id);
   if (!m) return;
   const assignedCount = S.current.filter(c => c.m1Id === id || c.m2Id === id).length
@@ -3419,6 +4252,7 @@ async function geocodeAddress(rawAddress) {
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function calculateDistances() {
+  if (!wardEditGuard()) return;
   const allPending = S.households.filter(hh => hh.address && !hh.lat);
   // Split into actually-geocodeable vs. permanently-ungeocodeable (PO Boxes, bare city names, etc.)
   const skipped   = allPending.filter(hh => isUngeocodeable(hh.address));
@@ -3495,6 +4329,7 @@ async function calculateDistances() {
 }
 
 function clearGeoCache() {
+  if (!wardEditGuard()) return;
   S.households.forEach(hh => { delete hh.lat; delete hh.lng; });
   dbUpsertHouseholds(S.households);
   document.getElementById('geo-status').textContent = 'Geocoding cache cleared.';
@@ -3516,6 +4351,7 @@ function saveGeoFile() {
 }
 
 function loadGeoFile(file) {
+  if (!wardEditGuard()) return;
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
@@ -3856,10 +4692,12 @@ function addNote() {
 }
 
 function deleteNote(index) {
-  if (!confirm(`Delete this ${notesFieldLabel().toLowerCase()}?`)) return;
   const target = getNotesTarget(_notesCtx);
   const field = notesField();
   if (!target?.[field]) return;
+  const t = { type: _notesCtx.type === 'brother' ? 'member' : _notesCtx.type, group: _notesCtx.groupKey };
+  if (!canRemoveNote({ ...target[field][index], target: t })) { alert('You can delete only notes you wrote.'); return; }
+  if (!confirm(`Delete this ${notesFieldLabel().toLowerCase()}?`)) return;
   target[field].splice(index, 1);
   persistNotesTarget();
   renderNotesList();
@@ -4572,6 +5410,7 @@ function dropFromMoveIns(memberIds) {
 // and next steps; each other group gets its own household at the same address
 // (coordinates copied, Pool left Out) and a fresh Move Ins entry.
 function splitMoveInEntry(id) {
+  if (!wardEditGuard()) return;
   const entry = groupList('movein').find(e => e.id === id);
   const hh = entry && hhById(entry.householdId);
   if (!entry || !hh) return;
@@ -4630,6 +5469,7 @@ function setMoveInRSPool(householdId, value) {
 }
 
 function setMoveInStatus(id, value) {
+  if (!wardEditGuard()) return;
   const e = groupList('movein').find(x => x.id === id);
   if (!e || !MOVEIN_STATUSES.some(s => s.value === value)) return;
   e.status = value;
@@ -4680,6 +5520,7 @@ function loadPdfJs() {
 let _moveInPlan = null;
 
 async function handleMoveInPdf(file) {
+  if (!wardEditGuard()) return;
   const statusEl = document.getElementById('movein-status');
   document.getElementById('movein-file').value = '';
   if (!file) return;
@@ -4918,6 +5759,7 @@ function cancelMoveInImport() {
 }
 
 async function applyMoveInPlan() {
+  if (!wardEditGuard()) return;
   const chosen = (_moveInPlan || []).filter(i => i.include);
   if (chosen.some(i => i.ambiguous && i.split === null)) return;
   const items = chosen.flatMap(expandMoveInItem);
@@ -5034,6 +5876,7 @@ function companionshipsServing(hh) {
 }
 
 async function handleMoveOutPdf(file) {
+  if (!wardEditGuard()) return;
   const statusEl = document.getElementById('moveout-status');
   document.getElementById('moveout-file').value = '';
   if (!file) return;
@@ -5204,6 +6047,7 @@ function cancelMoveOutImport() {
 }
 
 async function applyMoveOutPlan() {
+  if (!wardEditGuard()) return;
   const { members, households } = moveOutSelection();
   if (!members.length) return;
   const names = members.map(r => '  • ' + r.member.name).join('\n');
@@ -6898,6 +7742,7 @@ function statsLineChart(labels, series, opt = {}) {
 
 // ── Import ──
 async function handleStatsPdf(kind, file) {
+  if (!wardEditGuard()) return;
   const statusEl = document.getElementById('stats-status');
   document.getElementById('stats-file-' + kind).value = '';
   if (!file) return;
@@ -6960,6 +7805,7 @@ function renderStatsReview() {
 function cancelStatsImport() { _statsPlan = null; document.getElementById('stats-review').innerHTML = ''; document.getElementById('stats-status').textContent = ''; }
 
 async function applyStatsPlan() {
+  if (!wardEditGuard()) return;
   const p = _statsPlan; if (!p) return;
   const by = _currentUserName || _currentUserEmail || 'Unknown', now = new Date().toISOString();
   const d = { ...p.data }; delete d.problems;
@@ -7210,6 +8056,7 @@ function parseIdentReport(kind, pages) {
 
 let _identPlan = null;
 async function handleIdentPdf(kind, file) {
+  if (!wardEditGuard()) return;
   const statusEl = document.getElementById('ident-status');
   document.getElementById('ident-file-' + kind).value = '';
   if (!file) return;
@@ -7264,6 +8111,7 @@ function renderIdentReview() {
 function cancelIdentImport() { _identPlan = null; document.getElementById('ident-review').innerHTML = ''; document.getElementById('ident-status').textContent = ''; }
 
 function applyIdentPlan() {
+  if (!wardEditGuard()) return;
   const p = _identPlan; if (!p) return;
   const k = p.kind;
   const setI = (m, key, v) => { m.ident = { ...(m.ident || {}) }; if (v === undefined || v === false || v === null) delete m.ident[key]; else m.ident[key] = v; if (!Object.keys(m.ident).length) delete m.ident; };
@@ -7917,6 +8765,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 let _hhEditId = null;
 
 function openHHEditModal(id) {
+  if (!wardEditGuard()) return;
   const hh = S.households.find(x => x.id === id);
   if (!hh) return;
   _hhEditId = id;
@@ -7934,6 +8783,7 @@ function openHHEditModal(id) {
 }
 
 async function saveHHAddress(andGeocode) {
+  if (!wardEditGuard()) return;
   const hh = S.households.find(x => x.id === _hhEditId);
   if (!hh) return;
 
@@ -7975,6 +8825,7 @@ async function saveHHAddress(andGeocode) {
 
 // ── Add / Delete Households ─────────────────────────────────────
 function openAddHouseholdModal() {
+  if (!wardEditGuard()) return;
   document.getElementById('nhh-name').value = '';
   document.getElementById('nhh-head').value = '';
   document.getElementById('nhh-addr').value = '';
@@ -7986,6 +8837,7 @@ function openAddHouseholdModal() {
 }
 
 async function saveNewHousehold() {
+  if (!wardEditGuard()) return;
   const name = document.getElementById('nhh-name').value.trim();
   if (!name) { document.getElementById('nhh-error').textContent = 'Household name is required.'; return; }
   const head  = document.getElementById('nhh-head').value.trim();
@@ -8000,6 +8852,7 @@ async function saveNewHousehold() {
 }
 
 function deleteHousehold(id) {
+  if (!wardEditGuard()) return;
   const hh = S.households.find(x => x.id === id);
   if (!hh) return;
   const linkedMembers = S.members.filter(m => m.householdId === id);
@@ -8194,6 +9047,17 @@ function deleteHousehold(id) {
 </div>
 
 <!-- New conversation / add people -->
+<div class="modal-overlay stacked" id="chg-modal" onclick="if (event.target === this && _chgResolve) _chgResolve(false)">
+  <div class="modal" style="max-width:640px">
+    <h3>Save these changes?</h3>
+    <p style="font-size:0.85rem;color:#666;margin-bottom:0.8rem">These change ward data everyone sees. Check before → after, then save — or cancel to put it back the way it was.</p>
+    <div id="chg-body" style="max-height:55vh;overflow-y:auto;font-size:0.85rem"></div>
+    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1rem">
+      <button class="btn btn-secondary" id="chg-cancel">Cancel</button>
+      <button class="btn btn-primary" id="chg-ok">Save these changes</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="msg-people-modal">
   <div class="modal">
     <h3 id="msg-people-title">New conversation</h3>
