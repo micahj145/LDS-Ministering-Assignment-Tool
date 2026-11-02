@@ -418,6 +418,29 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
     return { pass: !(await adb.doc('privateNotes/' + id).get()).exists, obs: null };
   });
 
+  // ── Identifiers tab lists link to the rows ───────────────────
+  await check('idents', 'identifier lists link to the Members / Households rows', async () => {
+    const o = await ev(C, async () => {
+      showTab('members'); document.getElementById('member-search').value = 'zzz'; renderMembers();   // a stale search must not hide the row
+      showTab('idents');
+      const cards = [...document.querySelectorAll('#ident-body .card')];
+      const card = t => cards.find(c => c.querySelector('h2').innerText.includes(t));
+      const names = t => [...card(t).querySelectorAll('.ident-link')].map(b => b.innerText);
+      const res = { noCalling: names('without callings'), ysa: names('Young single'), partMember: names('Part-member') };
+      card('without callings').querySelector('.ident-link').click();
+      await new Promise(r => setTimeout(r, 300));
+      const row = document.querySelector('#tab-members tr.row-flash');
+      res.memberTab = document.querySelector('.tab-content.active').id; res.memberRow = row ? row.querySelector('strong').innerText : null;
+      showTab('idents'); [...document.querySelectorAll('#ident-body .card')].find(c => c.querySelector('h2').innerText.includes('Part-member')).querySelector('.ident-link').click();
+      await new Promise(r => setTimeout(r, 300));
+      const hrow = document.querySelector('#tab-households tr.row-flash');
+      res.hhTab = document.querySelector('.tab-content.active').id; res.hhRow = hrow ? hrow.querySelector('strong').innerText : null;
+      return res;
+    });
+    return { pass: o.memberTab === 'tab-members' && o.memberRow === o.noCalling[0] && o.hhTab === 'tab-households' && o.hhRow === o.partMember[0] && o.ysa.length > 0,
+      obs: o };
+  });
+
   // ── Search + nearby ────────────────────────────────────────
   await check('search', 'companionship search (minister / served / either)', async () => {
     const o = await ev(E, () => { showTab('current'); const q = document.getElementById('cs-q-current'), m = document.getElementById('cs-mode-current'); const out = {};

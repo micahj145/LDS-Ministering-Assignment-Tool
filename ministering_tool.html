@@ -153,6 +153,10 @@ tr:hover td{background:#fafbfc}
 .chg-before{color:#a12b2b;text-decoration:line-through}
 .chg-after{color:#17643a}
 .role-flag{background:#fff8e1;border:1px solid #f0d58a;border-radius:6px;padding:0.45rem 0.6rem;font-size:0.8rem;color:#6b5000;margin-top:0.4rem}
+.ident-list{display:flex;flex-direction:column;align-items:flex-start;gap:0.15rem}
+.ident-link{background:none;border:none;padding:0.15rem 0;color:#1a3a5c;text-decoration:underline;cursor:pointer;font-size:0.85rem;text-align:left;font-family:inherit}
+.ident-link:hover{color:#0d6efd}
+tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 </style>
 </head>
 <body>
@@ -3363,7 +3367,7 @@ function renderMembers() {
 
   filtered.forEach(m => {
     const hh = memberHousehold(m);
-    t += `<tr>
+    t += `<tr id="mrow-${esc(m.id)}">
       <td><strong>${esc(m.name)}</strong>${identBadgesHTML(m)}</td>
       <td>${esc(m.gender)}</td>
       <td>${m.age || ''}</td>
@@ -3546,7 +3550,7 @@ function renderHouseholds() {
     const poolBadge = poolState === 'in'    ? `<span class="badge badge-green"  style="cursor:pointer" title="In Pool — click to set Maybe"    onclick="toggleHHPool('${hh.id}')">In Pool</span>`
                     : poolState === 'maybe' ? `<span class="badge badge-yellow" style="cursor:pointer" title="Maybe — click to remove from pool" onclick="toggleHHPool('${hh.id}')">Maybe</span>`
                     :                         `<span class="badge badge-red"    style="cursor:pointer" title="Out — click to add to pool"        onclick="toggleHHPool('${hh.id}')">Out</span>`;
-    t += `<tr>
+    t += `<tr id="hrow-${esc(hh.id)}">
       <td><strong>${esc(hh.name)}</strong>${identDotsHH(hh)}</td>
       <td style="font-size:0.82rem;max-width:180px;white-space:normal">${esc(memberList) || '<span style="color:#aaa">—</span>'}</td>
       <td style="font-size:0.82rem">${esc(hh.head||'')}</td>
@@ -8220,7 +8224,9 @@ function renderIdentsTab() {
     el.innerHTML = x ? `${formatNoteDate(x.at)}${x.by ? ' · ' + esc(x.by) : ''} · ${k === 'partMember' ? `${x.households ?? '?'} households, ` : ''}${x.count} member${x.count === 1 ? '' : 's'}` : 'Not imported yet';
   });
   const host = document.getElementById('ident-body'); if (!host) return;
-  const nameList = arr => arr.length ? arr.map(m => `<span style="display:inline-block;margin:0.1rem 0.6rem 0.1rem 0;font-size:0.82rem">${esc(m.name)}</span>`).join('')
+  // One name per line; each opens that person's row on the Members tab.
+  const nameList = arr => arr.length ? `<div class="ident-list">${arr.map(m =>
+      `<button class="ident-link" onclick="showMemberRow('${esc(m.id)}')" title="Show on the Members tab">${esc(m.name)}</button>`).join('')}</div>`
     : '<span style="color:#aaa;font-size:0.82rem">No one yet.</span>';
   const byName = (a, b) => a.name.localeCompare(b.name);
   const soon = S.members.filter(bdaySoon).sort((a, b) => bdayDaysAway(a.ident.bday) - bdayDaysAway(b.ident.bday));
@@ -8234,10 +8240,34 @@ function renderIdentsTab() {
       <span style="color:#9c1d4f;white-space:nowrap">${bdayLabel(m.ident.bday)} · ${d === 0 ? 'today' : d === 1 ? 'tomorrow' : 'in ' + d + ' days'}</span></div>`; }).join('')
       : '<span style="color:#aaa;font-size:0.82rem">None in the next two weeks.</span>' + unm('bday'), 'From the last Birthdays import (month and day only).') +
     card('Members without callings', nm(identCurrentMembers('noCalling').length, 'member'), nameList(identCurrentMembers('noCalling').sort(byName)) + unm('noCalling')) +
-    card('Part-member households', nm(pmH.length, 'household'), pmH.length ? pmH.map(h => `<div style="font-size:0.84rem;padding:0.2rem 0"><strong>${esc(h.name)}</strong>
-      <span style="color:#888">· ${S.members.filter(m => m.householdId === h.id).map(m => esc(m.name)).join(', ') || 'no members linked'}</span></div>`).join('')
+    card('Part-member households', nm(pmH.length, 'household'), pmH.length ? `<div class="ident-list">${pmH.map(h =>
+      `<div><button class="ident-link" onclick="showHouseholdRow('${esc(h.id)}')" title="Show on the Households tab">${esc(h.name)}</button>
+      <span style="color:#888;font-size:0.8rem">· ${S.members.filter(m => m.householdId === h.id).map(m => esc(m.name)).join(', ') || 'no members linked'}</span></div>`).join('')}</div>`
       : '<span style="color:#aaa;font-size:0.82rem">No one yet.</span>', 'Marks the household and each member in it.') + unm('partMember') +
     card('Young single adults', nm(identCurrentMembers('ysa').length, 'member'), nameList(identCurrentMembers('ysa').sort(byName)) + unm('ysa'));
+}
+
+// Opens the Members / Households tab on one person's or household's row:
+// clears that tab's search and filter (so the row is there), scrolls to it
+// and highlights it for a moment.
+function flashRow(id) {
+  const row = document.getElementById(id); if (!row) return false;
+  row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  row.classList.remove('row-flash'); void row.offsetWidth; row.classList.add('row-flash');
+  setTimeout(() => row.classList.remove('row-flash'), 2600);
+  return true;
+}
+function showMemberRow(id) {
+  document.getElementById('member-search').value = '';
+  document.getElementById('member-link-filter').value = '';
+  showTab('members');
+  if (!flashRow('mrow-' + id)) alert('That member is no longer in the Members list.');
+}
+function showHouseholdRow(id) {
+  document.getElementById('hh-search').value = '';
+  document.getElementById('hh-addr-filter').value = '';
+  showTab('households');
+  if (!flashRow('hrow-' + id)) alert('That household is no longer in the Households list.');
 }
 
 // ── LCR Ministering Assignments (Individuals tab), printed to PDF ──

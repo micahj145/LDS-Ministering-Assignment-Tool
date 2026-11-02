@@ -503,6 +503,9 @@ Households, Brothers, Current/Proposed (cards, unassigned and Maybe lists, house
 Covenant Path Progress and Move Ins; each of those tabs has a `.ident-legend-slot` filled by
 `renderIdentLegends()` (hidden until something has been imported). 🎂 = birthday within the next 14 days
 (`BDAY_WINDOW_DAYS`), computed at render time. Filters: Members `id-*`, Households `part-member`.
+The Identifiers tab lists Members Without Callings, YSAs and Part-Member Households one per line as
+links: `showMemberRow(id)` / `showHouseholdRow(id)` clear that tab's search and filter, switch tab,
+scroll to `#mrow-{id}` / `#hrow-{id}` and flash it (`.row-flash`).
 follow.js doesn't diff `ident`, so imports don't notify followers.
 
 ### Unit Statistics tab (LCR report dashboards)
