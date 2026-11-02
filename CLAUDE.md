@@ -494,7 +494,18 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   list, applied in `compSearchRender()`. Served = household names, everyone living in those
   households, individual assignees and `extraAssignees`; every search word must appear in one name.
   While filtering, cards get no ▲▼ (positions stay those of the full list).
-- **LCR import** (`parseMinisteringReport`, card on both Current tabs, `LCR_REPORT_URLS.ministering`):
+- **EQ import: Ministering Interviews – Elders Quorum** (Nov 2026; `LCR_REPORT_URLS.ministering` =
+  `…/ministering?lang=eng&type=EQ`): `parseInterviewReport()` — per district ("District N", "Presidency
+  Member: …"), a table Companionships | months | Quarter | Households; rows found from the stripe fills
+  in the first column (shaded rows = fills, plain = gaps, as below), ministers = first column, household
+  names = last; a first row on a later page with no ministers continues the previous one. Households
+  matched by name (`findHouseholdByLcrName()`: exact normalised, unique one-sided prefix, then the head's
+  name before "&" → that member's household; exact always wins, so "Moeller, Craig" ≠ "Moeller, Craig &
+  Cynthia"); unmatched → `extraAssignees`. Saves `district` / `districtLeader` (shown on cards, copied to
+  drafts). `handleMinisteringPdf()` tries this layout first, then the Individuals-tab one. Checked on the
+  Nov 2026 EQ PDF: 26 companionships, 3 districts, 100 households. The RS card still links the
+  Individuals tab (`LCR_REPORT_URLS['ministering-rs']`) until an RS version is confirmed.
+- **LCR import, Individuals tab** (`parseMinisteringReport`, `LCR_REPORT_URLS['ministering-rs']`):
   rows from the cells' stripe fills (shaded rows = fills, plain rows = gaps); a row that continues
   past a page break has no name and joins the previous one. Companionships: groups whose members
   all list each other (assignments = those every member lists); else a one-companion row + its
@@ -503,6 +514,41 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   by assignees (all female → RS) and listed for the user to change. Replace Current (per side,
   per role) keeping id/notes of companionships with the same minister set (`minKey`). EQ:
   assignees → their households; RS: assignees stay individuals (RS households kept from before).
+
+### Nov 2026: LCR PDFs for members/households, sisters model, interviews, contacts
+- **Member List PDFs** (Import tab, top card; CSV import kept under a fold): LCR's `…/mlt/records/member-list`
+  printed in the Members view (`parseMemberListPdf`: rows anchored on the Gender cell, wrapped names join the
+  nearest row) and the Households view — a setting on the same page (`parseHouseholdListPdf`: household
+  name = the bold font of the first Name-column entry, phone/address lines plain; people anchored on
+  male/female, names wrap downward only, "First" or "Other Surname, First"). Checked on the Nov 2026 prints:
+  517 members, 352 households, 517 people (= the reports' Count). `planMembersFromPdf` / `planHouseholdsFromPdf`
+  → inline review (`renderRecReview`): likely renames (`pairRenames`: members by gender + age ±1 + `nameScore`
+  + phone; households by address (`looseKey`), phone, shared people), field changes current → LCR with a
+  tick, blank fields filled silently, new (ticked), not on LCR's list (kept unless ticked). Same-name people
+  are told apart by age (`recFind`). A rename keeps the record and stores the old name in `altNames`.
+  Members get `email` (shown, mailto) and `birthDate` (kept, never shown; CONFIRM_IGNORE) → `ident.bday`.
+  Households import links each listed person to the household (`memberForPerson`, moving them if needed).
+  `_skipConfirmOnce` skips the before/after box for those saves (already reviewed). importMeta keys stay
+  `members-csv` / `households-csv`.
+- **Alternate names**: `altNames` on members/households; `memberNameIdx()` / `householdNameIdx()` feed every
+  LCR name match (ministering, identifiers). The ministering review lists unmatched names with suggestions
+  (`nameSuggestions`); a pick is linked and remembered (`applyMinFixes`).
+- **Sisters**: companionships minister to individual sisters (`assignees`), not households. The RS household
+  pool (`hh.rsPool`) is no longer shown (Households tab column, Move Ins, RS modal, RS lists); old
+  companionships that list households still show them and can untick them. `sisters()` = every female member.
+  Receives pool `rsRecipient` is now In / Maybe / Out (`cyclePool`), also on Move Ins per sister. RS
+  ministers may include a husband (couples). RS interview import: right column → members; a household name →
+  its adult sisters. Find nearby (RS) = households of receives-pool sisters.
+- **Temporary**: `ADMIN_RS_SETUP` (app) + `adminRsSetup()` (rules) let the admin import/edit the sisters'
+  lists during the initial setup. Micah will turn both off afterwards.
+- **Interviews**: `c.interviews[YYYYQn] = { months: { Oct: [names] }, done, src, by, at }` on Current
+  companionships. Import: filled circle per minister per month + the Quarter check (`parseInterviewReport`);
+  `mergeInterviews` adds LCR's months, never removes. Current cards: month pills (`interviewRowHTML`,
+  `toggleInterview`), editable by EQ (brothers) / RS (sisters) only; stat "Interviewed Qn YYYY".
+  Not copied to drafts; ignored by the before/after box and the Draft diff.
+- **Contacts**: `telHTML` (tel:+1…), `mailHTML` (mailto:), `mapHTML` (Apple Maps on iPhone/iPad/Mac, geo:
+  on Android, Google Maps elsewhere) on Members, Households and Sisters; Members' household name links to
+  the household row, Households' people link to their member rows.
 
 ### Identifiers tab (markers beside names)
 Four LCR name reports (Members Without Callings, Part-Member Households, YSAs, Birthdays) imported

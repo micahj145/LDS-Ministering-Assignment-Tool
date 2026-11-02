@@ -139,6 +139,12 @@ service cloud.firestore {
     function groupKeysFor(r) {
       return r in ['eq', 'rs', 'bishopric'] ? ['new', 'returning', 'mission', 'movein', 'moveout'] : ['new', 'returning', 'mission'];
     }
+    // TEMPORARY (Nov 2026, initial sisters' setup): the admin may also change the
+    // sisters' lists. Set to false — with ADMIN_RS_SETUP in ministering_tool.html —
+    // once Current and the draft are in.
+    function adminRsSetup() { return true; }
+    function adminRsKeys() { return adminRsSetup() && access().get('admin', false) == true ? ['currentRS', 'proposedRS'] : []; }
+
     // importMeta.<key> = { at, by, count }: who last ran each import. Each line
     // belongs to whoever may run that import.
     function importKeysFor(r) {
@@ -152,9 +158,9 @@ service cloud.firestore {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       let groups = request.resource.data.get('groups', {}).diff(resource.data.get('groups', {})).affectedKeys();
       let imports = request.resource.data.get('importMeta', {}).diff(resource.data.get('importMeta', {})).affectedKeys();
-      return changed.hasOnly(wardKeysFor(r))
+      return changed.hasOnly(wardKeysFor(r).concat(adminRsKeys()))
         && groups.hasOnly(groupKeysFor(r))
-        && imports.hasOnly(importKeysFor(r))
+        && imports.hasOnly(importKeysFor(r).concat(adminRsKeys().size() > 0 ? ['ministering-rs'] : []))
         && request.resource.data.get('updatedByUid', '') == request.auth.uid;
     }
     match /wardData/shared {

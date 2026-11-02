@@ -305,7 +305,7 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
   await check('rs', 'toggle sister pool + recipient', async () => {
     await ev(R, () => { toggleSisterPool('m10'); toggleSisterRecipient('m3'); }); await flush(R);
     const w = await ward(); const a = w.members.find(x => x.id === 'm10'), b = w.members.find(x => x.id === 'm3');
-    return { pass: !!a.rsPool && b.rsRecipient === false, obs: { pool: a.rsPool, recipient: b.rsRecipient } };
+    return { pass: !!a.rsPool && b.rsRecipient === 'maybe', obs: { pool: a.rsPool, recipient: b.rsRecipient } };   // In → Maybe (Nov 2026: three states)
   });
   await check('rs', 'move-in RS pool select', async () => {
     await ev(R, () => setMoveInRSPool('h3', 'in')); await flush(R);
@@ -794,6 +794,120 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
         async () => { const d = (await adb.doc('wardData/stats').get()).data() || {}; return { ok: !!d[kind], obs: { keys: Object.keys(d[kind] || {}).sort() } }; });
     }
   } else rec('import', 'real-PDF imports skipped (set REAL_PDF_DIR)', true, null, 'info');
+
+  await check('round3', 'sisters: every female member listed; ministers can include a husband; no RS household pool', async () => {
+    const o = await ev(R, () => { showTab('sisters'); const n = document.querySelectorAll('#sisters-table tbody tr').length;
+      openRSModal('proposedRS'); const opts = [...document.querySelectorAll('#rs-m1 optgroup')].map(g => g.label + ':' + g.children.length); closeModal('rs-modal');
+      showTab('households'); const hhRsCol = [...document.querySelectorAll('#tab-households th')].some(th => /RS Pool/.test(th.innerText));
+      return { listed: n, females: S.members.filter(m => isFemale(m.gender)).length, opts, hhRsCol }; });
+    const admin = await ev(A, () => canEditRS());
+    const eq = await ev(E, () => canEditRS());
+    return { pass: o.listed === o.females && o.opts.length === 2 && /Brothers/.test(o.opts[1]) && !o.hhRsCol && admin && !eq, obs: { ...o, adminCanEditRS: admin, eqCan: eq } };
+  });
+  // Late, since it replaces Current: the Ministering Interviews – Elders Quorum page.
+  await check('round3', 'EQ Ministering Interviews PDF → Current (districts, households by name)', async () => {
+    const rows = [
+      ['District 1', 'Lindqvist, Erik', [[['Brandt, Hugo', 'Moreau, Jules'], ['Brandt, Hugo & Ilse', 'Tanaka, Ken', 'Nobody, Notin Ward']]]],
+      ['District 2', 'Carter, Sam', [[['Osei, Kofi', 'Tanaka, Ken'], ['Whitfield, Daniel & Grace']], [['Whitfield, Daniel'], ['Okafor, Ruth', 'Osei, Kofi']]]]];
+    const cell = 'padding:2px 0 2px 2px;vertical-align:middle;font:10px Arial';
+    const html = `<style>body{margin:40px;font:10px Arial} table{border-collapse:collapse;width:100%} th{text-align:left;${cell};background:#e3edf0}
+      tr.s td{background:#e3edf0}</style><div>Ministering Interviews - Elders Quorum</div><div>Current Quarter</div>` +
+      rows.map(([d, lead, comps]) => `<p>${d}</p><p>Presidency Member: ${lead}</p><table><tr><th style="width:150px">Companionships</th><th>Oct</th><th>Nov</th><th>Dec</th><th>Quarter 4</th><th style="width:150px">Households</th></tr>` +
+        comps.map(([ms, hh], i) => `<tr class="${i % 2 ? '' : 's'}"><td style="${cell}">${ms.map(n => `<div>${n}</div>`).join('')}</td><td></td><td></td><td></td><td></td><td style="${cell}">${hh.map(n => `<div>${n}</div>`).join('')}</td></tr>`).join('') + '</table>').join('');
+    const pg = await browser.newPage(); await pg.setContent(html);
+    const f = path.join(__dirname, 'synthetic-interviews.pdf'); await pg.pdf({ path: f, format: 'Letter', printBackground: true }); await pg.close();
+    await ev(E, () => showTab('current')); await E.page.setInputFiles('#min-file-eq', f); await sleep(2500); fs.unlinkSync(f);
+    const review = await ev(E, () => document.getElementById('min-review-eq').innerText.replace(/\s+/g, ' '));
+    await ev(E, () => applyMinPlan()); await sleep(600); await flush(E);
+    const cur = (await ward()).current;
+    const a = cur.find(c => c.m1Id === 'm5'), b = cur.find(c => c.m1Id === 'm11'), solo = cur.find(c => c.m1Id === 'm1');
+    const meta = (await ward()).importMeta?.['ministering-eq'];
+    return { pass: cur.length === 3 && a && a.m2Id === 'm7' && a.households.join() === 'h4,h6' && a.extraAssignees.join() === 'Nobody, Notin Ward' && a.district === 'District 1' && a.districtLeader === 'Lindqvist, Erik'
+        && b && b.households.join() === 'h1' && b.district === 'District 2' && solo && solo.households.join() === 'h2,h7' && /3 companionships/.test(review) && /Nobody, Notin Ward/.test(review) && meta?.count === 3,
+      obs: { n: cur.length, a: a && [a.m2Id, a.households, a.extraAssignees, a.district, a.districtLeader], b: b && [b.households, b.district], solo: solo && solo.households, review: review.slice(0, 120) } };
+  });
+
+  await check('round3', 'unmatched name: pick a household → linked and remembered for next import', async () => {
+    const mk = async () => {
+      const cell = 'padding:2px 0 2px 2px;vertical-align:middle;font:10px Arial';
+      const html = `<style>body{margin:40px;font:10px Arial} table{border-collapse:collapse;width:100%} th{text-align:left;${cell};background:#e3edf0} tr.s td{background:#e3edf0}</style>
+        <div>Ministering Interviews - Elders Quorum</div><p>District 1</p><p>Presidency Member: Carter, Sam</p><table><tr><th style="width:150px">Companionships</th><th>Oct</th><th>Nov</th><th>Dec</th><th>Quarter 4</th><th style="width:150px">Households</th></tr>
+        <tr class="s"><td style="${cell}"><div>Brandt, Hugo</div><div>Moreau, Jules</div></td><td></td><td></td><td></td><td></td><td style="${cell}"><div>Lindqvist, E.</div><div>Okafor, Ruth</div></td></tr></table><div>2 Nov 2026</div>`;
+      const pg = await browser.newPage(); await pg.setContent(html); const f = path.join(__dirname, 'synthetic-iv2.pdf'); await pg.pdf({ path: f, format: 'Letter', printBackground: true }); await pg.close(); return f;
+    };
+    let f = await mk(); await ev(E, () => showTab('current')); await E.page.setInputFiles('#min-file-eq', f); await sleep(2500);
+    const picker = await ev(E, () => { const sel = [...document.querySelectorAll('#min-review-eq select')].find(x => /Lindqvist, E\./.test(x.parentElement.innerText)); return sel ? [...sel.options].slice(0, 4).map(o => o.text) : null; });
+    await ev(E, () => { _minPlan.fixes['Lindqvist, E.'] = 'h3'; return applyMinPlan(); }); await flush(E);
+    let w = await until(async () => { const x = await ward(); return x.current.length === 1 && x; }) || await ward(); const c1 = w.current.find(c => c.m1Id === 'm5'); const alt = w.households.find(h => h.id === 'h3').altNames;
+    await E.page.setInputFiles('#min-file-eq', f); await sleep(2500); fs.unlinkSync(f);
+    const second = await ev(E, () => _minPlan.comps[0].hhs.map(x => x.h?.id || null));
+    await ev(E, () => cancelMinImport());
+    return { pass: !!picker && picker.some(t => /Lindqvist, Erik/.test(t)) && c1 && c1.households.join() === 'h3,h2' && (alt || []).includes('Lindqvist, E.') && second.join() === 'h3,h2',
+      obs: { picker, hh: c1?.households, alt, second } };
+  });
+  await check('round3', 'interviews: tick a month on Current, saved, counted; import adds LCR months', async () => {
+    const o = await ev(E, () => { showTab('current'); const c = S.current[0]; const q = quarterNow();
+      toggleInterview('current', c.id, q.months[1]); const pill = [...document.querySelectorAll('#current-list .iv-pill.on')].map(b => b.innerText);
+      const stat = document.getElementById('current-stats').innerText;
+      const merged = mergeInterviews(c.interviews, q.key, { months: { [q.months[0]]: ['X'] }, done: true }, c);
+      return { id: c.id, q: q.key, m: q.months[1], pill, stat, merged: Object.keys(merged[q.key].months).sort() }; });
+    await flush(E);
+    const c = (await ward()).current.find(x => x.id === o.id);
+    const R0 = await ev(R, () => { showTab('currentRS'); return [...document.querySelectorAll('#currentRS-list .iv-pill')].every(b => b.disabled) || !document.querySelector('#currentRS-list .iv-pill'); });
+    const council = await ev(C, () => { refreshFromCloud && null; showTab('current'); return [...document.querySelectorAll('#current-list .iv-pill')].every(b => b.disabled); });
+    return { pass: c?.interviews?.[o.q]?.months?.[o.m]?.length > 0 && o.pill.length === 1 && /1\/\d+\s*Interviewed/.test(o.stat) && o.merged.length === 2 && council,
+      obs: { stored: !!c?.interviews?.[o.q], pill: o.pill, merged: o.merged, councilReadOnly: council, rsSeesOwnOnly: R0 } };
+  });
+  await check('round3', 'RS Ministering Interviews PDF → Current sisters (individual sisters, districts)', async () => {
+    const cell = 'padding:2px 0 2px 2px;vertical-align:middle;font:10px Arial';
+    const html = `<style>body{margin:40px;font:10px Arial} table{border-collapse:collapse;width:100%} th{text-align:left;${cell};background:#e3edf0} tr.s td{background:#e3edf0}</style>
+      <div>Ministering Interviews - Relief Society</div><p>District 4 - Do not contact</p><p>Presidency Member: Unassigned</p><table><tr><th style="width:150px">Companionships</th><th>Oct</th><th>Nov</th><th>Dec</th><th>Quarter 4</th><th style="width:150px">Households</th></tr>
+      <tr class="s"><td style="${cell}"><div>Brandt, Ilse</div><div>Moreau, Claire</div></td><td></td><td></td><td></td><td></td><td style="${cell}"><div>Okafor, Ruth</div><div>Delgado, Marta</div><div>Tanaka, Ken &amp; Yumi</div></td></tr></table><div>2 Nov 2026</div>`;
+    const pg = await browser.newPage(); await pg.setContent(html); const f = path.join(__dirname, 'synthetic-rs.pdf'); await pg.pdf({ path: f, format: 'Letter', printBackground: true }); await pg.close();
+    await ev(R, () => showTab('currentRS')); await R.page.setInputFiles('#min-file-rs', f); await sleep(2500); fs.unlinkSync(f);
+    const boxes = await ev(R, () => document.getElementById('min-review-rs').innerText.match(/Replace/g)?.length || 0);
+    await ev(R, () => applyMinPlan()); await flush(R);
+    const c = (await until(async () => { const x = await ward(); return x.currentRS.some(y => y.m1Id === 'm6') && x; }) || await ward()).currentRS.find(x => x.m1Id === 'm6');
+    return { pass: !!c && c.m2Id === 'm8' && c.assignees.join() === 'm3,m12,m10' && !c.households.length && c.district === 'District 4 - Do not contact' && boxes === 1,
+      obs: { assignees: c?.assignees, hh: c?.households, district: c?.district, replaceBoxes: boxes } };
+  });
+  await check('round3', 'Member List PDF: rename kept as the same person, changes chosen, new and gone listed', async () => {
+    const rows = [['Whitfield, Daniel James', 'M', 34, '(321) 555-0101'], ['Whitfield, Grace', 'F', 32, '(321) 555-0999'], ['Okafor, Ruth', 'F', 71, ''], ['Lindqvist, Erik', 'M', 28, ''], ['Brandt, Hugo', 'M', 46, ''], ['Brandt, Ilse', 'F', 44, ''],
+      ['Moreau, Jules', 'M', 52, ''], ['Moreau, Claire', 'F', 50, ''], ['Tanaka, Ken', 'M', 39, ''], ['Tanaka, Yumi', 'F', 37, ''], ['Osei, Kofi', 'M', 23, ''], ['Newcomer, Nina Rose', 'F', 30, '(321) 555-0303']];
+    const html = `<style>body{margin:40px;font:10px Arial} td,th{text-align:left;padding:6px 8px}</style><div>Member List</div><div>Test Ward</div><table><tr><th>Name</th><th>Gender</th><th>Age</th><th>Birth Date</th><th>Phone Number</th><th>Email</th></tr>
+      ${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${/Newcomer/.test(r[0]) ? '14 Mar 1996' : '1 Jan 1990'}</td><td>${r[3]}</td><td>${/Newcomer/.test(r[0]) ? 'nina@example.org' : ''}</td></tr>`).join('')}</table><div>Count: ${rows.length}</div>`;
+    const pg = await browser.newPage(); await pg.setContent(html); const f = path.join(__dirname, 'synthetic-members.pdf'); await pg.pdf({ path: f, format: 'Letter' }); await pg.close();
+    await ev(E, () => showTab('import')); await E.page.setInputFiles('#rec-file-members', f); await sleep(2500); fs.unlinkSync(f);
+    const o = await ev(E, () => { const p = _recPlan; const r = p.pairs.find(x => x.rename); const ph = p.pairs.find(x => x.ex.id === 'm2').fields.find(f => f.key === 'phone');
+      if (ph) ph.use = false;   // keep ours
+      return { total: p.total, rename: r && [r.ex.id, r.r.name, r.same], phoneChange: !!ph, adds: p.adds.map(a => a.r.name), gone: p.gone.map(g => g.ex.name), text: document.getElementById('rec-review').innerText.slice(0, 200) }; });
+    await ev(E, () => applyRecPlan()); await flush(E);
+    const w = await until(async () => { const x = await ward(); return x.members.some(m => m.name === 'Newcomer, Nina Rose') && x; }) || await ward(); const d = w.members.find(m => m.id === 'm1'), g = w.members.find(m => m.id === 'm2'), h = w.members.find(m => m.id === 'm5');
+    const nn = w.members.find(m => m.name === 'Newcomer, Nina Rose');
+    const ui = await ev(E, id => { showTab('members'); const row = document.getElementById('mrow-' + id); return { tel: row?.querySelector('a[href^="tel:"]')?.getAttribute('href'), mail: row?.querySelector('a[href^="mailto:"]')?.getAttribute('href'), shown: /1996|Mar 14/.test(row?.innerText || '') }; }, nn?.id);
+    const hhLink = await ev(E, async () => { const b = document.querySelector('#mrow-m3 button.ident-link'); if (!b) return null; b.click(); await new Promise(r => setTimeout(r, 300)); return document.querySelector('#tab-households tr.row-flash')?.id; });
+    return { pass: nn?.email === 'nina@example.org' && nn?.birthDate === '1996-03-14' && nn?.ident?.bday === '03-14' && ui.tel === 'tel:+13215550303' && ui.mail === 'mailto:nina@example.org' && !ui.shown && hhLink === 'hrow-h2'
+        && o.total === 12 && o.rename?.[0] === 'm1' && o.rename[2] === true && o.phoneChange && o.adds.join() === 'Newcomer, Nina Rose' && o.gone.join() === 'Delgado, Marta'
+        && d.name === 'Whitfield, Daniel James' && (d.altNames || []).includes('Whitfield, Daniel') && g.phone !== '(321) 555-0999' && h.age === 46 && w.members.some(m => m.name === 'Newcomer, Nina Rose') && w.members.some(m => m.id === 'm12'),
+      obs: { ...o, text: undefined, dName: d.name, alt: d.altNames, grace: g.phone, hugoAge: h.age, email: nn?.email, bday: nn?.ident?.bday, ui, hhLink } };
+  });
+  await check('round3', 'Member List PDF (Households view): address change, people linked to their household', async () => {
+    const H = [['Whitfield, Daniel James &amp; Grace', '(321) 555-0101', ['120 Sample Ave', 'Palm Bay FL 32909-1234'], [['Daniel James', 'male', 34], ['Grace', 'female', 32]]],
+      ['Okafor, Ruth', '', ['46 Example Ct', 'Palm Bay FL 32905'], [['Ruth', 'female', 71]]],
+      ['Newcomer, Nina Rose', '(321) 555-0303', ['5 New St', 'Palm Bay FL 32909'], [['Nina Rose', 'female', 30], ['Osei, Kofi', 'male', 23]]]];
+    const L = 'line-height:14px;font:10px Arial';
+    const html = `<style>body{margin:40px;font:10px Arial} td,th{text-align:left;padding:4px 8px;vertical-align:top;${L}}</style><div>Member List</div><table><tr><th>Name</th><th>Household<br>Members</th><th>Gender</th><th>Age</th></tr>
+      ${H.map(([n, ph, ad, pp]) => `<tr><td><b>${n}</b><br>${[ph, ...ad].filter(Boolean).join('<br>')}</td><td>${pp.map(q => `<b>${q[0]}</b>`).join('<br>')}</td><td>${pp.map(q => q[1]).join('<br>')}</td><td>${pp.map(q => q[2]).join('<br>')}</td></tr>`).join('')}</table><div>Count: 3</div>`;
+    const pg = await browser.newPage(); await pg.setContent(html); const f = path.join(__dirname, 'synthetic-hh.pdf'); await pg.pdf({ path: f, format: 'Letter' }); await pg.close();
+    await E.page.setInputFiles('#rec-file-households', f); await sleep(2500); fs.unlinkSync(f);
+    const o = await ev(E, () => { const p = _recPlan; return { total: p.total, renames: p.pairs.filter(x => x.rename).map(x => [x.ex.id, x.same]), changes: p.pairs.flatMap(x => x.fields.map(f => x.ex.id + ':' + f.key)), adds: p.adds.map(a => a.r.name), gone: p.gone.length }; });
+    await ev(E, () => applyRecPlan()); await flush(E);
+    const w = await until(async () => { const x = await ward(); return x.households.some(h => /Newcomer/.test(h.name)) && x; }) || await ward(); const h1 = w.households.find(h => h.id === 'h1'), h2 = w.households.find(h => h.id === 'h2'), nh = w.households.find(h => /Newcomer/.test(h.name));
+    const kofi = w.members.find(m => m.id === 'm11'), nina = w.members.find(m => m.name === 'Newcomer, Nina Rose');
+    return { pass: o.total === 3 && o.renames.length === 1 && o.renames[0][0] === 'h1' && o.changes.includes('h2:address') && !o.changes.includes('h1:address') && o.adds.join() === 'Newcomer, Nina Rose'
+        && h1.name.startsWith('Whitfield, Daniel James') && h1.lat && h2.address.startsWith('46 Example') && !h2.lat && nh && kofi.householdId === nh.id && nina.householdId === nh.id,
+      obs: { ...o, h1: h1?.name, h1geo: !!h1?.lat, h2: h2?.address, h2geo: !!h2?.lat, kofiMoved: kofi?.householdId === nh?.id, nina: nina?.householdId === nh?.id } };
+  });
 
   // Last, since it wipes the shared doc: can a council member delete it?
   await check('rules-today', 'council deletes the whole ward doc', async () => ({ pass: true, obs: await tryOp(C2, `await db.doc('wardData/shared').delete()`) }), 'security');

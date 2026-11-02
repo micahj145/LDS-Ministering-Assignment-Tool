@@ -170,6 +170,13 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 .companionship-card.diff-changed { border-left:4px solid #e0a800; }
 .import-last { font-size:0.74rem; color:#888; margin-top:0.4rem; }
 .import-last:empty { display:none; }
+.iv-row { display:flex; flex-wrap:wrap; gap:0.3rem; align-items:center; font-size:0.76rem; color:#666; margin-top:0.4rem; }
+.iv-pill { border:1px solid #c9d3dd; background:#fff; color:#555; border-radius:10px; padding:0.05rem 0.5rem; font-size:0.74rem; cursor:pointer; }
+.iv-pill.on { background:#d4edda; border-color:#9fd3ad; color:#155724; font-weight:600; }
+.iv-pill:disabled { cursor:default; }
+.iv-done { color:#155724; font-weight:600; }
+.contact-link { color:#1a5c9c; text-decoration:none; }
+.contact-link:hover { text-decoration:underline; }
 </style>
 </head>
 <body>
@@ -361,9 +368,36 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 
 <!-- IMPORT TAB -->
 <div id="tab-import" class="tab-content active">
-  <div class="alert alert-info">
+  <div class="card member-edit">
+    <h2 style="margin:0 0 0.5rem">Members and Households from LCR</h2>
+    <p style="font-size:0.82rem;color:#888;margin:0 0 0.7rem">Tap <strong>Fetch/Print/Download</strong> to open LCR's Member List, choose the Members (or Households) view,
+      print it to PDF (Ctrl+P → Save as PDF; Android ⋮ → Share → Print → Save as PDF), then <strong>Import</strong>. Do Members first, then Households (which links people
+      to their household). You review every change first: renamed people and households keep their notes and assignments, and you choose which details to take from LCR.
+      The PDF is read in your browser and isn't uploaded.</p>
+    <div style="display:flex;gap:0.8rem;flex-wrap:wrap">
+      <div style="flex:1;min-width:170px">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">1. Members</div>
+        <input type="file" id="rec-file-members" accept=".pdf,application/pdf" style="display:none" onchange="handleRecordsPdf('members', this.files[0])">
+        <a class="btn btn-secondary lcr-fetch" data-report="members-list" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('rec-file-members').click()">Import</button>
+        <div class="import-last" data-imp="members-csv"></div>
+      </div>
+      <div style="flex:1;min-width:170px">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">2. Households</div>
+        <input type="file" id="rec-file-households" accept=".pdf,application/pdf" style="display:none" onchange="handleRecordsPdf('households', this.files[0])">
+        <a class="btn btn-secondary lcr-fetch" data-report="households-list" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('rec-file-households').click()">Import</button>
+        <div class="import-last" data-imp="households-csv"></div>
+      </div>
+    </div>
+    <div id="rec-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+    <div id="rec-review"></div>
+  </div>
+
+  <details class="card">
+  <summary style="cursor:pointer;font-weight:600;color:#1a3a5c">Or import CSV files (the older way)</summary>
+  <div class="alert alert-info" style="margin-top:0.7rem">
     Export your ward data from <strong>lcr.churchofjesuschrist.org</strong> as separate CSV files and upload them here.
-    Nothing leaves your browser — all data is stored locally.
   </div>
 
   <!-- Households first, then Members: importing households first means the
@@ -439,6 +473,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
       <div id="preview-body" style="overflow-x:auto"></div>
     </div>
   </div>
+  </details>
 
   <div class="card">
     <h2>Share / Collaborate</h2>
@@ -524,8 +559,6 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
         <option value="">All Households</option>
         <option value="in-pool">EQ Pool</option>
         <option value="maybe">EQ Maybe</option>
-        <option value="rs-in-pool">RS Pool</option>
-        <option value="rs-maybe">RS Maybe</option>
         <option value="part-member">Part-member household</option>
         <option value="out-pool">Out of Pool</option>
         <option value="has-addr">Has Address</option>
@@ -552,7 +585,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
       <datalist id="nearby-hh-list"></datalist>
       <select id="nearby-pool" onchange="renderNearby()" style="padding:0.42rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem">
         <option value="eq">EQ pool households (brothers)</option>
-        <option value="rs">RS pool households (sisters)</option>
+        <option value="rs">Households of receives-pool sisters (sisters)</option>
       </select>
       <label style="font-weight:400;font-size:0.82rem;display:flex;align-items:center;gap:0.3rem"><input type="checkbox" id="nearby-maybe" style="width:auto" onchange="renderNearby()"> include Maybe</label>
       <button class="btn btn-primary" id="nearby-go" onclick="findNearby()">Find</button>
@@ -591,9 +624,10 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
   <div class="card eq-edit" style="margin-bottom:1.25rem">
     <div class="flex-between" style="flex-wrap:wrap;gap:0.6rem">
       <div><h2 style="margin:0;border:none;padding:0">Import Current from LCR</h2>
-        <div style="font-size:0.8rem;color:#888;margin-top:0.2rem;max-width:640px">LCR's Ministering Assignments page (Individuals tab) lists brothers' and sisters'
-          companionships together. Tap <strong>Fetch/Print/Download</strong>, print the page to PDF (Ctrl+P → Save as PDF; Android ⋮ → Share → Print → Save as PDF),
-          then <strong>Import</strong>. You review it first; Current is replaced with LCR's, and notes on companionships with the same ministers are kept.</div></div>
+        <div style="font-size:0.8rem;color:#888;margin-top:0.2rem;max-width:640px">Tap <strong>Fetch/Print/Download</strong> to open LCR's Ministering page for the
+          Elders Quorum (districts, companionships, the households they visit, and interviews), print it to PDF (Ctrl+P → Save as PDF; Android ⋮ → Share → Print → Save as PDF),
+          then <strong>Import</strong>. You review it first; Current is replaced with LCR's, and notes on companionships with the same ministers are kept.
+          (The Ministering Assignments page, Individuals tab, still imports too.)</div></div>
       <div style="min-width:170px">
         <input type="file" id="min-file-eq" accept=".pdf,application/pdf" style="display:none" onchange="handleMinisteringPdf(this.files[0], 'eq')">
         <a class="btn btn-secondary lcr-fetch" data-report="ministering" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
@@ -729,12 +763,13 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
   <div class="card rs-edit" style="margin-bottom:1.25rem">
     <div class="flex-between" style="flex-wrap:wrap;gap:0.6rem">
       <div><h2 style="margin:0;border:none;padding:0">Import Current from LCR</h2>
-        <div style="font-size:0.8rem;color:#888;margin-top:0.2rem;max-width:640px">LCR's Ministering Assignments page (Individuals tab) lists brothers' and sisters'
-          companionships together. Tap <strong>Fetch/Print/Download</strong>, print the page to PDF (Ctrl+P → Save as PDF; Android ⋮ → Share → Print → Save as PDF),
-          then <strong>Import</strong>. You review it first; Current is replaced with LCR's, and notes on companionships with the same ministers are kept.</div></div>
+        <div style="font-size:0.8rem;color:#888;margin-top:0.2rem;max-width:640px">Tap <strong>Fetch/Print/Download</strong> to open LCR's Ministering page for the
+          Relief Society (districts, companionships, the sisters they minister to, and interviews), print it to PDF (Ctrl+P → Save as PDF; Android ⋮ → Share → Print → Save as PDF),
+          then <strong>Import</strong>. You review it first; Current is replaced with LCR's, and notes on companionships with the same ministers are kept.
+          (The Ministering Assignments page, Individuals tab, still imports too.)</div></div>
       <div style="min-width:170px">
         <input type="file" id="min-file-rs" accept=".pdf,application/pdf" style="display:none" onchange="handleMinisteringPdf(this.files[0], 'rs')">
-        <a class="btn btn-secondary lcr-fetch" data-report="ministering" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
+        <a class="btn btn-secondary lcr-fetch" data-report="ministering-rs" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
         <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('min-file-rs').click()">Import</button>
       </div>
     </div>
@@ -823,6 +858,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
     <div class="form-group">
       <label>Sisters they minister to</label>
       <input type="text" id="rs-asg-search" placeholder="Search sisters…" oninput="renderRSAssigneePicker()" style="margin-bottom:0.35rem">
+      <label style="font-weight:400;font-size:0.8rem;display:flex;gap:0.35rem;align-items:center;margin-bottom:0.3rem"><input type="checkbox" id="rs-asg-all" style="width:auto" onchange="renderRSAssigneePicker()"> Show all sisters, not just the receives pool</label>
       <div id="rs-asg-list" class="hh-picker"></div>
       <div id="rs-extra" style="font-size:0.76rem;color:#888;margin-top:0.3rem"></div>
     </div>
@@ -1502,8 +1538,9 @@ let _quietSyncFail = false;
 // ordering, map coordinates, and notes/goals/next steps save without asking.
 // Draft lists and Covenant Path / Move In lists save without asking too.
 const CONFIRM_KEYS = { members: 'Members', households: 'Households', current: 'Current Ministering Brother Assignments', currentRS: 'Current Ministering Sister Assignments' };
-const CONFIRM_IGNORE = new Set(['inPool', 'rsPool', 'rsRecipient', 'position', 'lat', 'lng', 'notes', 'goals', 'nextSteps']);
+const CONFIRM_IGNORE = new Set(['inPool', 'rsPool', 'rsRecipient', 'position', 'lat', 'lng', 'notes', 'goals', 'nextSteps', 'interviews', 'birthDate', 'altNames']);
 let _confirmBypass = false;
+let _skipConfirmOnce = false;   // the change was just reviewed in an import's own review
 
 function recordLabel(key, r) {
   if (!r) return '';
@@ -1550,6 +1587,7 @@ const FIELD_LABEL = { name: 'Name', gender: 'Gender', age: 'Age', phone: 'Phone'
 
 function confirmWardChanges(keys, now) {
   if (_confirmBypass) return Promise.resolve(true);
+  if (_skipConfirmOnce) { _skipConfirmOnce = false; return Promise.resolve(true); }
   const diff = wardDiff(keys, now);
   if (!Object.keys(diff).length) return Promise.resolve(true);
   const MAX = 25;
@@ -2500,7 +2538,12 @@ let _currentUserRole = 'council';
 // approved user write the ward document.
 function hasFullAccess() { return true; }
 function canEditEQ() { return _currentUserRole === 'eq'; }
-function canEditRS() { return _currentUserRole === 'rs'; }
+// TEMPORARY (Nov 2026, initial sisters' setup): the admin may also import and
+// edit the sisters' lists. Set ADMIN_RS_SETUP to false (and adminRsSetup() in
+// firestore.rules) once Current and the draft are in, so only the RS
+// presidency changes them again.
+const ADMIN_RS_SETUP = true;
+function canEditRS() { return _currentUserRole === 'rs' || (ADMIN_RS_SETUP && _currentUserIsAdmin === true); }
 // Member, household, move-in/out, identifier and unit data is the EQ and RS
 // presidencies' to change; ward council members add notes, tags and next
 // steps and keep Covenant Path Progress. firestore.rules enforces the same.
@@ -3471,7 +3514,7 @@ function renderMembers() {
   }
 
   let t = `<div style="overflow-x:auto"><table><thead><tr>
-    <th>Name</th><th>Gender</th><th>Age</th><th>Phone</th>
+    <th>Name</th><th>Gender</th><th>Age</th><th>Phone</th><th>Email</th>
     <th>Linked Household</th><th>Address on File</th><th>Link</th><th>Notes</th><th>Actions</th>
   </tr></thead><tbody>`;
 
@@ -3481,9 +3524,10 @@ function renderMembers() {
       <td><strong>${esc(m.name)}</strong>${identBadgesHTML(m)}</td>
       <td>${esc(m.gender)}</td>
       <td>${m.age || ''}</td>
-      <td>${esc(m.phone)}</td>
-      <td>${hh ? esc(hh.name) : '<span style="color:#aaa">—</span>'}</td>
-      <td style="font-size:0.82rem;color:#555">${hh?.address ? esc(hh.address) : '<span style="color:#aaa">—</span>'}</td>
+      <td style="white-space:nowrap">${telHTML(m.phone)}</td>
+      <td style="font-size:0.82rem">${mailHTML(m.email)}</td>
+      <td>${hh ? `<button class="ident-link" onclick="showHouseholdRow('${esc(hh.id)}')" title="Show this household">${esc(hh.name)}</button>` : '<span style="color:#aaa">—</span>'}</td>
+      <td style="font-size:0.82rem;color:#555">${hh?.address ? mapHTML(hh.address) : '<span style="color:#aaa">—</span>'}</td>
       <td style="white-space:nowrap">
         <span class="badge ${m.householdId ? 'badge-green' : 'badge-red'}" style="margin-right:0.4rem">${m.householdId ? 'Linked' : 'None'}</span>
         <button class="btn btn-secondary btn-sm" onclick="openLinkModal('${m.id}')">Edit</button>
@@ -3550,6 +3594,7 @@ function openAddMemberModal() {
   document.getElementById('nmem-gender').value = '';
   document.getElementById('nmem-age').value = '';
   document.getElementById('nmem-phone').value = '';
+  document.getElementById('nmem-email').value = '';
   document.getElementById('nmem-error').textContent = '';
   const sel = document.getElementById('nmem-hh');
   sel.innerHTML = '<option value="">None</option>';
@@ -3571,7 +3616,8 @@ function saveNewMember() {
   const age         = parseInt(document.getElementById('nmem-age').value) || 0;
   const phone       = document.getElementById('nmem-phone').value.trim();
   const householdId = document.getElementById('nmem-hh').value || null;
-  const m = { id: uid(), name, gender, age, phone, isBrother: isMale(gender), householdId, notes: [] };
+  const email       = document.getElementById('nmem-email').value.trim();
+  const m = { id: uid(), name, gender, age, phone, isBrother: isMale(gender), householdId, notes: [], ...(email ? { email } : {}) };
   S.members.push(m);
   dbUpsertMember(m);
   closeModal('new-member-modal');
@@ -3632,7 +3678,7 @@ function renderHouseholds() {
     <div class="stat-card"><div class="number">${list.length}</div><div class="label">Total Households</div></div>
     <div class="stat-card"><div class="number">${inPoolCount}</div><div class="label">EQ Pool</div></div>
     <div class="stat-card"><div class="number">${maybeCount}</div><div class="label">EQ Maybe</div></div>
-    <div class="stat-card"><div class="number">${list.filter(h => h.rsPool === true).length}</div><div class="label">RS Pool</div></div>
+
     <div class="stat-card"><div class="number">${withAddr}</div><div class="label">Have Address</div></div>
     <div class="stat-card"><div class="number">${geocoded}</div><div class="label">Geocoded</div></div>
   `;
@@ -3645,7 +3691,7 @@ function renderHouseholds() {
   }
 
   let t = `<div style="overflow-x:auto"><table><thead><tr>
-    <th>Household Name</th><th>Members</th><th>Head</th><th>Address</th><th>Phone</th><th>Email</th><th title="Households the EQ presidency assigns ministering brothers to">EQ Pool</th><th title="Households the RS presidency assigns ministering sisters to">RS Pool</th><th>Status</th><th>Notes</th><th>Actions</th>
+    <th>Household Name</th><th>Members</th><th>Head</th><th>Address</th><th>Phone</th><th>Email</th><th title="Households the EQ presidency assigns ministering brothers to">EQ Pool</th><th>Status</th><th>Notes</th><th>Actions</th>
   </tr></thead><tbody>`;
 
   filtered.forEach(hh => {
@@ -3654,7 +3700,7 @@ function renderHouseholds() {
       ? (hh.lat ? '<span class="badge badge-green">✓ Geocoded</span>' : '<span class="badge badge-yellow">Not geocoded</span>')
       : '<span class="badge badge-red">No address</span>';
     const addrCell = hh.address
-      ? `${esc(hh.address)}`
+      ? mapHTML(hh.address)
       : `<span style="color:#aaa">—</span>`;
     const poolState = hh.inPool === true ? 'in' : hh.inPool === 'maybe' ? 'maybe' : 'out';
     const poolBadge = poolState === 'in'    ? `<span class="badge badge-green"  style="cursor:pointer" title="In Pool — click to set Maybe"    onclick="toggleHHPool('${hh.id}')">In Pool</span>`
@@ -3662,7 +3708,9 @@ function renderHouseholds() {
                     :                         `<span class="badge badge-red"    style="cursor:pointer" title="Out — click to add to pool"        onclick="toggleHHPool('${hh.id}')">Out</span>`;
     t += `<tr id="hrow-${esc(hh.id)}">
       <td><strong>${esc(hh.name)}</strong>${identDotsHH(hh)}</td>
-      <td style="font-size:0.82rem;max-width:180px;white-space:normal">${esc(memberList) || '<span style="color:#aaa">—</span>'}</td>
+      <td style="font-size:0.82rem;max-width:180px;white-space:normal">${(() => { const linked = S.members.filter(m => m.householdId === hh.id);
+        return linked.length ? linked.map(m => `<button class="ident-link" onclick="showMemberRow('${esc(m.id)}')" title="Show on Members">${esc(m.name)}</button>`).join(', ')
+          : esc(memberList) || '<span style="color:#aaa">—</span>'; })()}</td>
       <td style="font-size:0.82rem">${esc(hh.head||'')}</td>
       <td style="font-size:0.82rem">
         <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">
@@ -3670,10 +3718,9 @@ function renderHouseholds() {
           <button class="btn btn-secondary btn-sm" style="flex-shrink:0" onclick="openHHEditModal('${hh.id}')">Edit</button>
         </div>
       </td>
-      <td style="font-size:0.82rem">${esc(hh.phone||'')}</td>
-      <td style="font-size:0.82rem">${esc(hh.email||'')}</td>
+      <td style="font-size:0.82rem;white-space:nowrap">${telHTML(hh.phone)}</td>
+      <td style="font-size:0.82rem">${mailHTML(hh.email)}</td>
       <td>${canEditEQ() ? poolBadge : poolBadge.replace(/onclick="[^"]*"/, '').replace('cursor:pointer', 'cursor:default')}</td>
-      <td>${poolBadgeRS(hh)}</td>
       <td>${addrBadge}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-secondary btn-sm" onclick="openNotesModal('household','${hh.id}')">${(hh.notes?.length||0) ? `Notes (${hh.notes.length})` : 'Notes'}</button>
@@ -3777,6 +3824,7 @@ function renderCurrent() {
     <div class="stat-card"><div class="number">${bList.length-unassigned.length}</div><div class="label">Assigned</div></div>
     <div class="stat-card"><div class="number">${unassigned.length}</div><div class="label">Unassigned</div></div>
     <div class="stat-card"><div class="number">${poolHH.length-unassignedHH.length}/${poolHH.length}</div><div class="label">HH Assigned</div></div>
+    ${interviewStat(list)}
   `;
 
   document.getElementById('current-list').innerHTML = !list.length
@@ -3890,8 +3938,9 @@ function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed', i
       ${moveBtns}
       <div class="ministers" style="flex:1">${ministers}</div>${editBtn}
     </div>
-    ${district?`<div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem">District: ${esc(district)}</div>`:''}
+    ${district?`<div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem">${/^district/i.test(district) ? esc(district) : 'District: ' + esc(district)}${rec?.districtLeader ? ' · ' + esc(rec.districtLeader) : ''}</div>`:''}
     <div>${tags}</div>
+    ${interviewRowHTML(rec, listKey)}
     ${notesBlock}
     ${distBlock}
   </div>`;
@@ -3910,6 +3959,8 @@ async function copyCurrentToProposed() {
     const hhs = c.households.map(n => hhLookup.get(norm(n)) || n);
     const rec = { id:uid(), fromId: c.id, m1Id:m1?.id||null, m1Name:c.m1Name, m2Id:m2?.id||null, m2Name:c.m2Name||'', m3Id:c.m3Id||null, m3Name:c.m3Name||'', households:hhs, extraAssignees:[...(c.extraAssignees||[])], assignees:[...(c.assignees||[])] };
     if (c.moreMinisters?.length) rec.moreMinisters = c.moreMinisters.map(m => ({ ...m }));
+    if (c.district) rec.district = c.district;
+    if (c.districtLeader) rec.districtLeader = c.districtLeader;
     return rec;
   });
   await dbReplaceCompanionshipList('proposed', S.proposed);
@@ -3948,7 +3999,7 @@ function renderProposed() {
 
   document.getElementById('proposed-list').innerHTML = !list.length
     ? '<div class="empty-state"><div class="icon">✏️</div><p>No proposals yet. Click "+ Add" to start.</p></div>'
-    : compSearchRender('proposed', list, (p, i) => companionshipHTML(p.m1Name, p.m2Name, p.households, '', p.id, 'proposed', i, list.length));
+    : compSearchRender('proposed', list, (p, i) => companionshipHTML(p.m1Name, p.m2Name, p.households, p.district || '', p.id, 'proposed', i, list.length));
 
   if (!unassigned.length) {
     document.getElementById('unassigned-list').innerHTML = bList.length === 0
@@ -5516,15 +5567,10 @@ function renderMoves() {
         <option value="maybe" ${pool === 'maybe' ? 'selected' : ''}>Maybe</option>
         <option value="out" ${pool === 'out' ? 'selected' : ''}>Out</option>
       </select>`;
-    // The RS household pool (hh.rsPool), same as the Households tab's RS Pool column.
-    const rsPool = !hh ? null : hh.rsPool === true ? 'in' : hh.rsPool === 'maybe' ? 'maybe' : 'out';
-    const rsSel = !hh ? '' : `
-      <select style="font-size:0.82rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px;font-weight:500;${poolColors[rsPool]}"
-        onchange="setMoveInRSPool('${hh.id}', this.value)" ${canEditRS() ? '' : 'disabled'} title="Whether this household is in the RS ministering pool — same setting as the Households tab (RS presidency changes it)">
-        <option value="in" ${rsPool === 'in' ? 'selected' : ''}>In Pool</option>
-        <option value="maybe" ${rsPool === 'maybe' ? 'selected' : ''}>Maybe</option>
-        <option value="out" ${rsPool === 'out' ? 'selected' : ''}>Out</option>
-      </select>`;
+    // RS: each sister's receives pool (member.rsRecipient), same as the Sisters tab.
+    const hhSisters = !hh ? [] : S.members.filter(m => m.householdId === hh.id && isFemale(m.gender));
+    const rsSel = !hhSisters.length ? '<span style="font-size:0.78rem;color:#aaa">—</span>' : hhSisters.map(m =>
+      `<div style="font-size:0.76rem;margin-bottom:0.2rem">${esc(m.name.split(',')[1]?.trim() || m.name)} ${poolBadge(m.rsRecipient, `toggleSisterRecipient('${m.id}')`, canEditRS(), { in: 'In', out: 'Out' })}</div>`).join('');
     const steps = e.nextSteps || [];
     const merged = groupMergedNotes(e);
     return `<tr>
@@ -5558,7 +5604,7 @@ function renderMoves() {
          <th style="width:22%">Household</th>
          <th style="width:14%">Status</th>
          <th style="width:9%" title="The EQ household pool (ministering brothers), same as the Households tab">EQ Pool</th>
-         <th style="width:9%" title="The RS household pool (ministering sisters), same as the Households tab">RS Pool</th>
+         <th style="width:9%" title="Each sister's receives pool (ministering sisters), same as the Sisters tab">RS Pool</th>
          <th style="width:19%">Next Step <span style="font-weight:400;color:#aaa">· most recent</span></th>
          <th style="width:19%">Notes <span style="font-weight:400;color:#aaa">· most recent</span></th>
          <th>Actions</th>
@@ -8203,13 +8249,42 @@ function identRecords(pages, kind) {
 function identFind(n, idx) {
   const exact = idx.filter(r => r.n === n);
   if (exact.length) return exact[0];
-  const near = idx.filter(r => r.n && (r.n.startsWith(n + ' ') || n.startsWith(r.n + ' ')));
-  return near.length === 1 ? near[0] : null;
+  const near = idx.filter(r => r.n && ((r.n.startsWith(n + ' ') && !r.n.startsWith(n + ' &')) || (n.startsWith(r.n + ' ') && !n.startsWith(r.n + ' &'))));
+  const recs = [...new Set(near.map(r => r.m || r.h || r))];
+  return recs.length === 1 ? near[0] : null;
+}
+
+// Name indexes that include each record's alternate names (altNames: names
+// LCR used for them that someone confirmed in an import review, and old names
+// kept after a rename), so those keep matching on every later import.
+function memberNameIdx() { const out = []; S.members.forEach(m => { out.push({ n: identNorm(m.name), m }); (m.altNames || []).forEach(a => out.push({ n: identNorm(a), m })); }); return out; }
+function householdNameIdx() { const out = []; S.households.forEach(h => { out.push({ n: identNorm(h.name), h }); (h.altNames || []).forEach(a => out.push({ n: identNorm(a), h })); }); return out; }
+function addAltName(rec, name) {
+  if (!rec || !name || identNorm(name) === identNorm(rec.name)) return;
+  const alt = rec.altNames || [];
+  if (!alt.some(a => identNorm(a) === identNorm(name))) rec.altNames = [...alt, name];
+}
+// How alike two "Last, First Middle" names are: surname word shared (+2),
+// same first given name (+3), else any given name shared (+2), else one first
+// name the start of the other (+1, "Chris" / "Christopher"). Used to suggest,
+// never to match on its own.
+function nameParts(n) { const [l, f = ''] = identNorm(n).split(','); return { last: (l || '').split(/[ -]+/).filter(Boolean), first: f.trim().split(/[ -]+/).filter(t => t && !/^(jr|sr|ii|iii|iv)\.?$/.test(t)) }; }
+function nameScore(a, b) {
+  const A = nameParts(a), B = nameParts(b); let s = 0;
+  if (A.last.some(t => B.last.includes(t))) s += 2;
+  if (A.first[0] && A.first[0] === B.first[0]) s += 3;
+  else if (A.first.some(t => B.first.includes(t))) s += 2;
+  else if (A.first[0] && B.first[0] && (A.first[0].startsWith(B.first[0]) || B.first[0].startsWith(A.first[0]))) s += 1;
+  return s;
+}
+function nameSuggestions(name, list, max = 5) {
+  return list.map(r => ({ r, s: Math.max(nameScore(name, r.name), ...(r.altNames || []).map(a => nameScore(name, a))) }))
+    .filter(x => x.s >= 2).sort((a, b) => b.s - a.s || a.r.name.localeCompare(b.r.name)).slice(0, max).map(x => x.r);
 }
 
 function parseIdentReport(kind, pages) {
-  const memberIdx0 = S.members.map(m => ({ n: identNorm(m.name), m }));
-  const hhIdx0 = S.households.map(h => ({ n: identNorm(h.name), h }));
+  const memberIdx0 = memberNameIdx();
+  const hhIdx0 = householdNameIdx();
   const titleText0 = pages.flatMap(statLines).slice(0, 8).map(l => l.text).join(' ');
   const recs = identRecords(pages, kind);
   if (recs.length) {
@@ -8231,8 +8306,8 @@ function parseIdentReport(kind, pages) {
   }
   // No table header found: fall back to reading line by line.
   const lines = pages.flatMap(statLines).map(l => l.text).filter(t => !/For Church Use Only|Intellectual Reserve/i.test(t));
-  const memberIdx = S.members.map(m => ({ n: identNorm(m.name), m }));
-  const hhIdx = S.households.map(h => ({ n: identNorm(h.name), h }));
+  const memberIdx = memberNameIdx();
+  const hhIdx = householdNameIdx();
   const hits = new Map(), hhHits = new Map(), unmatched = [];
   lines.forEach(text => {
     const n = identNorm(text);
@@ -8472,20 +8547,22 @@ function parseMinisteringReport(pages) {
 }
 
 // ── Ministering sisters ───────────────────────────────────────
-// Mirrors the brothers side, with two differences: a sisters' companionship
-// can be assigned households AND individual sisters, and there are two
-// separate pools on each sister:
-//   member.rsPool       considered as a ministering sister (true / 'maybe' / out)
-//   member.rsRecipient  in the pool of individual sisters to be ministered to
-//   household.rsPool    in the RS household pool (separate from hh.inPool, the EQ pool)
+// Mirrors the brothers side, except that sisters' companionships minister to
+// individual sisters, not households (Nov 2026: the RS household pool is no
+// longer shown or used; old companionships that list households still show
+// them). Two pools on each sister, both In / Maybe / Out, set on the Sisters tab:
+//   member.rsPool       considered as a ministering sister
+//   member.rsRecipient  to be ministered to by ministering sisters
+// Ministers can include a husband (couples), as LCR allows.
 // Lists: S.currentRS / S.proposedRS, entries
 //   { id, m1Id, m1Name, m2Id, m2Name, m3Id, m3Name, households: [hhId], assignees: [memberId],
 //     extraAssignees: [LCR names not in Members], notes, position, source }
 function isFemale(g) { return /^f/i.test(String(g || '').trim()); }
-function sisters() { return S.members.filter(m => isFemale(m.gender) && (!m.age || m.age >= 18)); }
+function sisters() { return S.members.filter(m => isFemale(m.gender)); }   // every female member (the presidency decides who's in each pool)
 function rsPoolSisters() { return sisters().filter(m => m.rsPool === true); }
 function rsMaybeSisters() { return sisters().filter(m => m.rsPool === 'maybe'); }
 function rsRecipientSisters() { return sisters().filter(m => m.rsRecipient === true); }
+function rsRecipientMaybe() { return sisters().filter(m => m.rsRecipient === 'maybe'); }
 function rsPoolHouseholds() { return S.households.filter(h => h.rsPool === true); }
 function rsMinisterIds(list) { const s = new Set(); (list || []).forEach(c => ministersOf(c).forEach(m => m.id && s.add(m.id))); return s; }
 function rsServed(list) {
@@ -8506,7 +8583,7 @@ function toggleSisterPool(id) {
 function toggleSisterRecipient(id) {
   if (!canEditRS()) return;
   const m = S.members.find(x => x.id === id); if (!m) return;
-  m.rsRecipient = m.rsRecipient === true ? false : true; dbUpsertMember(m); renderSisters();
+  m.rsRecipient = cyclePool(m.rsRecipient); dbUpsertMember(m); renderSisters(); try { renderMoves(); } catch (e) {}
 }
 function toggleHHRSPool(id) {
   if (!canEditRS()) { alert('The Relief Society presidency sets the RS household pool.'); return; }
@@ -8535,26 +8612,27 @@ function renderSisters() {
     return true;
   }).sort((a, b) => a.name.localeCompare(b.name));
   document.getElementById('sisters-stats').innerHTML = `
-    <div class="stat-card"><div class="number">${list.length}</div><div class="label">Sisters (18+)</div></div>
+    <div class="stat-card"><div class="number">${list.length}</div><div class="label">Sisters</div></div>
     <div class="stat-card"><div class="number">${rsPoolSisters().length}</div><div class="label">Ministering Pool</div></div>
     <div class="stat-card"><div class="number">${rsMaybeSisters().length}</div><div class="label">Maybe</div></div>
     <div class="stat-card"><div class="number">${list.filter(m => ministering.has(m.id)).length}</div><div class="label">Currently Ministering</div></div>
-    <div class="stat-card"><div class="number">${rsRecipientSisters().length}</div><div class="label">In Receives Pool</div></div>
+    <div class="stat-card"><div class="number">${rsRecipientSisters().length}${rsRecipientMaybe().length ? ` <span style="font-size:0.7em;color:#888">+${rsRecipientMaybe().length} maybe</span>` : ''}</div><div class="label">In Receives Pool</div></div>
     <div class="stat-card"><div class="number">${list.filter(hasMS).length}</div><div class="label">Have Ministering Sisters</div></div>`;
   if (!rows.length) {
     document.getElementById('sisters-table').innerHTML = list.length ? '<div class="empty-state"><div class="icon">🔍</div><p>No results.</p></div>'
-      : '<div class="empty-state"><div class="icon">📋</div><p>No sisters in Members yet (women 18 and older).</p></div>';
+      : '<div class="empty-state"><div class="icon">📋</div><p>No sisters in Members yet.</p></div>';
     return;
   }
   document.getElementById('sisters-table').innerHTML = `<div style="overflow-x:auto"><table><thead><tr>
-    <th>Name</th><th>Household</th><th>Phone</th><th title="Considered as a ministering sister">Ministering Pool</th><th title="In the pool of individual sisters to be ministered to">Receives Pool</th>
+    <th>Name</th><th>Age</th><th>Household</th><th>Phone</th><th title="Considered as a ministering sister">Ministering Pool</th><th title="In the pool of individual sisters to be ministered to">Receives Pool</th>
     <th>Ministering</th><th>Has Ministering Sisters</th><th>Notes</th></tr></thead><tbody>${rows.map(m => {
       const hh = memberHousehold(m);
       return `<tr><td><strong>${esc(m.name)}</strong>${identBadgesHTML(m)}</td>
-        <td style="font-size:0.82rem">${hh ? esc(hh.name) : '<span style="color:#aaa">—</span>'}</td>
-        <td style="font-size:0.82rem">${esc(m.phone || '')}</td>
+        <td style="font-size:0.82rem">${m.age || ''}</td>
+        <td style="font-size:0.82rem">${hh ? `<button class="ident-link" onclick="showHouseholdRow('${esc(hh.id)}')">${esc(hh.name)}</button>` : '<span style="color:#aaa">—</span>'}</td>
+        <td style="font-size:0.82rem;white-space:nowrap">${telHTML(m.phone)}</td>
         <td>${poolBadge(m.rsPool, `toggleSisterPool('${m.id}')`, can)}</td>
-        <td>${poolBadge(m.rsRecipient === true, `toggleSisterRecipient('${m.id}')`, can, { in: 'Yes', out: 'No' })}</td>
+        <td>${poolBadge(m.rsRecipient, `toggleSisterRecipient('${m.id}')`, can, { in: 'In Pool', out: 'Out' })}</td>
         <td><span class="badge ${ministering.has(m.id) ? 'badge-green' : 'badge-red'}">${ministering.has(m.id) ? 'Assigned' : 'Unassigned'}</span></td>
         <td>${hasMS(m) ? '<span class="badge badge-green">Yes</span>' : '<span style="color:#aaa">—</span>'}</td>
         <td><button class="btn btn-secondary btn-sm" onclick="openNotesModal('member','${m.id}')">${(m.notes?.length || 0) ? `Notes (${m.notes.length})` : 'Notes'}</button></td></tr>`;
@@ -8566,7 +8644,7 @@ function exportSistersCSV() {
   const mi = rsMinisterIds(S.currentRS);
   let csv = 'Name,Household,Phone,MinisteringPool,ReceivesPool,CurrentlyMinistering\n';
   list.forEach(m => { const hh = memberHousehold(m);
-    csv += [m.name, hh ? hh.name : '', m.phone, m.rsPool === true ? 'In' : m.rsPool === 'maybe' ? 'Maybe' : 'Out', m.rsRecipient === true ? 'Yes' : 'No', mi.has(m.id) ? 'Yes' : 'No']
+    csv += [m.name, hh ? hh.name : '', m.phone, m.rsPool === true ? 'In' : m.rsPool === 'maybe' ? 'Maybe' : 'Out', m.rsRecipient === true ? 'In' : m.rsRecipient === 'maybe' ? 'Maybe' : 'Out', mi.has(m.id) ? 'Yes' : 'No']
       .map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',') + '\n'; });
   dlCSV(csv, 'sisters.csv');
 }
@@ -8589,7 +8667,9 @@ function rsCompanionshipHTML(c, listKey, idx, total) {
         ${can ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openRSModal('${listKey}','${c.id}')">Edit</button>` : ''}
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openNotesModal('${listKey}','${c.id}')">${notes.length ? `Notes (${notes.length})` : 'Notes'}</button></div>
     </div>
+    ${c.district ? `<div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem">${esc(c.district)}${c.districtLeader && c.districtLeader !== 'Unassigned' ? ' · ' + esc(c.districtLeader) : ''}</div>` : ''}
     <div>${hhTags}${sisTags}${extra || ''}${!hhTags && !sisTags && !extra ? '<span style="color:#aaa;font-size:0.82rem">No one assigned</span>' : ''}</div>
+    ${interviewRowHTML(c, listKey)}
     ${notes.map(n => `<div style="margin-top:0.35rem;padding:0.28rem 0.55rem;border-left:3px solid #f2c1d6;font-size:0.8rem;color:#555">
       <span style="font-weight:600;color:#1a3a5c">${esc(n.author)}</span><span style="color:#aaa;font-size:0.75rem"> · ${formatNoteDate(n.date)}</span>
       <div style="margin-top:0.1rem;white-space:pre-wrap;font-style:italic">${esc(n.text)}</div></div>`).join('')}
@@ -8599,15 +8679,14 @@ function rsCompanionshipHTML(c, listKey, idx, total) {
 function renderRSList(listKey, prefix) {
   const list = S[listKey] || [];
   const mi = rsMinisterIds(list), served = rsServed(list);
-  const pool = rsPoolSisters(), recip = rsRecipientSisters(), hhPool = rsPoolHouseholds();
+  const pool = rsPoolSisters(), recip = rsRecipientSisters();
   const unMin = pool.filter(m => !mi.has(m.id));
   const unRecip = recip.filter(m => !served.mem.has(m.id) && !served.hh.has(m.householdId));
-  const unHH = hhPool.filter(h => !served.hh.has(h.id));
   document.getElementById(prefix + '-stats').innerHTML = `
     <div class="stat-card"><div class="number">${list.length}</div><div class="label">Companionships</div></div>
     <div class="stat-card"><div class="number">${pool.length - unMin.length}/${pool.length}</div><div class="label">Pool Sisters Ministering</div></div>
-    <div class="stat-card"><div class="number">${hhPool.length - unHH.length}/${hhPool.length}</div><div class="label">RS Pool Households Assigned</div></div>
-    <div class="stat-card"><div class="number">${recip.length - unRecip.length}/${recip.length}</div><div class="label">Receives-Pool Sisters Assigned</div></div>`;
+    <div class="stat-card"><div class="number">${recip.length - unRecip.length}/${recip.length}</div><div class="label">Receives-Pool Sisters Assigned</div></div>
+    ${listKey === 'currentRS' ? interviewStat(list) : ''}`;
   document.getElementById(listKey + '-list').innerHTML = list.length ? compSearchRender(listKey, list, (c, i) => rsCompanionshipHTML(c, listKey, i, list.length))
     : `<div class="empty-state"><div class="icon">✏️</div><p>${listKey === 'currentRS' ? 'No current sister assignments yet — import them from LCR above.' : 'No draft yet. Click "+ Add", or copy Current to the draft.'}</p></div>`;
   const li = (inner) => `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">${inner}</li>`;
@@ -8616,11 +8695,7 @@ function renderRSList(listKey, prefix) {
     : !unMin.length ? '<p style="color:#155724;font-size:0.88rem">✓ Every pool sister is ministering.</p>'
     : `<p style="font-size:0.82rem;color:#888;margin-bottom:0.5rem">${unMin.length} not yet assigned:</p><ul style="list-style:none;padding:0">${unMin.map(m => li(`${esc(m.name)}${identBadgesHTML(m)}`)).join('')}</ul>`;
   document.getElementById(prefix + '-unserved').innerHTML = `
-    <div style="font-size:0.82rem;font-weight:600;color:#1a3a5c;margin-bottom:0.3rem">RS pool households (${unHH.length})</div>
-    ${!hhPool.length ? '<p style="color:#888;font-size:0.84rem">No households in the RS pool yet — set them on the Households tab.</p>'
-      : !unHH.length ? '<p style="color:#155724;font-size:0.84rem">✓ All assigned.</p>'
-      : `<ul style="list-style:none;padding:0;margin-bottom:0.8rem">${unHH.map(h => li(`${esc(h.name)}${identDotsHH(h)}`)).join('')}</ul>`}
-    <div style="font-size:0.82rem;font-weight:600;color:#1a3a5c;margin:0.4rem 0 0.3rem">Receives-pool sisters (${unRecip.length})</div>
+    <div style="font-size:0.82rem;font-weight:600;color:#1a3a5c;margin:0 0 0.3rem">Receives-pool sisters (${unRecip.length})</div>
     ${!recip.length ? '<p style="color:#888;font-size:0.84rem">No sisters in the receives pool yet — set them on the Sisters tab.</p>'
       : !unRecip.length ? '<p style="color:#155724;font-size:0.84rem">✓ All assigned.</p>'
       : `<ul style="list-style:none;padding:0">${unRecip.map(m => li(`${esc(m.name)}${identBadgesHTML(m)}`)).join('')}</ul>`}`;
@@ -8633,7 +8708,9 @@ let _rsCtx = null;
 function rsMinisterOptions(sel) {
   const pool = new Set(rsPoolSisters().map(m => m.id)), maybe = new Set(rsMaybeSisters().map(m => m.id));
   const list = sisters().sort((a, b) => (pool.has(b.id) - pool.has(a.id)) || (maybe.has(b.id) - maybe.has(a.id)) || a.name.localeCompare(b.name));
-  return `<option value="">—</option>` + list.map(m => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${pool.has(m.id) ? '★ ' : maybe.has(m.id) ? '☆ ' : ''}${esc(m.name)}</option>`).join('');
+  const men = S.members.filter(m => !isFemale(m.gender) && (!m.age || m.age >= 18)).sort((a, b) => a.name.localeCompare(b.name));
+  return `<option value="">—</option><optgroup label="Sisters">` + list.map(m => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${pool.has(m.id) ? '★ ' : maybe.has(m.id) ? '☆ ' : ''}${esc(m.name)}</option>`).join('')
+    + `</optgroup><optgroup label="Brothers (with their wife, as a couple)">` + men.map(m => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${esc(m.name)}</option>`).join('') + '</optgroup>';
 }
 function openRSModal(listKey, id) {
   if (!canEditList(listKey)) return;
@@ -8654,15 +8731,17 @@ function renderRSAssigneePicker() {
   const ctx = _rsCtx; if (!ctx) return;
   const q = norm(document.getElementById('rs-asg-search').value);
   const others = (S[ctx.listKey] || []).filter(c => c.id !== ctx.id), taken = rsServed(others);
-  const hhs = S.households.filter(h => h.rsPool === true || ctx.hh.has(h.id)).filter(h => !q || norm(h.name).includes(q)).sort((a, b) => a.name.localeCompare(b.name));
-  const sis = sisters().filter(m => m.rsRecipient === true || ctx.mem.has(m.id)).filter(m => !q || norm(m.name).includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+  const hhs = S.households.filter(h => ctx.hh.has(h.id)).filter(h => !q || norm(h.name).includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+  const all = !!document.getElementById('rs-asg-all')?.checked;
+  const sis = sisters().filter(m => all || m.rsRecipient === true || m.rsRecipient === 'maybe' || ctx.mem.has(m.id)).filter(m => !q || norm(m.name).includes(q))
+    .sort((a, b) => ((b.rsRecipient === true) - (a.rsRecipient === true)) || a.name.localeCompare(b.name));
   const row = (kind, id, label, dots, isTaken, on) => `<label><input type="checkbox" ${on ? 'checked' : ''} onchange="rsPick('${kind}','${id}',this.checked)">
     <span>${kind === 'hh' ? '🏠 ' : ''}${esc(label)}${dots}${isTaken && !on ? ' <span style="color:#aaa;font-size:0.76rem">(assigned elsewhere)</span>' : ''}</span></label>`;
   document.getElementById('rs-asg-list').innerHTML =
-    `<div style="font-size:0.74rem;font-weight:600;color:#888;padding:0.3rem 0.65rem">RS POOL HOUSEHOLDS</div>` +
-    (hhs.map(h => row('hh', h.id, h.name, identDotsHH(h), taken.hh.has(h.id), ctx.hh.has(h.id))).join('') || '<div style="color:#aaa;font-size:0.8rem;padding:0.2rem 0.65rem">None in the RS pool (Households tab).</div>') +
-    `<div style="font-size:0.74rem;font-weight:600;color:#888;padding:0.5rem 0.65rem 0.3rem">RECEIVES-POOL SISTERS</div>` +
-    (sis.map(m => row('mem', m.id, m.name, identBadgesHTML(m), taken.mem.has(m.id), ctx.mem.has(m.id))).join('') || '<div style="color:#aaa;font-size:0.8rem;padding:0.2rem 0.65rem">None in the receives pool (Sisters tab).</div>');
+    `<div style="font-size:0.74rem;font-weight:600;color:#888;padding:0.3rem 0.65rem">SISTERS ${all ? '(EVERYONE)' : '(RECEIVES POOL; ☆ = MAYBE)'}</div>` +
+    (sis.map(m => row('mem', m.id, (m.rsRecipient === 'maybe' ? '☆ ' : '') + m.name, identBadgesHTML(m), taken.mem.has(m.id), ctx.mem.has(m.id))).join('') || '<div style="color:#aaa;font-size:0.8rem;padding:0.2rem 0.65rem">No one in the receives pool yet (Sisters tab) — tick "Show all sisters".</div>') +
+    (hhs.length ? `<div style="font-size:0.74rem;font-weight:600;color:#888;padding:0.5rem 0.65rem 0.3rem">HOUSEHOLDS (FROM AN EARLIER ASSIGNMENT — UNTICK TO REMOVE)</div>` +
+      hhs.map(h => row('hh', h.id, h.name, identDotsHH(h), taken.hh.has(h.id), ctx.hh.has(h.id))).join('') : '');
 }
 function rsPick(kind, id, on) { const set = _rsCtx[kind]; on ? set.add(id) : set.delete(id); }
 function saveRSCompanionship() {
@@ -8688,8 +8767,8 @@ function deleteRSCompanionship() {
   closeModal('rs-modal');
   ctx.listKey === 'currentRS' ? renderCurrentRS() : renderProposedRS();
 }
-const rsCopy = c => ({ ...c, id: uid(), fromId: c.id, notes: [], households: [...(c.households || [])], assignees: [...(c.assignees || [])], extraAssignees: [...(c.extraAssignees || [])],
-  ...(c.moreMinisters ? { moreMinisters: c.moreMinisters.map(m => ({ ...m })) } : {}) });
+const rsCopy = c => { const { interviews, ...rest } = c; return { ...rest, id: uid(), fromId: c.id, notes: [], households: [...(c.households || [])], assignees: [...(c.assignees || [])], extraAssignees: [...(c.extraAssignees || [])],
+  ...(c.moreMinisters ? { moreMinisters: c.moreMinisters.map(m => ({ ...m })) } : {}) }; };
 async function copyRSToDraft() {
   if (!canEditRS()) return;
   if (!S.currentRS.length) { alert('No current sister assignments to copy.'); return; }
@@ -8723,6 +8802,81 @@ function exportRS(listKey) {
 }
 
 // ── Importing LCR's Ministering Assignments into Current ──
+// LCR "Ministering Interviews – Elders Quorum" (…/ministering?type=EQ), printed to PDF.
+// Per district: "District N", "Presidency Member: Name", then a table
+// Companionships | Oct | Nov | Dec | Quarter N | Households. Each table row is
+// one companionship: ministers in the first column, household names in the
+// last. Rows alternate shaded (drawn as fills) and plain (the gaps between),
+// like the Individuals-tab report.
+// A row cut by a page break continues, with
+// no ministers, at the top of the next page's table.
+// Interviews: each minister's line has a circle per month, filled when that
+// month's interview is recorded; the Quarter column has a (green) check when
+// the companionship's quarter is done. The year comes from the print date.
+function parseInterviewReport(pages) {
+  const out = []; let district = '', leader = '', title = '', months = [], quarter = '', year = '';
+  const MONTH = /^(Companionships|Households|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Quarter \d)$/i;
+  pages.forEach((P, pi) => {
+    if (!title) title = (P.items.find(i => /^Ministering Interviews/i.test(i.s)) || {}).s || '';
+    if (!year) { const d = P.items.map(i => i.s.match(/^\d{1,2} [A-Z][a-z]{2} (\d{4})$/)).find(Boolean); if (d) year = d[1]; }
+    const heads = P.items.filter(i => /^Companionships$/i.test(i.s)).sort((a, b) => b.y - a.y);
+    const hh = P.items.find(i => /^Households$/i.test(i.s));
+    const body = P.items.filter(i => i.y > 22 && !MONTH.test(i.s) && !/For Church Use|Intellectual Reserve|©/.test(i.s));
+    const marks = body.filter(i => /^District\b/i.test(i.s) || /^Presidency Member/i.test(i.s));
+    // markers above the first table on this page
+    const take = m => { if (/^District/i.test(m.s)) { district = m.s.trim(); leader = ''; }
+      else leader = (m.s.replace(/^Presidency Member:?\s*/i, '') || P.items.filter(i => Math.abs(i.y - m.y) < 2 && i.x > m.x + 5).map(i => i.s).join(' ')).trim(); };
+    if (!heads.length || !hh) { marks.forEach(take); return; }
+    const xC = heads[0].x, xH = hh.x;
+    const mHeads = P.items.filter(i => /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/.test(i.s.trim()) && Math.abs(i.y - heads[0].y) < 3).sort((a, b) => a.x - b.x);
+    const qHead = P.items.find(i => /^Quarter \d$/.test(i.s.trim()) && Math.abs(i.y - heads[0].y) < 3);
+    if (!months.length) months = mHeads.map(i => i.s.trim());
+    if (!quarter && qHead) quarter = qHead.s.trim().slice(-1);
+    const dots = P.shapes.filter(s => s.kind === 'fill' && s.w > 7 && s.w < 12 && s.h > 7 && s.h < 12 && s.fill && s.fill !== '255,255,255');
+    const filledFor = it => mHeads.filter(m => dots.some(d => d.cx > m.x - 2 && d.cx < m.x + 14 && Math.abs(d.cy - (it.y + it.h / 2)) < 5)).map(m => m.s.trim());
+    const checkIn = (y0, y1) => !!qHead && P.shapes.some(s => s.kind === 'fill' && s.fill && !['255,255,255', '229,229,229'].includes(s.fill) && s.h < 12 && s.cx > qHead.x - 4 && s.cx < xH - 4 && s.cy > y0 && s.cy < y1);
+    heads.forEach((h, hi) => {
+      marks.filter(m => m.y > h.y && (hi === 0 || m.y < heads[hi - 1].y)).sort((a, b) => b.y - a.y).forEach(take);
+      const nextMark = marks.filter(m => m.y < h.y).sort((a, b) => b.y - a.y)[0];
+      const bottom = nextMark ? nextMark.y + 8 : 20;
+      const fills = P.shapes.filter(s => s.kind === 'fill' && Math.abs(s.x0 - (xC - 1)) < 4 && s.h > 4);
+      const headBand = fills.find(s => s.y0 <= h.y + 1 && s.y1 >= h.y + 1);
+      let cur = headBand ? headBand.y0 : h.y - 4;
+      const stripes = fills.filter(s => s.fill && s.fill !== '255,255,255' && s.y1 <= cur + 1 && s.y0 >= bottom - 2)
+        .map(s => [s.y0, s.y1]).sort((a, b) => b[1] - a[1])
+        .filter((b, i, a) => !i || Math.abs(a[i - 1][0] - b[0]) > 0.5);
+      const bands = [];
+      stripes.forEach(b => { if (cur - b[1] > 2) bands.push([b[1], cur]); bands.push(b); cur = b[0]; });
+      if (cur - bottom > 2) bands.push([bottom, cur]);
+      bands.forEach(([y0, y1], bi) => {
+        const inB = body.filter(i => i.y > y0 && i.y < y1 && !marks.includes(i));
+        const mItems = inB.filter(i => i.x < xC + 150).sort((a, b) => b.y - a.y);
+        const ministers = mItems.map(i => i.s.trim());
+        const households = inB.filter(i => i.x >= xH - 4).sort((a, b) => b.y - a.y).map(i => i.s.trim());
+        if (!ministers.length && !households.length) return;
+        const done = checkIn(y0, y1);
+        if (!ministers.length && pi > 0 && hi === 0 && bi === 0 && out.length) { const l = out[out.length - 1]; l.households.push(...households); l.interviews.done = l.interviews.done || done; return; }
+        const byMonth = {}; mItems.forEach(it => filledFor(it).forEach(m => (byMonth[m] = byMonth[m] || []).push(it.s.trim())));
+        out.push({ district, leader, ministers, households, interviews: { months: byMonth, done } });
+      });
+    });
+  });
+  return { title, companionships: out, months, quarter, year, quarterKey: year && quarter ? `${year}Q${quarter}` : '' };
+}
+
+// A household name from LCR → a household: exact (normalised) name, else a
+// unique one-sided prefix, else the head's name before "&" naming exactly one
+// member, whose household it is. "Moeller, Craig" and "Moeller, Craig & Cynthia"
+// are different households, so the exact match always wins.
+function findHouseholdByLcrName(name) {
+  const n = identNorm(name), idx = householdNameIdx();
+  const hit = identFind(n, idx); if (hit) return hit.h;
+  const head = n.split(' & ')[0];
+  const m = identFind(head, memberNameIdx())?.m;
+  const h = m && m.householdId && hhById(m.householdId);
+  return h && !idx.some(r => r.n === n) ? h : null;
+}
+
 let _minPlan = null;
 async function handleMinisteringPdf(file, from) {
   const statusEl = document.getElementById('min-status-' + from);
@@ -8734,9 +8888,11 @@ async function handleMinisteringPdf(file, from) {
   try {
     const lib = await loadPdfJs();
     const pages = await readPdfPages(file, lib);
+    const iv = parseInterviewReport(pages);
+    if (iv.title && iv.companionships.length) { planFromInterviewReport(iv, from); statusEl.textContent = ''; renderMinReview(); return; }
     const parsed = parseMinisteringReport(pages);
     if (!parsed.companionships.length) { statusEl.style.color = '#dc3545'; statusEl.textContent = `No companionships found in ${file.name}. Is it LCR's Ministering Assignments page (Individuals tab) printed to PDF?`; return; }
-    const memIdx = S.members.map(m => ({ n: identNorm(m.name), m }));
+    const memIdx = memberNameIdx();
     const find = n => identFind(identNorm(n), memIdx)?.m || null;
     const comps = parsed.companionships.map(c => {
       const ministers = c.ministers.map(n => ({ name: n, m: find(n) }));
@@ -8755,6 +8911,55 @@ async function handleMinisteringPdf(file, from) {
     statusEl.style.color = '#dc3545'; statusEl.textContent = 'Could not read that PDF: ' + (err?.message || 'unknown error');
   }
 }
+// EQ: the right-hand column is households. RS: it's individual sisters (a
+// name that's a household, not a person, is taken as the household).
+function planFromInterviewReport(iv, from) {
+  const memIdx = memberNameIdx();
+  const find = n => identFind(identNorm(n), memIdx)?.m || null;
+  const side = /relief society/i.test(iv.title) ? 'rs' : 'eq';
+  const comps = iv.companionships.map(c => {
+    const right = c.households.map(n => {
+      if (side === 'rs') { const m = find(n); if (m) return { name: n, m }; }
+      return { name: n, h: findHouseholdByLcrName(n), person: side === 'rs' };
+    }).flatMap(x => {   // RS ministers to sisters: a household name stands for its sisters
+      if (side !== 'rs' || !x.h) return [x];
+      const sis = S.members.filter(m => m.householdId === x.h.id && isFemale(m.gender) && (!m.age || m.age >= 18));
+      return sis.length ? sis.map(m => ({ name: m.name, m })) : [x];
+    });
+    return { ministers: c.ministers.map(n => ({ name: n, m: find(n) })),
+      assignees: right.filter(x => x.m), hhs: right.filter(x => !x.m),
+      side, unsure: false, how: 'interviews', district: c.district, leader: c.leader, interviews: c.interviews };
+  });
+  _minPlan = { from, comps, rows: comps.length, kind: 'interviews', title: iv.title, quarterKey: iv.quarterKey, fixes: {},
+    doEq: side === 'eq' && canEditEQ(), doRs: side === 'rs' && canEditRS() };
+}
+// Names in the review that matched nothing: { kind: 'm'|'h', name, sugg: [records] }.
+function minUnmatched(p) {
+  const out = new Map();
+  p.comps.forEach(c => {
+    c.ministers.filter(x => !x.m).forEach(x => out.set('m:' + x.name, { kind: 'm', name: x.name }));
+    (c.assignees || []).filter(x => !x.m).forEach(x => out.set('m:' + x.name, { kind: 'm', name: x.name }));
+    (c.hhs || []).filter(x => !x.h).forEach(x => out.set((x.person ? 'm:' : 'h:') + x.name, { kind: x.person ? 'mh' : 'h', name: x.name }));
+  });
+  return [...out.values()].map(u => ({ ...u, sugg: u.kind === 'h' ? nameSuggestions(u.name, S.households)
+    : u.kind === 'mh' ? [...nameSuggestions(u.name, S.members, 4), ...nameSuggestions(u.name, S.households, 2)] : nameSuggestions(u.name, S.members) }));
+}
+// The review's picks for unmatched names: link them and remember the name.
+function applyMinFixes(p) {
+  const fx = p.fixes || {}; if (!Object.keys(fx).length) return 0;
+  let n = 0; const touchedM = new Set(), touchedH = new Set();
+  const pick = name => { const id = fx[name]; if (!id) return null; const m = S.members.find(x => x.id === id); if (m) return { m }; const h = hhById(id); return h ? { h } : null; };
+  p.comps.forEach(c => {
+    c.ministers.forEach(x => { if (!x.m) { const r = pick(x.name); if (r?.m) { x.m = r.m; addAltName(r.m, x.name); touchedM.add(r.m.id); n++; } } });
+    (c.assignees || []).forEach(x => { if (!x.m) { const r = pick(x.name); if (r?.m) { x.m = r.m; addAltName(r.m, x.name); touchedM.add(r.m.id); n++; } } });
+    (c.hhs || []).slice().forEach(x => { if (x.h) return; const r = pick(x.name); if (!r) return; n++;
+      if (r.h) { x.h = r.h; addAltName(r.h, x.name); touchedH.add(r.h.id); }
+      else if (r.m) { addAltName(r.m, x.name); touchedM.add(r.m.id); if (c.side === 'rs') { c.hhs = c.hhs.filter(y => y !== x); c.assignees.push({ name: x.name, m: r.m }); } else { const h = r.m.householdId && hhById(r.m.householdId); if (h) x.h = h; } } });
+  });
+  if (touchedM.size && canManageMembers()) dbUpsertMembers(S.members);
+  if (touchedH.size && canManageMembers()) dbUpsertHouseholds(S.households);
+  return n;
+}
 function renderMinReview() {
   const p = _minPlan; if (!p) return;
   const eq = p.comps.filter(c => c.side === 'eq'), rs = p.comps.filter(c => c.side === 'rs');
@@ -8762,31 +8967,49 @@ function renderMinReview() {
   const unsure = p.comps.map((c, i) => ({ c, i })).filter(x => x.c.unsure);
   const missM = [...new Set(p.comps.flatMap(c => c.ministers.filter(x => !x.m).map(x => x.name)))];
   const missA = [...new Set(p.comps.flatMap(c => c.assignees.filter(x => !x.m).map(x => x.name)))];
+  const missH = [...new Set(p.comps.flatMap(c => (c.hhs || []).filter(x => !x.h).map(x => x.name)))];
+  const districts = [...new Set(p.comps.map(c => c.district).filter(Boolean))];
   document.getElementById('min-review-' + p.from).innerHTML = `<div class="alert" style="background:#eef6ee;border:1px solid #cfe5cf;color:#333;margin-top:0.8rem">
-    <strong>${p.comps.length} companionships</strong> found (${p.rows} people listed): <strong>${eq.length}</strong> brothers', <strong>${rs.length}</strong> sisters'.
+    ${p.kind === 'interviews' ? `<strong>${p.comps.length} companionships</strong> found in ${esc(p.title)}${districts.length ? ` (${districts.length} districts)` : ''}, serving ${p.comps.reduce((n, c) => n + c.hhs.length, 0)} households.`
+      : `<strong>${p.comps.length} companionships</strong> found (${p.rows} people listed): <strong>${eq.length}</strong> brothers', <strong>${rs.length}</strong> sisters'.`}
     ${p.comps.filter(c => c.ministers.length === 3).length ? ` ${p.comps.filter(c => c.ministers.length === 3).length} have three companions.` : ''}
     ${p.comps.filter(c => c.ministers.length === 1).length ? ` ${p.comps.filter(c => c.ministers.length === 1).length} are listed with no companion in the ward (solo).` : ''}
     ${unsure.length ? `<div style="margin-top:0.5rem;font-size:0.84rem">Couples or people not in Members — check which list each goes on:</div>
       ${unsure.map(({ c, i }) => `<div style="display:flex;gap:0.5rem;align-items:center;font-size:0.82rem;margin:0.2rem 0">
         <select onchange="_minPlan.comps[${i}].side=this.value;renderMinReview()" style="font-size:0.8rem;padding:0.15rem"><option value="eq" ${c.side === 'eq' ? 'selected' : ''}>Brothers</option><option value="rs" ${c.side === 'rs' ? 'selected' : ''}>Sisters</option></select>
         <span>${nm(c)} <span style="color:#888">· ministers to ${c.assignees.length}</span></span></div>`).join('')}` : ''}
-    ${missM.length || missA.length ? `<div style="font-size:0.8rem;color:#856404;margin-top:0.5rem">Not in Members (kept as names): ${[...missM, ...missA].map(esc).join(' · ')}</div>` : ''}
+    ${p.kind === 'interviews' ? minUnmatchedHTML(p) : (missM.length || missA.length ? `<div style="font-size:0.8rem;color:#856404;margin-top:0.5rem">Not in Members (kept as names): ${[...missM, ...missA].map(esc).join(' · ')}</div>` : '')}
     <div style="margin-top:0.6rem;font-size:0.85rem">
-      <label style="font-weight:400;display:flex;gap:0.4rem;align-items:center"><input type="checkbox" style="width:auto" ${p.doEq ? 'checked' : ''} ${canEditEQ() ? '' : 'disabled'} onchange="_minPlan.doEq=this.checked">
-        Replace <strong>Current Ministering Brother Assignments</strong> (${S.current.length} now → ${eq.length})${canEditEQ() ? '' : ' — EQ presidency only'}</label>
-      <label style="font-weight:400;display:flex;gap:0.4rem;align-items:center"><input type="checkbox" style="width:auto" ${p.doRs ? 'checked' : ''} ${canEditRS() ? '' : 'disabled'} onchange="_minPlan.doRs=this.checked">
-        Replace <strong>Current Ministering Sister Assignments</strong> (${(S.currentRS || []).length} now → ${rs.length})${canEditRS() ? '' : ' — RS presidency only'}</label>
-      <div style="font-size:0.76rem;color:#888;margin-top:0.2rem">Notes on a companionship with the same ministers are kept. Brothers' assignments become those people's households; sisters' stay as individual sisters. Drafts aren't touched.</div>
+      ${p.kind === 'interviews' && p.comps[0]?.side !== 'eq' ? '' : `<label style="font-weight:400;display:flex;gap:0.4rem;align-items:center"><input type="checkbox" style="width:auto" ${p.doEq ? 'checked' : ''} ${canEditEQ() ? '' : 'disabled'} onchange="_minPlan.doEq=this.checked">
+        Replace <strong>Current Ministering Brother Assignments</strong> (${S.current.length} now → ${eq.length})${canEditEQ() ? '' : ' — EQ presidency only'}</label>`}
+      ${p.kind === 'interviews' && p.comps[0]?.side !== 'rs' ? '' : `<label style="font-weight:400;display:flex;gap:0.4rem;align-items:center"><input type="checkbox" style="width:auto" ${p.doRs ? 'checked' : ''} ${canEditRS() ? '' : 'disabled'} onchange="_minPlan.doRs=this.checked">
+        Replace <strong>Current Ministering Sister Assignments</strong> (${(S.currentRS || []).length} now → ${rs.length})${canEditRS() ? '' : ' — RS presidency only'}</label>`}
+      <div style="font-size:0.76rem;color:#888;margin-top:0.2rem">Notes on a companionship with the same ministers are kept. ${p.kind === 'interviews' ? 'Households are matched by name; districts are kept.' : "Brothers' assignments become those people's households; sisters' stay as individual sisters."} Drafts aren't touched.</div>
     </div>
     <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.6rem">
       <button class="btn btn-secondary btn-sm" onclick="cancelMinImport()">Cancel</button>
       <button class="btn btn-primary btn-sm" onclick="applyMinPlan()">Save</button></div></div>`;
+}
+function minUnmatchedHTML(p) {
+  const un = minUnmatched(p); if (!un.length) return '<div style="font-size:0.8rem;color:#155724;margin-top:0.5rem">✓ Every name matched a member or household.</div>';
+  if (!canManageMembers()) return `<div style="font-size:0.8rem;color:#856404;margin-top:0.5rem">Not matched (kept as names): ${un.map(u => esc(u.name)).join(' · ')}</div>`;
+  const what = { m: 'member', h: 'household', mh: 'sister or household' };
+  return `<div style="font-size:0.84rem;margin-top:0.6rem"><b>${un.length} name${un.length === 1 ? '' : 's'} didn't match.</b> If LCR uses a different name for someone in your records, pick them;
+    the tool remembers it for later imports. Otherwise it's kept as a name.</div>
+    ${un.map(u => `<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;font-size:0.82rem;margin:0.25rem 0">
+      <span style="min-width:200px">${esc(u.name)} <span style="color:#888">(${what[u.kind]})</span></span>
+      <select style="font-size:0.8rem;padding:0.15rem;max-width:280px" onchange="if(this.value)_minPlan.fixes[${esc(JSON.stringify(u.name))}]=this.value;else delete _minPlan.fixes[${esc(JSON.stringify(u.name))}]">
+        <option value="">Not in ${u.kind === 'h' ? 'Households' : 'Members'} — keep the name</option>
+        ${u.sugg.map(r => `<option value="${esc(r.id)}" ${p.fixes[u.name] === r.id ? 'selected' : ''}>${esc(r.name)}${r.members ? ' (household)' : r.age ? ' · ' + r.age : ''}</option>`).join('')}
+        <optgroup label="Everyone">${(u.kind === 'h' ? S.households : S.members).slice().sort((a, b) => a.name.localeCompare(b.name)).map(r => `<option value="${esc(r.id)}" ${p.fixes[u.name] === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</optgroup>
+      </select></div>`).join('')}`;
 }
 function cancelMinImport() { const f = _minPlan?.from; _minPlan = null; if (f) { document.getElementById('min-review-' + f).innerHTML = ''; document.getElementById('min-status-' + f).textContent = ''; } }
 function minKey(names) { return names.filter(Boolean).map(n => normNameKey(n)).sort().join(' | '); }
 async function applyMinPlan() {
   const p = _minPlan; if (!p || (!p.doEq && !p.doRs)) { alert('Nothing ticked to replace.'); return; }
   const now = new Date().toISOString();
+  const fixed = applyMinFixes(p);
   const build = (side, oldList) => {
     const old = new Map((oldList || []).map(c => [minKey(ministersOf(c).map(m => m.name)), c]));
     return p.comps.filter(c => c.side === side).map((c, i) => {
@@ -8795,8 +9018,17 @@ async function applyMinPlan() {
       const rec = { id: prev?.id || uid(), notes: prev?.notes || [], position: i, source: 'LCR', importedAt: now,
         extraAssignees: c.assignees.filter(a => !a.m).map(a => a.name) };
       setMinisters(rec, ms);
+      if (prev?.interviews) rec.interviews = JSON.parse(JSON.stringify(prev.interviews));   // kept unless the report has its own
       const matched = c.assignees.filter(a => a.m).map(a => a.m);
-      if (side === 'eq') {
+      if (c.hhs) {   // Ministering Interviews report: households (EQ) or sisters (RS) by name
+        rec.assignees = [...new Set((c.assignees || []).filter(x => x.m).map(x => x.m.id))];
+        rec.households = [...new Set(c.hhs.filter(x => x.h).map(x => x.h.id))];
+        rec.extraAssignees = [...c.hhs.filter(x => !x.h).map(x => x.name), ...(c.assignees || []).filter(x => !x.m).map(x => x.name)];
+        if (c.district) rec.district = c.district; else delete rec.district;
+        if (c.leader) rec.districtLeader = c.leader; else delete rec.districtLeader;
+        rec.interviews = mergeInterviews(prev?.interviews, p.quarterKey, c.interviews, rec);
+        if (!Object.keys(rec.interviews).length) delete rec.interviews;
+      } else if (side === 'eq') {
         rec.assignees = matched.map(m => m.id);
         rec.households = [...new Set(matched.map(m => m.householdId).filter(Boolean))];
         matched.filter(m => !m.householdId).forEach(m => rec.extraAssignees.push(m.name));
@@ -8812,8 +9044,368 @@ async function applyMinPlan() {
   if (p.doRs && canEditRS()) { S.currentRS = build('rs', S.currentRS); noteImport('ministering-rs', S.currentRS.length); await dbReplaceCompanionshipList('currentRS', S.currentRS); done.push(`${S.currentRS.length} sisters' companionships`); }
   const f = p.from; _minPlan = null;
   document.getElementById('min-review-' + f).innerHTML = '';
-  const st = document.getElementById('min-status-' + f); st.style.color = '#155724'; st.textContent = '✓ Saved ' + done.join(' and ') + '.';
+  const st = document.getElementById('min-status-' + f); st.style.color = '#155724'; st.textContent = '✓ Saved ' + done.join(' and ') + '.' + (fixed ? ` ${fixed} name${fixed === 1 ? '' : 's'} linked and remembered.` : '');
   renderCurrent(); renderCurrentRS(); renderBrothers(); renderSisters();
+}
+
+// ── LCR Member List, printed (…/mlt/records/member-list) ───────
+// Members view: Name | Gender | Age | Birth Date | Phone Number | Email, one
+// row per person, anchored on its Gender cell (M/F); a long name wraps onto
+// the lines above and below and joins the nearest row.
+function parseMemberListPdf(pages) {
+  const rows = [];
+  pages.forEach(P => {
+    const items = P.items.filter(i => String(i.s).trim() && i.y > 24 && !/For Church Use|Intellectual Reserve|©/.test(i.s));
+    const hName = items.find(i => /^Name$/.test(i.s.trim())), hG = items.find(i => /^Gender$/.test(i.s.trim()) && hName && Math.abs(i.y - hName.y) < 3);
+    const hAge = items.find(i => /^Age$/.test(i.s.trim()) && hG && Math.abs(i.y - hG.y) < 3);
+    if (!hName || !hG || !hAge || items.some(i => /^Members$/.test(i.s.trim()))) return;   // the Households view has "Household Members"
+    const hs = items.filter(i => Math.abs(i.y - hName.y) < 3).sort((a, b) => a.x - b.x);
+    const colOf = i => { let c = null; hs.forEach(h => { if (i.x >= h.x - 4) c = h.s.trim(); }); return c; };
+    const body = items.filter(i => i.y < hName.y - 3 && !/^Count:/i.test(i.s.trim()));
+    const anchors = body.filter(i => colOf(i) === 'Gender' && /^(M|F)$/i.test(i.s.trim())).map(i => ({ y: i.y, cells: {} })).sort((a, b) => b.y - a.y);
+    if (!anchors.length) return;
+    const gaps = anchors.slice(1).map((a, k) => anchors[k].y - a.y).sort((a, b) => a - b);
+    const pitch = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 20;
+    body.forEach(i => {
+      const col = colOf(i); if (!col) return;
+      const a = anchors.reduce((b, c) => Math.abs(c.y - i.y) < Math.abs(b.y - i.y) ? c : b);
+      if (Math.abs(a.y - i.y) > pitch * 0.75) return;
+      (a.cells[col] = a.cells[col] || []).push(i);
+    });
+    const txt = (a, c) => (a.cells[c] || []).sort((p, q) => q.y - p.y || p.x - q.x).map(p => p.s.trim()).join(' ').replace(/\s+/g, ' ').replace(/-\s+/g, '-').trim();
+    anchors.forEach(a => { const name = txt(a, 'Name'); const age = txt(a, 'Age'); if (name) rows.push({ name, gender: txt(a, 'Gender').toUpperCase(), age: /^\d+$/.test(age) ? +age : null, birth: txt(a, 'Birth Date'), phone: txt(a, 'Phone Number'), email: txt(a, 'Email') }); });
+  });
+  return rows;
+}
+
+// Households view: Name | Household Members | Gender | Age. A household starts
+// with its name in bold in the Name column; its phone and address lines follow
+// in plain type. Each person is a row anchored on their Gender cell (male /
+// female), shown by first names only unless their surname differs ("Vandyne,
+// Jackie"); wrapped pieces join the nearest row.
+function parseHouseholdListPdf(pages) {
+  const out = [];
+  pages.forEach(P => {
+    const items = P.items.filter(i => String(i.s).trim() && i.y > 24 && !/For Church Use|Intellectual Reserve|©/.test(i.s));
+    const hName = items.find(i => /^Name$/.test(i.s.trim())), hMem = items.find(i => /^Members$/.test(i.s.trim()));
+    const hG = items.find(i => /^Gender$/.test(i.s.trim())), hAge = items.find(i => /^Age$/.test(i.s.trim()));
+    if (!hName || !hMem || !hG || !hAge) return;
+    const top = Math.min(hName.y, hMem.y) - 3;
+    const body = items.filter(i => i.y < top && !/^Count:/i.test(i.s.trim()));
+    const inName = i => i.x < hMem.x - 4, inMem = i => i.x >= hMem.x - 4 && i.x < hG.x - 4;
+    // Household names are in the bold font: the one the page's first Name-column entry uses.
+    const firstName = body.filter(inName).sort((a, b) => b.y - a.y)[0];
+    const bold = firstName && /,/.test(firstName.s) ? firstName.font : hName.font;
+    const heads = [];
+    body.filter(inName).sort((a, b) => b.y - a.y).forEach(i => {
+      const isBold = i.font === bold, last = heads[heads.length - 1];
+      if (isBold && last && !last.lines.length && last.y - i.y < 13 && !/,/.test(i.s)) { last.name += ' ' + i.s.trim(); last.y2 = i.y; return; }   // wrapped household name
+      if (isBold) heads.push({ y: i.y, y2: i.y, name: i.s.trim(), lines: [], people: [] });
+      else if (last) last.lines.push(i.s.trim());
+    });
+    const anchors = body.filter(i => i.x >= hG.x - 4 && i.x < hAge.x - 4 && /^(male|female)$/i.test(i.s.trim()))
+      .map(i => ({ y: i.y, gender: /^f/i.test(i.s.trim()) ? 'F' : 'M', name: [], age: null })).sort((a, b) => b.y - a.y);
+    const gaps = anchors.slice(1).map((a, k) => anchors[k].y - a.y).sort((a, b) => a - b);
+    const pitch = gaps.length ? Math.max(gaps[0], 10) : 14;
+    // A person's name wraps downwards only, so a piece belongs to the nearest row at or above it.
+    body.forEach(i => {
+      if (!(inMem(i) || i.x >= hAge.x - 4)) return;
+      const a = anchors.filter(c => c.y >= i.y - 1.5).pop();
+      if (!a || a.y - i.y > 40) return;
+      if (inMem(i)) a.name.push(i); else if (/^\d+$/.test(i.s.trim())) a.age = +i.s.trim();
+    });
+    anchors.forEach(a => {
+      const h = heads.filter(h => h.y >= a.y - 4).pop() || out[out.length - 1];   // the household started at or above this row
+      if (!h) return;
+      const first = a.name.sort((p, q) => q.y - p.y || p.x - q.x).map(p => p.s.trim()).join(' ').replace(/\s+/g, ' ').replace(/-\s+/g, '-').replace(/,\s*/, ', ').trim();
+      h.people.push({ first, gender: a.gender, age: a.age });
+    });
+    out.push(...heads);
+  });
+  return out.map(h => {
+    const phone = h.lines.find(l => /^\(?\d{3}\)?[ -.]?\d{3}[-. ]\d{4}$/.test(l)) || '';
+    const addr = h.lines.filter(l => l !== phone);
+    const surname = h.name.split(',')[0].trim();
+    return { name: h.name.replace(/\s+/g, ' '), phone, address: addr.join(', '), people: h.people.map(p => ({ ...p, name: /,/.test(p.first) ? p.first : `${surname}, ${p.first}` })) };
+  });
+}
+
+// ── Members / Households from LCR's Member List (printed PDF) ──
+// Replaces the CSV import as the main way in. Each import is reviewed before
+// anything changes: records LCR now spells differently are offered as "same
+// person, renamed" (keeping notes, pools, assignments and follows; the old
+// name is kept as an alternate name), changed fields are shown current → LCR
+// with a tick to take LCR's, new records are ticked to add, and records not on
+// LCR's list are kept unless ticked to remove.
+let _recPlan = null;
+const digits = s => String(s || '').replace(/\D/g, '');
+// Ignores case, punctuation, spacing and ZIP+4, so "Apt 105" on its own line
+// vs. after the street, or a dropped comma, isn't reported as a change.
+const looseKey = s => String(s || '').toLowerCase().replace(/(\d{5})-\d{4}/g, '$1').replace(/[^a-z0-9]/g, '');
+// Exact name or an alternate name, by normNameKey. Two people can share a
+// name (a father and son), so with `age` the closest in age wins.
+function recFind(list, name, age) {
+  const k = normNameKey(name);
+  let c = list.filter(r => normNameKey(r.name) === k);
+  if (!c.length) c = list.filter(r => (r.altNames || []).some(a => normNameKey(a) === k));
+  if (c.length > 1 && age != null) c.sort((a, b) => Math.abs((a.age ?? 999) - age) - Math.abs((b.age ?? 999) - age));
+  return c[0] || null;
+}
+// Unmatched old records paired with unmatched new ones that look like the same
+// person/household. score(old, new) → number or -1; greedy best-first.
+function pairRenames(olds, news, score, min) {
+  const cand = [];
+  olds.forEach(o => news.forEach(n => { const sc = score(o, n); if (sc >= min) cand.push({ o, n, sc }); }));
+  cand.sort((a, b) => b.sc - a.sc);
+  const uo = new Set(), un = new Set(), out = [];
+  cand.forEach(c => { if (uo.has(c.o) || un.has(c.n)) return; uo.add(c.o); un.add(c.n); out.push(c); });
+  return out;
+}
+function genderCode(g) { return isFemale(g) ? 'F' : /^m/i.test(String(g || '').trim()) ? 'M' : ''; }
+
+function planMembersFromPdf(rows) {
+  const seen = new Set(), inc = rows.filter(r => { const k = normNameKey(r.name) + '|' + r.birth + '|' + r.gender; if (!normNameKey(r.name) || seen.has(k)) return false; seen.add(k); return true; });
+  const pairs = [], adds = [], used = new Set();
+  inc.forEach(r => { const ex = recFind(S.members.filter(m => !used.has(m.id)), r.name, r.age); if (ex) { used.add(ex.id); pairs.push({ ex, r, rename: false }); } else adds.push(r); });
+  const olds = S.members.filter(m => !used.has(m.id));
+  const ren = pairRenames(olds, adds, (o, n) => {
+    if (genderCode(o.gender) && genderCode(o.gender) !== n.gender) return -1;
+    if (o.age && n.age != null && Math.abs(o.age - n.age) > 1) return -1;
+    const ns = nameScore(o.name, n.name), ph = digits(o.phone) && digits(o.phone) === digits(n.phone) ? 3 : 0;
+    if (ns < 2 && !ph) return -1;
+    return ns + ph + (o.age && o.age === n.age ? 1 : 0);
+  }, 3);
+  ren.forEach(c => { pairs.push({ ex: c.o, r: c.n, rename: true, same: c.sc >= 5 }); });
+  const renNew = new Set(ren.map(c => c.n)), renOld = new Set(ren.map(c => c.o));
+  pairs.forEach(p => {
+    p.fields = [];
+    const add = (key, label, from, to) => { if (String(from || '') !== String(to || '')) p.fields.push({ key, label, from, to, use: true, fill: !String(from || '').trim() }); };
+    if (!p.rename && p.ex.name !== p.r.name) add('name', 'Name', p.ex.name, p.r.name);
+    add('gender', 'Gender', genderCode(p.ex.gender) || p.ex.gender, p.r.gender);
+    if (digits(p.r.phone) !== digits(p.ex.phone)) add('phone', 'Phone', p.ex.phone, p.r.phone);
+    if (p.r.email && (p.r.email || '').toLowerCase() !== (p.ex.email || '').toLowerCase()) add('email', 'Email', p.ex.email, p.r.email);
+  });
+  _recPlan = { kind: 'members', pairs, adds: adds.filter(r => !renNew.has(r)).map(r => ({ r, add: true })),
+    gone: S.members.filter(m => !used.has(m.id) && !renOld.has(m)).map(ex => ({ ex, remove: false })), total: inc.length };
+}
+
+function planHouseholdsFromPdf(list) {
+  const seen = new Set(), inc = list.filter(h => { const k = norm(h.name) + '|' + looseKey(h.address); if (!norm(h.name) || seen.has(k)) return false; seen.add(k); return true; });
+  inc.forEach(h => { h.address = normalizeAddress(h.address); });
+  const pairs = [], adds = [], used = new Set();
+  inc.forEach(r => { const ex = recFind(S.households.filter(h => !used.has(h.id)), r.name); if (ex) { used.add(ex.id); pairs.push({ ex, r, rename: false }); } else adds.push(r); });
+  const olds = S.households.filter(h => !used.has(h.id));
+  const ren = pairRenames(olds, adds, (o, n) => {
+    const sameAddr = o.address && looseKey(o.address) === looseKey(n.address) ? 4 : 0;
+    const ph = digits(o.phone) && digits(o.phone) === digits(n.phone) ? 3 : 0;
+    const people = (o.members || []).filter(a => n.people.some(p => normNameKey(p.name) === normNameKey(a))).length;
+    const ns = nameScore(o.name.split(' & ')[0], n.name.split(' & ')[0]);
+    if (!sameAddr && !ph && !people) return -1;
+    return sameAddr + ph + Math.min(people, 3) * 2 + ns;
+  }, 4);
+  ren.forEach(c => pairs.push({ ex: c.o, r: c.n, rename: true, same: c.sc >= 6 }));
+  const renNew = new Set(ren.map(c => c.n)), renOld = new Set(ren.map(c => c.o));
+  pairs.forEach(p => {
+    p.fields = [];
+    const add = (key, label, from, to, note) => { if (looseKey(from) !== looseKey(to)) p.fields.push({ key, label, from, to, use: true, note, fill: !looseKey(from) }); };
+    if (!p.rename && p.ex.name !== p.r.name) add('name', 'Name', p.ex.name, p.r.name);
+    add('address', 'Address', p.ex.address, p.r.address, p.ex.lat ? 'clears its map location (look it up again on the Households tab)' : '');
+    if (digits(p.r.phone) !== digits(p.ex.phone)) p.fields.push({ key: 'phone', label: 'Phone', from: p.ex.phone, to: p.r.phone, use: true, fill: !digits(p.ex.phone) });
+  });
+  _recPlan = { kind: 'households', pairs, adds: adds.filter(r => !renNew.has(r)).map(r => ({ r, add: true })),
+    gone: S.households.filter(h => !used.has(h.id) && !renOld.has(h)).map(ex => ({ ex, remove: false })), total: inc.length };
+}
+
+async function handleRecordsPdf(kind, file) {
+  if (!memberEditGuard()) return;
+  const statusEl = document.getElementById('rec-status');
+  document.getElementById('rec-file-' + kind).value = '';
+  if (!file) return;
+  _recPlan = null; document.getElementById('rec-review').innerHTML = '';
+  statusEl.style.color = '#555'; statusEl.textContent = `Reading ${file.name}…`;
+  try {
+    const pages = await readPdfPages(file, await loadPdfJs());
+    if (kind === 'members') {
+      const rows = parseMemberListPdf(pages);
+      if (!rows.length) { statusEl.style.color = '#dc3545'; statusEl.textContent = parseHouseholdListPdf(pages).length ? 'That PDF is the Households view — use the Households button.' : `No members found in ${file.name}. Is it LCR's Member List (Members view) printed to PDF?`; return; }
+      planMembersFromPdf(rows);
+    } else {
+      const list = parseHouseholdListPdf(pages);
+      if (!list.length) { statusEl.style.color = '#dc3545'; statusEl.textContent = parseMemberListPdf(pages).length ? 'That PDF is the Members view — use the Members button.' : `No households found in ${file.name}. Is it LCR's Member List (Households view) printed to PDF?`; return; }
+      planHouseholdsFromPdf(list);
+    }
+    const cnt = pdfReportCount(pages);
+    _recPlan.reportCount = cnt;
+    statusEl.textContent = '';
+    renderRecReview();
+  } catch (err) {
+    console.error('Records import failed:', err);
+    statusEl.style.color = '#dc3545'; statusEl.textContent = 'Could not read that PDF: ' + (err?.message || 'unknown error');
+  }
+}
+// "27 Feb 1987" → birthDate '1987-02-27' (kept, not shown) and the birthday
+// marker ident.bday 'MM-DD' that the Birthdays list and 🎂 use.
+function setBirthDate(m, s) {
+  const x = String(s || '').match(/^(\d{1,2}) ([A-Z][a-z]{2}) (\d{4})$/); if (!x) return;
+  const mo = MON3.indexOf(x[2]) + 1; if (!mo) return;
+  const mm = String(mo).padStart(2, '0'), dd = x[1].padStart(2, '0');
+  m.birthDate = `${x[3]}-${mm}-${dd}`;
+  m.ident = { ...(m.ident || {}), bday: `${mm}-${dd}` };
+}
+function pdfReportCount(pages) { for (const P of pages) for (const i of P.items) { const m = String(i.s).match(/^Count:\s*(\d+)/i); if (m) return +m[1]; } return null; }
+
+function renderRecReview() {
+  const p = _recPlan, el = document.getElementById('rec-review'); if (!p) { el.innerHTML = ''; return; }
+  const what = p.kind === 'members' ? 'members' : 'households', one = p.kind === 'members' ? 'person' : 'household';
+  const ren = p.pairs.map((x, i) => ({ x, i })).filter(o => o.x.rename);
+  const chg = p.pairs.map((x, i) => ({ x, i })).filter(o => o.x.fields.some(f => !f.fill) && (!o.x.rename || o.x.same));
+  const fills = p.pairs.filter(x => !x.rename || x.same).reduce((n, x) => n + x.fields.filter(f => f.fill && f.to).length, 0);
+  const box = (path, on) => `<input type="checkbox" style="width:auto" ${on ? 'checked' : ''} onchange="${path}=this.checked;renderRecReview()">`;
+  const sec = (title, body) => `<div style="margin-top:0.7rem"><div style="font-weight:600;color:#1a3a5c;font-size:0.88rem">${title}</div>${body}</div>`;
+  const row = inner => `<div style="font-size:0.83rem;padding:0.25rem 0;border-bottom:1px solid #f0f0f0;display:flex;gap:0.45rem;align-items:flex-start">${inner}</div>`;
+  el.innerHTML = `<div class="alert" style="background:#eef6ee;border:1px solid #cfe5cf;color:#333;margin-top:0.8rem">
+    <strong>${p.total} ${what}</strong> in LCR's list${p.reportCount != null && p.reportCount !== p.total ? ` <span style="color:#856404">(the report says ${p.reportCount} — some rows may not have been read; check before saving)</span>` : ''}.
+    ${p.pairs.filter(x => !x.rename).length} already here, ${ren.length} look renamed, ${p.adds.length} new, ${p.gone.length} not on LCR's list.
+    ${ren.length ? sec(`Same ${one}, new name? (${ren.length})`, `<div style="font-size:0.78rem;color:#888">Ticked = the same ${one}: the record keeps its notes, pools, assignments and follows, takes LCR's name, and remembers the old one.</div>` +
+      ren.map(({ x, i }) => row(`${box(`_recPlan.pairs[${i}].same`, x.same)}<span><b>${esc(x.ex.name)}</b> → <b>${esc(x.r.name)}</b>
+        <span style="color:#888">${p.kind === 'members' ? [x.r.gender, x.r.age != null ? 'age ' + x.r.age : ''].filter(Boolean).join(' · ') : esc(x.r.address || '')}</span></span>`)).join('')) : ''}
+    ${fills ? `<div style="font-size:0.82rem;margin-top:0.5rem">${fills} blank detail${fills === 1 ? '' : 's'} (phone, email, address) will be filled in from LCR.</div>` : ''}
+    ${chg.length ? sec(`Changes (${chg.reduce((n, o) => n + o.x.fields.filter(f => !f.fill).length, 0)})`, `<div style="font-size:0.78rem;color:#888">Ticked = use LCR's; unticked = keep what's here.</div>` +
+      chg.map(({ x, i }) => x.fields.map((f, k) => f.fill ? '' : row(`${box(`_recPlan.pairs[${i}].fields[${k}].use`, f.use)}<span><b>${esc(x.r.name)}</b> · ${f.label}:
+        <span style="color:#a12a2a;text-decoration:line-through">${esc(f.from || '—')}</span> → <span style="color:#1e6b34">${esc(f.to || '—')}</span>${f.note && f.use ? ` <span style="color:#856404">(${f.note})</span>` : ''}</span>`)).join('')).join('')) : ''}
+    ${p.adds.length ? sec(`New (${p.adds.length})`, p.adds.map((a, i) => row(`${box(`_recPlan.adds[${i}].add`, a.add)}<span>${esc(a.r.name)} <span style="color:#888">${p.kind === 'members' ? [a.r.gender, a.r.age != null ? 'age ' + a.r.age : ''].filter(Boolean).join(' · ') : esc(a.r.address || '')}</span></span>`)).join('')) : ''}
+    ${p.gone.length ? sec(`Not on LCR's list (${p.gone.length})`, `<div style="font-size:0.78rem;color:#888">Kept unless ticked. (Moved Out on the Move Ins / Outs tab also removes people.)</div>` +
+      p.gone.map((g, i) => row(`${box(`_recPlan.gone[${i}].remove`, g.remove)}<span>Remove <b>${esc(g.ex.name)}</b></span>`)).join('')) : ''}
+    <div style="font-size:0.78rem;color:#888;margin-top:0.6rem">${p.kind === 'members' ? 'Ages and birth dates update automatically (birth dates aren’t shown; they feed the 🎂 birthday marker).' : 'Each household’s list of people updates automatically, and people are linked to their household.'}</div>
+    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.6rem">
+      <button class="btn btn-secondary btn-sm" onclick="_recPlan=null;renderRecReview()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="applyRecPlan()">Save</button></div></div>`;
+}
+
+// A household's people → members: exact name (or alternate name), else same
+// gender, age within a year and a similar name (LCR's household view sometimes
+// gives a longer or shorter form of the name than the member view).
+function memberForPerson(p, pool) {
+  const ex = recFind(pool, p.name, p.age); if (ex) return ex;
+  const c = pool.filter(m => (!p.gender || !genderCode(m.gender) || genderCode(m.gender) === p.gender) && (p.age == null || !m.age || Math.abs(m.age - p.age) <= 1) && nameScore(m.name, p.name) >= 4);
+  return c.length === 1 ? c[0] : null;
+}
+
+async function applyRecPlan() {
+  if (!memberEditGuard()) return;
+  const p = _recPlan; if (!p) return;
+  const take = (x, key) => x.fields.find(f => f.key === key && f.use);
+  let renamed = 0, changed = 0, added = 0, removed = 0, linked = 0;
+  if (p.kind === 'members') {
+    p.pairs.forEach(x => {
+      if (x.rename && !x.same) { p.adds.push({ r: x.r, add: true }); return; }
+      const m = x.ex;
+      if (x.rename) { const old = m.name; m.name = x.r.name; addAltName(m, old); renamed++; }
+      x.fields.forEach(f => { if (f.use) { m[f.key] = f.to; changed++; } });
+      if (x.r.age != null) m.age = x.r.age;
+      setBirthDate(m, x.r.birth);
+      m.isBrother = isMale(m.gender);
+    });
+    p.adds.filter(a => a.add).forEach(a => { const m = { id: uid(), name: a.r.name, gender: a.r.gender, age: a.r.age ?? 0, phone: a.r.phone, isBrother: a.r.gender === 'M', householdId: null, notes: [] };
+      if (a.r.email) m.email = a.r.email; setBirthDate(m, a.r.birth); S.members.push(m); added++; });
+    const rm = new Set(p.gone.filter(g => g.remove).map(g => g.ex.id));
+    if (rm.size) { S.members = S.members.filter(m => !rm.has(m.id)); removed = rm.size; }
+    linkMembersToHouseholds(true);
+    noteImport('members-csv', S.members.length);
+    _skipConfirmOnce = true;
+    await dbUpsertMembers(S.members);
+    if (rm.size) await dbDeleteMembers([...rm]);
+  } else {
+    const geoCache = {}; S.households.forEach(h => { if (h.lat && h.address) geoCache[norm(h.address)] = { lat: h.lat, lng: h.lng }; });
+    const touched = [];
+    p.pairs.forEach(x => {
+      if (x.rename && !x.same) { p.adds.push({ r: x.r, add: true }); return; }
+      const h = x.ex;
+      if (x.rename) { const old = h.name; h.name = x.r.name; addAltName(h, old); renamed++; }
+      x.fields.forEach(f => { if (!f.use) return; changed++;
+        if (f.key === 'address') { h.address = f.to; delete h.lat; delete h.lng; const g = geoCache[norm(f.to)]; if (g) Object.assign(h, g); }
+        else h[f.key] = f.to; });
+      h.members = x.r.people.map(q => q.name); h.head = h.members[0] || h.head || '';
+      touched.push([h, x.r]);
+    });
+    p.adds.filter(a => a.add).forEach(a => { const h = { id: uid(), name: a.r.name, members: a.r.people.map(q => q.name), head: a.r.people[0]?.name || '', address: a.r.address, phone: a.r.phone, notes: [], ...(geoCache[norm(a.r.address)] || {}) };
+      S.households.push(h); touched.push([h, a.r]); added++; });
+    const rm = new Set(p.gone.filter(g => g.remove).map(g => g.ex.id));
+    if (rm.size) { S.households = S.households.filter(h => !rm.has(h.id)); S.members.forEach(m => { if (rm.has(m.householdId)) m.householdId = null; }); removed = rm.size; }
+    // Link each listed person to their household (moving them if LCR lists them elsewhere).
+    touched.forEach(([h, r]) => r.people.forEach(q => { const m = memberForPerson(q, S.members); if (m && m.householdId !== h.id) { m.householdId = h.id; linked++; } }));
+    linkMembersToHouseholds(true);
+    noteImport('households-csv', S.households.length);
+    _skipConfirmOnce = true;
+    await dbUpsertHouseholds(S.households);
+    if (rm.size) await dbDeleteHouseholds([...rm]);
+    await dbUpsertMembers(S.members);
+  }
+  const kind = p.kind; _recPlan = null; renderRecReview();
+  refreshBadge(); renderMembers(); renderHouseholds(); renderBrothers();
+  const st = document.getElementById('rec-status'); st.style.color = '#155724';
+  st.textContent = `✓ ${kind === 'members' ? 'Members' : 'Households'}: ` + [renamed && `${renamed} renamed`, changed && `${changed} change${changed === 1 ? '' : 's'}`, added && `${added} added`, removed && `${removed} removed`, linked && `${linked} people linked to their household`].filter(Boolean).join(', ') + (renamed || changed || added || removed || linked ? '.' : 'no changes.');
+}
+
+// ── Tap to call, email or get directions ────────────────────
+// tel: / mailto: open the phone's dialer and the default mail app; addresses
+// open Apple Maps on iPhone/iPad/Mac, the default maps app on Android (geo:),
+// and Google Maps elsewhere.
+function telHTML(p) { const d = digits(p); if (!d) return esc(p || ''); return `<a class="contact-link" href="tel:${d.length === 10 ? '+1' + d : d}" onclick="event.stopPropagation()">${esc(p)}</a>`; }
+function mailHTML(e) { return e ? `<a class="contact-link" href="mailto:${esc(encodeURI(e))}" onclick="event.stopPropagation()">${esc(e)}</a>` : ''; }
+function mapHref(addr) {
+  const q = encodeURIComponent(addr), ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod|Macintosh/.test(ua)) return `https://maps.apple.com/?q=${q}`;
+  if (/Android/.test(ua)) return `geo:0,0?q=${q}`;
+  return `https://www.google.com/maps/search/?api=1&query=${q}`;
+}
+function mapHTML(addr) { return addr ? `<a class="contact-link" href="${esc(mapHref(addr))}" target="_blank" rel="noopener" title="Directions" onclick="event.stopPropagation()">📍 ${esc(addr)}</a>` : ''; }
+
+// ── Ministering interviews (Current lists) ─────────────────
+// c.interviews = { '2026Q4': { months: { Oct: [minister names] }, done, by, at } }.
+// From LCR's Ministering Interviews report (a filled circle per minister per
+// month, a check for the quarter) and/or ticked here by the presidency (EQ for
+// brothers, RS for sisters), who act as district leaders. An import adds
+// LCR's months to what's already ticked; nothing is unticked by an import.
+const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function quarterNow(d = new Date()) {
+  const q = Math.floor(d.getMonth() / 3) + 1;
+  return { key: `${d.getFullYear()}Q${q}`, months: MON3.slice((q - 1) * 3, q * 3), label: `Q${q} ${d.getFullYear()}` };
+}
+function mergeInterviews(prevAll, qk, lcr, rec) {
+  const all = JSON.parse(JSON.stringify(prevAll || {}));
+  if (!qk || !lcr) return all;
+  const cur = all[qk] || { months: {} };
+  Object.entries(lcr.months || {}).forEach(([m, names]) => { cur.months[m] = [...new Set([...(cur.months[m] || []), ...names])]; });
+  cur.done = !!(cur.done || lcr.done || Object.keys(cur.months).length);
+  if (lcr.done || Object.keys(lcr.months || {}).length) { cur.src = 'LCR'; cur.at = new Date().toISOString(); }
+  if (Object.keys(cur.months).length || cur.done) all[qk] = cur;
+  return all;
+}
+function canRecordInterviews(listKey) { return listKey === 'current' ? canEditEQ() : listKey === 'currentRS' ? canEditRS() : false; }
+function interviewRowHTML(rec, listKey) {
+  if (!rec || (listKey !== 'current' && listKey !== 'currentRS')) return '';
+  const q = quarterNow(), iv = rec.interviews?.[q.key] || { months: {} }, can = canRecordInterviews(listKey);
+  const pills = q.months.map(m => { const who = iv.months?.[m] || [], on = who.length > 0;
+    return `<button type="button" class="iv-pill ${on ? 'on' : ''}" ${can ? `onclick="event.stopPropagation();toggleInterview('${listKey}','${rec.id}','${m}')"` : 'disabled'}
+      title="${on ? 'Interviewed in ' + m + (who.length < ministersOf(rec).length ? ': ' + esc(who.join(', ')) : '') : (can ? 'Mark interviewed in ' + m : 'Not recorded')}">${on ? '✓ ' : ''}${m}</button>`; }).join('');
+  return `<div class="iv-row" onclick="event.stopPropagation()"><span>Interview ${q.label}:</span>${pills}${iv.done || Object.keys(iv.months || {}).length ? '<span class="iv-done">✓ done</span>' : ''}</div>`;
+}
+function toggleInterview(listKey, id, month) {
+  if (!canRecordInterviews(listKey)) return;
+  const c = (S[listKey] || []).find(x => x.id === id); if (!c) return;
+  const q = quarterNow(); c.interviews = c.interviews || {};
+  const iv = c.interviews[q.key] = c.interviews[q.key] || { months: {} };
+  if (iv.months[month]?.length) delete iv.months[month]; else iv.months[month] = ministersOf(c).map(m => m.name);
+  iv.done = Object.keys(iv.months).length > 0;
+  iv.by = _currentUserName || _currentUserEmail || ''; iv.at = new Date().toISOString(); iv.src = 'app';
+  if (!iv.done) delete c.interviews[q.key];
+  dbUpsertCompanionship(listKey, c);
+  if (listKey === 'current') renderCurrent(); else renderCurrentRS();
+}
+function interviewStat(list) {
+  const q = quarterNow(); const n = list.filter(c => { const iv = c.interviews?.[q.key]; return iv && (iv.done || Object.keys(iv.months || {}).length); }).length;
+  return `<div class="stat-card"><div class="number">${n}/${list.length}</div><div class="label">Interviewed ${q.label}</div></div>`;
 }
 
 // ── Searching companionships (all four assignment tabs) ──
@@ -8936,8 +9528,11 @@ let _nearbyOrigin = null;      // { lat, lng, label }
 function nearbyPool() {
   const side = document.getElementById('nearby-pool')?.value || 'eq';
   const maybe = !!document.getElementById('nearby-maybe')?.checked;
-  const key = side === 'rs' ? 'rsPool' : 'inPool';
-  return S.households.filter(h => h[key] === true || (maybe && h[key] === 'maybe'));
+  if (side === 'rs') {   // households with a sister in the receives pool
+    const ids = new Set(sisters().filter(m => m.rsRecipient === true || (maybe && m.rsRecipient === 'maybe')).map(m => m.householdId).filter(Boolean));
+    return S.households.filter(h => ids.has(h.id));
+  }
+  return S.households.filter(h => h.inPool === true || (maybe && h.inPool === 'maybe'));
 }
 
 async function findNearby() {
@@ -8977,13 +9572,14 @@ function renderNearby() {
   const pool = nearbyPool();
   const label = side === 'rs' ? 'RS pool' : 'EQ pool';
   const assigned = new Set((side === 'rs' ? (S.currentRS || []) : (S.current || [])).flatMap(c => c.households || []));
+  if (side === 'rs') (S.currentRS || []).forEach(c => (c.assignees || []).forEach(id => { const m = S.members.find(x => x.id === id); if (m?.householdId) assigned.add(m.householdId); }));
   const isAssigned = h => assigned.has(h.id) || assigned.has(h.name);
   const placed = pool.filter(h => h.lat != null && h.lng != null && !isNaN(h.lat));
   const unplaced = pool.filter(h => !placed.includes(h)).sort((a, b) => a.name.localeCompare(b.name));
   const tag = h => isAssigned(h) ? '<span class="badge badge-green" style="font-size:0.68rem">Assigned (Current)</span>' : '<span class="badge badge-red" style="font-size:0.68rem">Not assigned</span>';
   let top;
   if (!pool.length) {
-    top = `<div class="card"><p style="color:#888;font-size:0.86rem">No households are in the ${label} yet. ${side === 'rs' ? 'The RS presidency sets the RS Pool' : 'The EQ presidency sets the EQ Pool'} on the Households tab.</p></div>`;
+    top = `<div class="card"><p style="color:#888;font-size:0.86rem">No households are in the ${label} yet. ${side === 'rs' ? 'The RS presidency sets the Receives Pool on the Sisters tab' : 'The EQ presidency sets the EQ Pool on the Households tab'}.</p></div>`;
   } else if (!_nearbyOrigin) {
     top = `<div class="card"><p style="color:#888;font-size:0.86rem">${placed.length} of ${pool.length} ${label} households can be measured. Enter an address above and tap Find.</p></div>`;
   } else {
@@ -9034,8 +9630,13 @@ const LCR_REPORT_URLS = {
   'st-ki': 'https://lcr.churchofjesuschrist.org/report/key-indicators?lang=eng',
   'st-qr': 'https://lcr.churchofjesuschrist.org/report/quarterly-report?lang=eng',
   'st-us': 'https://lcr.churchofjesuschrist.org/report/unit-statistics?lang=eng',
-  // Ministering assignments (Individuals tab) → Current brother and sister lists
-  ministering: 'https://lcr.churchofjesuschrist.org/ministering-assignments?lang=eng&tab=individuals',
+  // Ministering Interviews – Elders Quorum → Current brother list (districts, companionships, households)
+  ministering: 'https://lcr.churchofjesuschrist.org/ministering?lang=eng&type=EQ',
+  // Member List (Members view / Households view), printed → Import tab
+  'members-list': 'https://lcr.churchofjesuschrist.org/mlt/records/member-list?lang=eng',
+  'households-list': 'https://lcr.churchofjesuschrist.org/mlt/records/member-list?lang=eng',
+  // Ministering Interviews – Relief Society → Current sister list
+  'ministering-rs': 'https://lcr.churchofjesuschrist.org/ministering?lang=eng&type=RS',
   // Identifiers tab
   'id-noCalling': 'https://lcr.churchofjesuschrist.org/mlt/report/member-callings?tab=without-callings&lang=eng',
   'id-partMember': 'https://lcr.churchofjesuschrist.org/mlt/report/part-member-households?lang=eng',
@@ -9225,6 +9826,10 @@ function deleteHousehold(id) {
     <div class="form-group">
       <label>Phone</label>
       <input type="text" id="nmem-phone" placeholder="555-555-5555">
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="nmem-email" placeholder="Optional">
     </div>
     <div class="form-group">
       <label>Household (optional)</label>

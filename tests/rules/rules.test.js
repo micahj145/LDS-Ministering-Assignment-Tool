@@ -120,6 +120,9 @@ test('final: ward data by role', async t => {
     await assertSucceeds(wardUpd(E, 'eq', { 'importMeta.ministering-eq': { at: 'x', by: 'E' }, 'importMeta.movein': { at: 'x', by: 'E' } }));
     await assertFails(wardUpd(E, 'eq', { 'importMeta.ministering-rs': { at: 'x', by: 'E' } }));
     await assertSucceeds(wardUpd(R, 'rs', { 'importMeta.ministering-rs': { at: 'x', by: 'R' } }));
+    // Temporary sisters' setup: the admin may change the sisters' lists; another EQ member may not.
+    await assertSucceeds(wardUpd(as(env, 'admin'), 'admin', { currentRS: [{ id: 'a' }], 'importMeta.ministering-rs': { at: 'x', by: 'A' } }));
+    await assertFails(wardUpd(E, 'eq', { proposedRS: [{ id: 'x' }] }));
   });
   await t.test('council: not members, households, identifiers, assignments, move-ins', async () => {
     for (const f of ['members', 'households', 'current', 'proposed', 'currentRS', 'proposedRS'])
