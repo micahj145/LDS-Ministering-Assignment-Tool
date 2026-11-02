@@ -102,9 +102,9 @@ Rollout steps and console setup: **`SECURITY_ROLLOUT.md`**; manual checks: **`PH
   (+ admin delete, + anyone deletes notes on new/returning/mission entries). `fromCurrentApp()`
   refuses saves without `clientVersion >= 2` once the doc has it (old tabs can't re-embed notes).
   Tests: **`tests/rules/`** (`./run.sh`, 61 cases, both steps).
-- **Roles in the app**: `canEditWard()` (eq or rs) for member/household/move-in/out/identifier/unit
-  data — `wardEditGuard()` at the top of every such entry point, `.ward-edit` controls hidden for
-  council. `canWriteKey()` / `canRemoveNote()` / `canWriteNote()` mirror the rules; `syncOnce()`
+- **Roles in the app**: `canManageMembers()` (eq, rs or bishopric) for member/household/move-in/out
+  data — `memberEditGuard()` at the top of every such entry point, `.member-edit` controls hidden
+  otherwise; `canEditWard()` (eq or rs) for identifiers and unit stats — `wardEditGuard()`, `.ward-edit`. `canWriteKey()` / `canRemoveNote()` / `canWriteNote()` mirror the rules; `syncOnce()`
   puts back (with an alert) anything the role can't save rather than sending a doomed batch.
 - **Before/after confirmation** (`confirmWardChanges()`, `#chg-modal`): changes to `members`,
   `households`, `current`, `currentRS` (ignoring pools, `position`, lat/lng, notes) are listed
@@ -128,8 +128,12 @@ Rollout steps and console setup: **`SECURITY_ROLLOUT.md`**; manual checks: **`PH
   (one-click fix), callings not on the access list, and names not found are flagged in the user
   list; nothing changes automatically. Verified on the Oct 2026 PDF: 146 rows, 106 people, 4 EQ +
   6 RS + 3 bishopric roles, 27 people with an access calling (YW and Primary secretary vacant).
-- **Bishopric** role (Nov 2026): same rights as council everywhere for now (`roleOf()` keeps it;
-  rules treat any role but eq/rs as council); its own role so bishopric-only features can come later.
+- **Bishopric** role (Nov 2026): council rights plus members, households and move-ins/outs (add,
+  change, remove; CSV/LCR imports; geocoding) — `canManageMembers()` / `memberEditGuard()` /
+  `.member-edit` in the app, `memberManager()` + `wardKeysFor`/`groupKeysFor` in the rules. Not
+  identifiers, unit stats (`canEditWard()` / `wardEditGuard()` / `.ward-edit`, eq/rs only), pools or
+  assignment lists (`canEditEQ/RS()`). The rules can't tell pool fields from other member/household
+  fields, so keeping the bishopric off pools is the app's job.
 - **Functions**: every push/feed recipient must be approved **and** on the allowed list
   (`mayReceive()`; profile alone until the list exists). `notifyNoteChange` (notes/{id}) places the
   note into the ward doc before/after and reuses `newTags()` / `householdChanges()`.

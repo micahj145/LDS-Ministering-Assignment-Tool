@@ -13,8 +13,8 @@
 // What they can change depends on their role on the allowed list:
 //   eq / rs (EQ or RS presidency): member, household, move-in/out, identifier
 //     and unit data; eq the brother assignment lists, rs the sister lists.
-//   council and bishopric (everyone else; bishopric is its own role so it can
-//     get its own features later): notes, goals, next steps, Covenant Path Progress
+//   bishopric: as council, plus member, household and move-in/out data.
+//   council (everyone else): notes, goals, next steps, Covenant Path Progress
 //     (groups new / returning / mission), the tag directory, their own
 //     profile (following, notification settings), messages.
 //   Admin (admin: true on the allowed list) manages people; it adds no
@@ -60,6 +60,8 @@ service cloud.firestore {
     }
     function role() { return access().get('role', 'council'); }
     function presidency() { return finalRules() ? (onAllowList() && role() in ['eq', 'rs']) : true; }
+    // Members and households (and their notes): the presidencies and the bishopric.
+    function memberManager() { return finalRules() ? (onAllowList() && role() in ['eq', 'rs', 'bishopric']) : true; }
     function isAdmin() {
       return isSignedIn() && (
         finalRules() ? (canUse() && access().get('admin', false) == true)
@@ -129,12 +131,13 @@ service cloud.firestore {
     }
     function wardKeysFor(r) {
       return ['users', 'activityLog', 'updatedAt', 'updatedBy', 'updatedByUid', 'clientVersion', 'groups']
-        .concat(r in ['eq', 'rs'] ? ['members', 'households', 'identMeta'] : [])
+        .concat(r in ['eq', 'rs', 'bishopric'] ? ['members', 'households'] : [])
+        .concat(r in ['eq', 'rs'] ? ['identMeta'] : [])
         .concat(r == 'eq' ? ['current', 'proposed'] : [])
         .concat(r == 'rs' ? ['currentRS', 'proposedRS'] : []);
     }
     function groupKeysFor(r) {
-      return r in ['eq', 'rs'] ? ['new', 'returning', 'mission', 'movein', 'moveout'] : ['new', 'returning', 'mission'];
+      return r in ['eq', 'rs', 'bishopric'] ? ['new', 'returning', 'mission', 'movein', 'moveout'] : ['new', 'returning', 'mission'];
     }
     function allowedWardChange() {
       let r = role();
@@ -176,12 +179,12 @@ service cloud.firestore {
     match /notes/{noteId} {
       allow read: if canUse();
       allow create: if canUse() && validNote()
-        && (!finalRules() || request.resource.data.get('authorId', '') == request.auth.uid || presidency());
+        && (!finalRules() || request.resource.data.get('authorId', '') == request.auth.uid || memberManager());
       allow update: if canUse() && validNote()
         && request.resource.data.get('authorId', '') == noteAuthor()
-        && (!finalRules() || noteAuthor() == request.auth.uid || presidency());
+        && (!finalRules() || noteAuthor() == request.auth.uid || memberManager());
       allow delete: if canUse() && (!finalRules()
-        || noteAuthor() == '' || noteAuthor() == request.auth.uid || presidency() || isAdmin()
+        || noteAuthor() == '' || noteAuthor() == request.auth.uid || memberManager() || isAdmin()
         || (resource.data.target.type == 'group' && resource.data.target.get('group', '') in ['new', 'returning', 'mission']));
     }
 

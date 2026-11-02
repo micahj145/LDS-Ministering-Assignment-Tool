@@ -583,6 +583,20 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
       await ev(A, () => setUserRole('uPending', 'rs')); await sleep(800);
       return { pass: a.role === 'bishopric' && opt, obs: { role: a.role, option: opt } };
     });
+    await check('admin', 'Bishopric can add members and run move-ins, not identifiers', async () => {
+      await adb.doc('allowedUsers/cora@example.com').update({ role: 'bishopric' });
+      const B = await open('cora@example.com');
+      const o = await ev(B, () => ({ role: _currentUserRole, addBtn: !!document.querySelector('#tab-members .member-edit') && document.querySelector('#tab-members .member-edit').style.display !== 'none',
+        moveIn: document.querySelector('[onclick*="movein-file"]').style.display !== 'none', ident: document.querySelector('[onclick*="ident-file-ysa"]').style.display !== 'none',
+        pools: canEditEQ() || canEditRS() }));
+      await ev(B, () => openAddMemberModal()); await B.page.fill('#nmem-name', 'Bishopric, Added'); await ev(B, () => saveNewMember()); await flush(B);
+      const added = (await ward()).members.some(m => m.name === 'Bishopric, Added');
+      const id = (await ward()).members.find(m => m.name === 'Bishopric, Added')?.id;
+      if (id) { await ev(B, id => deleteMember(id), id); await flush(B); }
+      const removed = !(await ward()).members.some(m => m.name === 'Bishopric, Added');
+      await B.ctx.close(); await adb.doc('allowedUsers/cora@example.com').update({ role: 'council' });
+      return { pass: o.role === 'bishopric' && o.addBtn && o.moveIn && !o.ident && !o.pools && added && removed, obs: { ...o, added, removed } };
+    });
     await check('admin', 'reset two-step sign-in (lost phone)', async () => {
       const before = ((await require('firebase-admin/auth').getAuth().getUser('uFresh')).multiFactor?.enrolledFactors || []).length;
       await ev(A, () => resetTwoStep('uFresh')); await sleep(1500);

@@ -124,12 +124,13 @@ test('final: ward data by role', async t => {
   });
   await t.test('council: a whole-document overwrite is refused', () =>
     assertFails(setDoc(doc(C, 'wardData', 'shared'), { members: [], groups: {}, updatedByUid: 'uC', clientVersion: 2 })));
-  await t.test('bishopric: same as council for now', async () => {
+  await t.test('bishopric: members, households, move-ins/outs; not identifiers, assignments or unit stats', async () => {
     const B = as(env, 'bishopric');
     await assertSucceeds(wardUpd(B, 'bishopric', { 'groups.new': [{ id: 'gb' }] }));
-    await assertFails(wardUpd(B, 'bishopric', { members: [{ id: 'x' }] }));
-    await assertFails(wardUpd(B, 'bishopric', { current: [{ id: 'x' }] }));
-    await assertFails(wardUpd(B, 'bishopric', { 'groups.movein': [{ id: 'x' }] }));
+    await assertSucceeds(wardUpd(B, 'bishopric', { members: [{ id: 'mb' }], households: [{ id: 'hb' }] }));
+    await assertSucceeds(wardUpd(B, 'bishopric', { 'groups.movein': [{ id: 'eb' }], 'groups.moveout': [] }));
+    await assertFails(wardUpd(B, 'bishopric', { identMeta: { ysa: {} } }));
+    for (const f of ['current', 'proposed', 'currentRS', 'proposedRS']) await assertFails(wardUpd(B, 'bishopric', { [f]: [{ id: 'x' }] }));
     await assertFails(updateDoc(doc(B, 'wardData', 'stats'), { 'us.b': 1 }));
   });
   await t.test('eq: members, households, brother lists, move-ins', async () => {
@@ -179,6 +180,10 @@ test('final: notes', async t => {
     await assertSucceeds(deleteDoc(doc(C, 'notes', 'c1')));
   });
   await t.test("council can remove others' goals on a Covenant Path person", () => assertSucceeds(deleteDoc(doc(C, 'notes', 'onNew'))));
+  await t.test("the bishopric can remove others' household notes (removing a household)", async () => {
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'notes', 'byEq2'), { text: 'x', author: 'E', authorId: 'uE', target: { type: 'household', id: 'h1', field: 'notes' } }));
+    await assertSucceeds(deleteDoc(doc(as(env, 'bishopric'), 'notes', 'byEq2')));
+  });
   await t.test("a presidency member can remove others' notes", () => assertSucceeds(deleteDoc(doc(E, 'notes', 'byEq'))));
   await t.test('nobody can re-sign a note as someone else', () => assertFails(updateDoc(doc(E, 'notes', 'c2'), { authorId: 'uE' })));
 });

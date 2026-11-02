@@ -356,7 +356,7 @@ tr:hover td{background:#fafbfc}
     <!-- Households -->
     <div class="card">
       <h2>1. Households CSV</h2>
-      <div class="drop-zone ward-edit" id="hh-drop" onclick="document.getElementById('hh-file').click()">
+      <div class="drop-zone member-edit" id="hh-drop" onclick="document.getElementById('hh-file').click()">
         <input type="file" id="hh-file" accept=".csv" onchange="handleHouseholdsFile(this.files[0])">
         <div class="icon">🏠</div>
         <strong>Click or drag to upload</strong>
@@ -386,7 +386,7 @@ tr:hover td{background:#fafbfc}
     <!-- Members -->
     <div class="card">
       <h2>2. Members CSV</h2>
-      <div class="drop-zone ward-edit" id="member-drop" onclick="document.getElementById('member-file').click()">
+      <div class="drop-zone member-edit" id="member-drop" onclick="document.getElementById('member-file').click()">
         <input type="file" id="member-file" accept=".csv" onchange="handleMemberFile(this.files[0])">
         <div class="icon">👤</div>
         <strong>Click or drag to upload</strong>
@@ -469,7 +469,7 @@ tr:hover td{background:#fafbfc}
         <option value="id-partMember">In a part-member household</option>
         <option value="id-bday">Birthday in the next 2 weeks</option>
       </select>
-      <button class="ward-edit btn btn-primary btn-sm" onclick="openAddMemberModal()">+ Add Member</button>
+      <button class="member-edit btn btn-primary btn-sm" onclick="openAddMemberModal()">+ Add Member</button>
     </div>
     <div id="members-table"></div>
   </div>
@@ -494,7 +494,7 @@ tr:hover td{background:#fafbfc}
         <option value="no-addr">No Address</option>
         <option value="geocoded">Geocoded</option>
       </select>
-      <button class="ward-edit btn btn-primary btn-sm" onclick="openAddHouseholdModal()">+ Add Household</button>
+      <button class="member-edit btn btn-primary btn-sm" onclick="openAddHouseholdModal()">+ Add Household</button>
     </div>
     <div id="households-table"></div>
   </div>
@@ -615,11 +615,11 @@ tr:hover td{background:#fafbfc}
 
   <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
     <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-      <button class="ward-edit btn btn-secondary btn-sm" onclick="calculateDistances()">Calculate Distances</button>
+      <button class="member-edit btn btn-secondary btn-sm" onclick="calculateDistances()">Calculate Distances</button>
       <div id="geo-status" style="font-size:0.85rem;color:#666"></div>
       <button class="btn btn-secondary btn-sm" onclick="saveGeoFile()">Save Coords</button>
-      <label class="ward-edit btn btn-secondary btn-sm" style="cursor:pointer">Load Coords<input type="file" accept=".json" style="display:none" onchange="loadGeoFile(this.files[0])"></label>
-      <button class="ward-edit btn btn-secondary btn-sm" onclick="clearGeoCache()" style="margin-left:auto">Clear Cache</button>
+      <label class="member-edit btn btn-secondary btn-sm" style="cursor:pointer">Load Coords<input type="file" accept=".json" style="display:none" onchange="loadGeoFile(this.files[0])"></label>
+      <button class="member-edit btn btn-secondary btn-sm" onclick="clearGeoCache()" style="margin-left:auto">Clear Cache</button>
     </div>
     <div id="geo-progress" style="display:none;margin-top:0.6rem">
       <div style="background:#e0e6ed;border-radius:4px;height:5px">
@@ -864,7 +864,7 @@ tr:hover td{background:#fafbfc}
       <div>
         <input type="file" id="movein-file" accept=".pdf,application/pdf" style="display:none" onchange="handleMoveInPdf(this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="in" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('movein-file').click()">Import</button>
+        <button class="btn btn-primary member-edit" style="display:block;width:100%" onclick="document.getElementById('movein-file').click()">Import</button>
       </div>
     </div>
     <p style="font-size:0.82rem;color:#888;margin:0.4rem 0 0">Tap <strong>Fetch/Print/Download</strong> to open the Members Moved In report in LCR (sign in if asked) and print or save it as a PDF (on Android: Share → Print → Save as PDF), then tap <strong>Import</strong> and pick that file. The PDF is read in your
@@ -879,7 +879,7 @@ tr:hover td{background:#fafbfc}
       <div>
         <input type="file" id="moveout-file" accept=".pdf,application/pdf" style="display:none" onchange="handleMoveOutPdf(this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="out" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
-        <button class="btn btn-primary ward-edit" style="display:block;width:100%" onclick="document.getElementById('moveout-file').click()">Import</button>
+        <button class="btn btn-primary member-edit" style="display:block;width:100%" onclick="document.getElementById('moveout-file').click()">Import</button>
       </div>
     </div>
     <p style="font-size:0.82rem;color:#888;margin:0.4rem 0 0">Tap <strong>Fetch/Print/Download</strong> to open the Members Moved Out report in LCR and save it as a PDF, then tap <strong>Import</strong>. Everyone in it is matched to
@@ -1299,7 +1299,7 @@ async function syncOnce() {
       if (badKeys.length || badNotes.length) {
         if (badKeys.length) revertWardKeys(badKeys);
         if (badNotes.length) restoreNotes(badNotes);
-        alert(badKeys.length ? 'Only the EQ or RS presidency can change member, household, move-in/out, identifier and assignment data, so that part was not saved.'
+        alert(badKeys.length ? 'Your role can\'t change that part (members, households and move-ins/outs: EQ, RS or bishopric; identifiers and assignments: EQ or RS), so it was not saved.'
                              : 'You can remove or change only your own notes, so that was put back.');
         now = cloudShape(); ({ keys, upserts, removed } = diff());
       }
@@ -1937,7 +1937,7 @@ async function setUserRole(id, role) {
   const who = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'this user';
   const detail = role === 'eq' ? 'They can change member, household, move-in/out and unit data, and the ministering brother lists. Everyone can see all the lists.'
     : role === 'rs' ? 'They can change member, household, move-in/out and unit data, and the ministering sister lists. Everyone can see all the lists.'
-    : role === 'bishopric' ? 'Bishopric: for now the same as Ward Council — they can see every tab, add notes, tags and next steps, and keep Covenant Path Progress, but not change member, household or assignment data.'
+    : role === 'bishopric' ? 'Bishopric: everything Ward Council can do, plus adding, changing and removing members and households, including the Move In and Move Out imports. Not identifiers, unit statistics, pools or ministering assignments.'
     : 'They can see every tab, add notes, tags and next steps, and keep Covenant Path Progress — but not change member, household or assignment data.';
   // Cancelling re-renders so the dropdown snaps back to the stored value.
   if (!confirm(`Set ${who} to ${ROLE_LABEL[roleOf(role)]}?\n\n${detail}`)) { renderAdminPanel(); return; }
@@ -2467,27 +2467,37 @@ function canEditRS() { return _currentUserRole === 'rs'; }
 function canEditWard() { return _currentUserRole === 'eq' || _currentUserRole === 'rs'; }
 function wardEditGuard() {
   if (canEditWard()) return true;
-  alert('Only the EQ or RS presidency can change member, household, move-in/out, identifier and unit data.');
+  alert('Only the EQ or RS presidency can change identifier and unit statistics data.');
+  return false;
+}
+// Members and households — adding, changing, removing, and the Move In /
+// Move Out imports that do so — are the EQ and RS presidencies' and the
+// bishopric's (Nov 2026). Pools and assignment lists stay with EQ / RS.
+function canManageMembers() { return canEditWard() || _currentUserRole === 'bishopric'; }
+function memberEditGuard() {
+  if (canManageMembers()) return true;
+  alert('Only the EQ or RS presidency or the bishopric can add, change or remove members, households, move-ins and move-outs.');
   return false;
 }
 const COUNCIL_GROUPS = ['new', 'returning', 'mission'];
 // Which parts of wardData/shared this person may save (see firestore.rules).
 function canWriteKey(k) {
   if (k === 'users') return true;
-  if (k.startsWith('groups.')) return COUNCIL_GROUPS.includes(k.slice(7)) || canEditWard();
+  if (k.startsWith('groups.')) return COUNCIL_GROUPS.includes(k.slice(7)) || canManageMembers();
   if (k === 'current' || k === 'proposed') return canEditEQ();
   if (k === 'currentRS' || k === 'proposedRS') return canEditRS();
-  return canEditWard();     // members, households, identMeta
+  if (k === 'members' || k === 'households') return canManageMembers();
+  return canEditWard();     // identMeta
 }
 // Notes: anyone writes their own; the presidencies (and an admin) may also
 // remove others' — needed when a member or household is removed — and anyone
 // may remove those on a Covenant Path Progress person they take off the list.
 function canRemoveNote(n) {
-  return !n.authorId || n.authorId === _currentUserId || canEditWard() || _currentUserIsAdmin
+  return !n.authorId || n.authorId === _currentUserId || canManageMembers() || _currentUserIsAdmin
     || (n.target?.type === 'group' && COUNCIL_GROUPS.includes(n.target.group));
 }
 function canWriteNote(n, existed) {
-  return existed ? (n.authorId === _currentUserId || canEditWard()) : (n.authorId === _currentUserId || n.migrated === true || canEditWard());
+  return existed ? (n.authorId === _currentUserId || canManageMembers()) : (n.authorId === _currentUserId || n.migrated === true || canManageMembers());
 }
 const LISTS = {
   current:    { min: 'eq', tab: 'current',   label: 'Current Ministering Brother Assignments' },
@@ -2513,6 +2523,8 @@ function applyAccessVisibility() {
   document.querySelectorAll('.rs-viewonly').forEach(el => { el.style.display = canEditRS() ? 'none' : ''; });
   // Member, household, move-in/out, identifier and unit data: EQ or RS presidency.
   document.querySelectorAll('.ward-edit').forEach(el => { el.style.display = canEditWard() ? '' : 'none'; });
+  // Members, households, move-ins/outs: EQ, RS or bishopric.
+  document.querySelectorAll('.member-edit').forEach(el => { el.style.display = canManageMembers() ? '' : 'none'; });
   document.querySelectorAll('.ward-viewonly').forEach(el => { el.style.display = canEditWard() ? 'none' : ''; });
 }
 
@@ -2764,7 +2776,7 @@ function readFile(file, cb) {
 
 // ── Member Import ─────────────────────────────────────────────
 function handleMemberFile(file) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   readFile(file, text => {
     const parsed = parseCSV(text);
     S.rawMembers = parsed;
@@ -2788,7 +2800,7 @@ function autoMemberCols(headers) {
 }
 
 function importMembers() {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   if (!S.rawMembers) return;
   const nameCol = document.getElementById('map-name').value;
   if (!nameCol) { alert('Map the Name column first.'); return; }
@@ -2870,7 +2882,7 @@ function isMale(g) {
 
 // ── Households Import ─────────────────────────────────────────
 function handleHouseholdsFile(file) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   readFile(file, text => {
     const parsed = parseCSV(text);
     S.rawHouseholds = parsed;
@@ -2899,7 +2911,7 @@ function autoHouseholdCols(headers) {
 }
 
 function importHouseholds() {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   if (!S.rawHouseholds) return;
   const nameCol    = document.getElementById('map-hh-name').value;
   if (!nameCol) { alert('Map the Household Name column first.'); return; }
@@ -3375,7 +3387,7 @@ function renderMembers() {
 }
 
 function openLinkModal(memberId) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const m = S.members.find(x => x.id === memberId);
   if (!m) return;
   document.getElementById('link-member-id').value = memberId;
@@ -3404,7 +3416,7 @@ function renderLinkHHSelect() {
 }
 
 function saveMemberLink(clear) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const memberId = document.getElementById('link-member-id').value;
   const m = S.members.find(x => x.id === memberId);
   if (!m) return;
@@ -3419,7 +3431,7 @@ function saveMemberLink(clear) {
 }
 
 function openAddMemberModal() {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   document.getElementById('nmem-name').value = '';
   document.getElementById('nmem-gender').value = '';
   document.getElementById('nmem-age').value = '';
@@ -3438,7 +3450,7 @@ function openAddMemberModal() {
 }
 
 function saveNewMember() {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const name = document.getElementById('nmem-name').value.trim();
   if (!name) { document.getElementById('nmem-error').textContent = 'Name is required.'; return; }
   const gender      = document.getElementById('nmem-gender').value;
@@ -3453,7 +3465,7 @@ function saveNewMember() {
 }
 
 function deleteMember(id) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const m = S.members.find(x => x.id === id);
   if (!m) return;
   const assignedCount = S.current.filter(c => c.m1Id === id || c.m2Id === id).length
@@ -4313,7 +4325,7 @@ async function geocodeAddress(rawAddress) {
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function calculateDistances() {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const allPending = S.households.filter(hh => hh.address && !hh.lat);
   // Split into actually-geocodeable vs. permanently-ungeocodeable (PO Boxes, bare city names, etc.)
   const skipped   = allPending.filter(hh => isUngeocodeable(hh.address));
@@ -4390,7 +4402,7 @@ async function calculateDistances() {
 }
 
 function clearGeoCache() {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   S.households.forEach(hh => { delete hh.lat; delete hh.lng; });
   dbUpsertHouseholds(S.households);
   document.getElementById('geo-status').textContent = 'Geocoding cache cleared.';
@@ -4412,7 +4424,7 @@ function saveGeoFile() {
 }
 
 function loadGeoFile(file) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
@@ -5471,7 +5483,7 @@ function dropFromMoveIns(memberIds) {
 // and next steps; each other group gets its own household at the same address
 // (coordinates copied, Pool left Out) and a fresh Move Ins entry.
 function splitMoveInEntry(id) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const entry = groupList('movein').find(e => e.id === id);
   const hh = entry && hhById(entry.householdId);
   if (!entry || !hh) return;
@@ -5530,7 +5542,7 @@ function setMoveInRSPool(householdId, value) {
 }
 
 function setMoveInStatus(id, value) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const e = groupList('movein').find(x => x.id === id);
   if (!e || !MOVEIN_STATUSES.some(s => s.value === value)) return;
   e.status = value;
@@ -5581,7 +5593,7 @@ function loadPdfJs() {
 let _moveInPlan = null;
 
 async function handleMoveInPdf(file) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const statusEl = document.getElementById('movein-status');
   document.getElementById('movein-file').value = '';
   if (!file) return;
@@ -5820,7 +5832,7 @@ function cancelMoveInImport() {
 }
 
 async function applyMoveInPlan() {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const chosen = (_moveInPlan || []).filter(i => i.include);
   if (chosen.some(i => i.ambiguous && i.split === null)) return;
   const items = chosen.flatMap(expandMoveInItem);
@@ -5937,7 +5949,7 @@ function companionshipsServing(hh) {
 }
 
 async function handleMoveOutPdf(file) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const statusEl = document.getElementById('moveout-status');
   document.getElementById('moveout-file').value = '';
   if (!file) return;
@@ -6108,7 +6120,7 @@ function cancelMoveOutImport() {
 }
 
 async function applyMoveOutPlan() {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const { members, households } = moveOutSelection();
   if (!members.length) return;
   const names = members.map(r => '  • ' + r.member.name).join('\n');
@@ -8826,7 +8838,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 let _hhEditId = null;
 
 function openHHEditModal(id) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const hh = S.households.find(x => x.id === id);
   if (!hh) return;
   _hhEditId = id;
@@ -8844,7 +8856,7 @@ function openHHEditModal(id) {
 }
 
 async function saveHHAddress(andGeocode) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const hh = S.households.find(x => x.id === _hhEditId);
   if (!hh) return;
 
@@ -8886,7 +8898,7 @@ async function saveHHAddress(andGeocode) {
 
 // ── Add / Delete Households ─────────────────────────────────────
 function openAddHouseholdModal() {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   document.getElementById('nhh-name').value = '';
   document.getElementById('nhh-head').value = '';
   document.getElementById('nhh-addr').value = '';
@@ -8898,7 +8910,7 @@ function openAddHouseholdModal() {
 }
 
 async function saveNewHousehold() {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const name = document.getElementById('nhh-name').value.trim();
   if (!name) { document.getElementById('nhh-error').textContent = 'Household name is required.'; return; }
   const head  = document.getElementById('nhh-head').value.trim();
@@ -8913,7 +8925,7 @@ async function saveNewHousehold() {
 }
 
 function deleteHousehold(id) {
-  if (!wardEditGuard()) return;
+  if (!memberEditGuard()) return;
   const hh = S.households.find(x => x.id === id);
   if (!hh) return;
   const linkedMembers = S.members.filter(m => m.householdId === id);
