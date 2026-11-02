@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { insertNotes, callerProblem, roleFlags, roleReviewMessage } = require('./access');
+const { insertNotes, callerProblem, roleFlags, roleReviewMessage, twoStepSummary } = require('./access');
 const { newTags } = require('./tags');
 const { householdChanges } = require('./follow');
 
@@ -61,4 +61,11 @@ test('roleFlags lists only people on the allowed list whose role differs', () =>
   assert.deepStrictEqual(roleFlags(callings, allowed), ['b@x', 'c@x']);
   assert.deepStrictEqual(roleFlags(null, allowed), []);
   assert.strictEqual(roleReviewMessage(1), '1 person’s role needs your review.');
+});
+
+test('twoStepSummary reports the methods set up', () => {
+  assert.deepStrictEqual(twoStepSummary({ multiFactor: { enrolledFactors: [{ factorId: 'totp' }, { factorId: 'phone' }, { factorId: 'phone' }] }, metadata: { lastSignInTime: 'Sun, 01 Nov 2026 12:00:00 GMT' } }),
+    { factors: ['phone', 'totp'], lastSignIn: 'Sun, 01 Nov 2026 12:00:00 GMT' });
+  assert.deepStrictEqual(twoStepSummary({ metadata: {} }), { factors: [], lastSignIn: null });
+  assert.deepStrictEqual(twoStepSummary(null), { factors: [], lastSignIn: null });
 });

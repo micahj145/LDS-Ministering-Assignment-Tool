@@ -63,8 +63,15 @@ function roleFlags(callings, allowed) {
   }).sort();
 }
 
+// Two-step sign-in status for the Admin tab, from an Auth user record:
+// which methods they've set up ('phone' = texted code, 'totp' = authenticator app).
+function twoStepSummary(user) {
+  const factors = ((user && user.multiFactor && user.multiFactor.enrolledFactors) || []).map(f => f.factorId).filter(Boolean);
+  return { factors: [...new Set(factors)].sort(), lastSignIn: (user && user.metadata && user.metadata.lastSignInTime) || null };
+}
+
 function roleReviewMessage(n) {
   return n === 1 ? '1 person’s role needs your review.' : `${n} people’s roles need your review.`;
 }
 
-module.exports = { NOTE_FIELDS, COUNCIL_GROUPS, MAX_SESSION_S, insertNotes, callerProblem, roleFlags, roleReviewMessage };
+module.exports = { NOTE_FIELDS, COUNCIL_GROUPS, MAX_SESSION_S, insertNotes, callerProblem, roleFlags, roleReviewMessage, twoStepSummary };

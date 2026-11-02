@@ -9,6 +9,7 @@
 //  notifyNoteChange     a note, goal or next step added/changed (notes/{id}): tags + followers.
 //  notifyRoleReview     callings report imported or a role changed: tell admins about mismatches.
 //  resetTwoStep         (callable) an admin clears someone's two-step sign-in after a lost phone.
+//  twoStepStatus        (callable) for the Admin tab: who has set up two-step sign-in, and how.
 //
 // Who gets anything: only people still allowed in — an approved profile and an
 // allowedUsers/{email} entry (until that list is first filled, the profile alone).
@@ -31,7 +32,7 @@ const { getMessaging } = require('firebase-admin/messaging');
 const { newTags, unreadCount, messageFor, accessRequestMessage } = require('./tags');
 const { householdChanges, followMessage } = require('./follow');
 const { dmMessage, restrictedMessage, newViewers, threadsUnread, restrictedUnread } = require('./private');
-const { insertNotes, callerProblem, roleFlags, roleReviewMessage } = require('./access');
+const { insertNotes, callerProblem, roleFlags, roleReviewMessage, twoStepSummary } = require('./access');
 
 initializeApp();
 
@@ -312,17 +313,35 @@ exports.notifyRestrictedNote = onDocumentWritten({ document: 'privateNotes/{note
   }, 'notifyRestrictedNote');
 });
 
+// Same caller checks as firestore.rules, plus admin. Throws if not allowed.
+async function requireAdmin(req) {
+  const token = req.auth?.token;
+  const me = token?.email ? (await getFirestore().doc('allowedUsers/' + token.email.toLowerCase()).get()).data() : null;
+  const problem = callerProblem(token, me);
+  if (problem) throw new HttpsError('permission-denied', `Not allowed (${problem}). Sign in again and retry.`);
+  if (me.admin !== true) throw new HttpsError('permission-denied', 'Only an admin can do that.');
+}
+
+// For the Admin tab: which two-step methods each person with a profile has set
+// up, and when they last signed in. Only the browser can't see this (Firebase
+// keeps it server-side), so an admin asks here. Returns no phone numbers.
+exports.twoStepStatus = onCall({ region: REGION, maxInstances: 1 }, async (req) => {
+  await requireAdmin(req);
+  const uids = (await getFirestore().collection('profiles').get()).docs.map(d => d.id);
+  const users = {};
+  for (let i = 0; i < uids.length; i += 100) {
+    const r = await getAuth().getUsers(uids.slice(i, i + 100).map(uid => ({ uid })));
+    r.users.forEach(u => { users[u.uid] = twoStepSummary(u); });
+  }
+  return { users, checkedAt: new Date().toISOString() };
+});
+
 // Lost or replaced phone: an admin clears someone's two-step sign-in so they
 // can set it up again at their next sign-in. The caller must pass the same
 // checks firestore.rules makes (allowed list, admin, code step, < 14 days),
 // and the person is signed out everywhere.
 exports.resetTwoStep = onCall({ region: REGION, maxInstances: 1 }, async (req) => {
-  const token = req.auth?.token;
-  const db = getFirestore();
-  const me = token?.email ? (await db.doc('allowedUsers/' + token.email.toLowerCase()).get()).data() : null;
-  const problem = callerProblem(token, me);
-  if (problem) throw new HttpsError('permission-denied', `Not allowed (${problem}). Sign in again and retry.`);
-  if (me.admin !== true) throw new HttpsError('permission-denied', 'Only an admin can reset two-step sign-in.');
+  await requireAdmin(req);
   const uid = req.data && typeof req.data.uid === 'string' ? req.data.uid : '';
   if (!uid) throw new HttpsError('invalid-argument', 'Which person?');
   await getAuth().updateUser(uid, { multiFactor: { enrolledFactors: null } });

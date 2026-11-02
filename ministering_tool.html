@@ -987,6 +987,7 @@ tr:hover td{background:#fafbfc}
   <div class="card">
     <h2>All Users</h2>
     <div id="admin-allow-missing"></div>
+    <div id="admin-twostep-summary"></div>
     <div id="admin-all-list"></div>
   </div>
   <div class="card">
@@ -1830,7 +1831,7 @@ async function renderAdminPanel() {
     <div style="border-bottom:1px solid #f0f0f0;padding:0.5rem 0">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:0.6rem;flex-wrap:wrap">
       <div><div style="font-weight:500">${name ? esc(name) + ' — ' : ''}${esc(p.email)}${isSelf ? ' <span style="font-weight:400;color:#888">(you)</span>' : ''}</div>
-      <div style="font-size:0.78rem;color:#888">${p.status} · ${a ? ROLE_LABEL[role] + (a.admin ? ' · admin' : '') : '<span style="color:#856404">not on the allowed list</span>'} · ${p.emailVerified ? '<span style="color:#155724">email verified</span>' : '<span style="color:#856404">email not verified yet</span>'}${chk && chk.ok ? ' · <span style="color:#155724">role matches callings</span>' : ''}</div></div>
+      <div style="font-size:0.78rem;color:#888">${p.status} · ${a ? ROLE_LABEL[role] + (a.admin ? ' · admin' : '') : '<span style="color:#856404">not on the allowed list</span>'} · ${p.emailVerified ? '<span style="color:#155724">email verified</span>' : '<span style="color:#856404">email not verified yet</span>'}${chk && chk.ok ? ' · <span style="color:#155724">role matches callings</span>' : ''}${p.status === 'approved' ? ` · <span class="ts-status" data-uid="${p.id}">${twoStepLabel(p.id)}</span>` : ''}</div></div>
       <div style="display:flex;gap:0.4rem;align-items:center;flex-shrink:0;flex-wrap:wrap">
         ${a ? `<select style="font-size:0.8rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px" onchange="setUserRole('${p.id}', this.value)" title="Which ministering lists this person can change (everyone can see them all)">
           <option value="council" ${role === 'council' ? 'selected' : ''}>Ward Council</option>
@@ -1851,6 +1852,8 @@ async function renderAdminPanel() {
   document.getElementById('admin-allow-missing').innerHTML = missing.length
     ? `<div class="role-flag" style="margin-bottom:0.6rem">${missing.length} approved ${missing.length === 1 ? 'person isn\'t' : 'people aren\'t'} on the allowed list yet, so ${missing.length === 1 ? 'they' : 'they'} will lose access once the final security rules are on.
         <button class="btn btn-primary btn-sm" style="margin-left:0.4rem" onclick="addApprovedToAllowList()">Add ${missing.length === 1 ? 'them' : 'all ' + missing.length}</button></div>` : '';
+  renderTwoStepSummary();
+  loadTwoStepStatus();
   const cd = _callingsDoc;
   document.getElementById('callings-summary').textContent = cd
     ? `Last imported ${new Date(cd.importedAt).toLocaleDateString()} by ${cd.importedBy || 'admin'} (${cd.rows} callings).` : 'Not imported yet.';
@@ -1879,6 +1882,39 @@ async function updateAdminPendingCount() {
     const snap = await db.collection('profiles').where('status', '==', 'pending').get();
     setAdminPendingCount(snap.size);
   } catch (e) { console.warn('Could not count pending requests:', e?.message); }
+}
+
+// Who has set up two-step sign-in. Firebase keeps that server-side, so the
+// Admin tab asks the twoStepStatus Cloud Function (admins only), and fills in
+// each row and the summary line when the answer comes back.
+let _twoStep = null;          // { uid: { factors: ['phone'|'totp'], lastSignIn } }
+let _twoStepError = '';
+function twoStepLabel(uid) {
+  if (_twoStepError) return '<span style="color:#888">two-step: couldn\'t check</span>';
+  if (!_twoStep) return '<span style="color:#888">two-step: checking…</span>';
+  const t = _twoStep[uid];
+  if (!t || !t.factors.length) return '<span style="color:#856404">two-step: not set up yet</span>';
+  const how = t.factors.map(f => f === 'totp' ? 'app' : f === 'phone' ? 'text' : f).join(' + ');
+  return `<span style="color:#155724">two-step: ${how} ✓</span>`;
+}
+function renderTwoStepSummary() {
+  const el = document.getElementById('admin-twostep-summary'); if (!el) return;
+  const approved = _adminProfiles.filter(p => p.status === 'approved');
+  if (!_twoStep || !approved.length) { el.innerHTML = ''; return; }
+  const missing = approved.filter(p => !(_twoStep[p.id]?.factors || []).length);
+  const name = p => esc([p.firstName, p.lastName].filter(Boolean).join(' ') || p.email);
+  el.innerHTML = missing.length
+    ? `<div class="role-flag" style="margin-bottom:0.6rem">Two-step sign-in set up: <b>${approved.length - missing.length} of ${approved.length}</b>. Not yet: ${missing.map(name).join(', ')}.
+       <span style="color:#888">(They'll be asked to set it up the next time they sign in.)</span></div>`
+    : `<div style="font-size:0.82rem;color:#155724;margin-bottom:0.6rem">✓ Everyone approved (${approved.length}) has set up two-step sign-in.</div>`;
+}
+async function loadTwoStepStatus() {
+  try {
+    const r = await firebase.functions().httpsCallable('twoStepStatus')({});
+    _twoStep = r.data.users || {}; _twoStepError = '';
+  } catch (e) { console.warn('Two-step status:', e?.message); _twoStepError = e?.message || 'error'; }
+  document.querySelectorAll('#tab-admin .ts-status').forEach(el => { el.innerHTML = twoStepLabel(el.dataset.uid); });
+  renderTwoStepSummary();
 }
 
 function allowEntry(p, role, admin) {
@@ -1967,6 +2003,7 @@ async function resetTwoStep(id) {
   try {
     await firebase.functions().httpsCallable('resetTwoStep')({ uid: id });
     alert(`Done. ${who} will set up two-step sign-in again at their next sign-in.`);
+    loadTwoStepStatus();
   } catch (e) {
     alert('Could not reset: ' + (e?.message || 'unknown error'));
   }

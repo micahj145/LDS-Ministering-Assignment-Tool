@@ -577,6 +577,14 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
       const msg = A.dialogs.slice(-1)[0] || '';
       return { pass: before === 1 && after === 0, obs: { before, after, msg: msg.slice(0, 40) } };
     });
+    await check('admin', 'Admin tab shows who has set up two-step sign-in', async () => {
+      await ev(A, () => showTab('admin'));
+      await A.page.waitForFunction(() => [...document.querySelectorAll('#tab-admin .ts-status')].length && ![...document.querySelectorAll('#tab-admin .ts-status')].some(e => /checking/.test(e.innerText)), null, { timeout: 30000 });
+      const o = await ev(A, () => { const by = uid => document.querySelector(`#tab-admin .ts-status[data-uid="${uid}"]`)?.innerText || '';
+        return { sam: by('uEq'), finn: by('uFresh'), summary: document.getElementById('admin-twostep-summary').innerText.replace(/\s+/g, ' ').slice(0, 120) }; });
+      const r = await ev(E, async () => { try { await firebase.functions().httpsCallable('twoStepStatus')({}); return 'allowed'; } catch (e) { return e.code; } });
+      return { pass: /text ✓/.test(o.sam) && /not set up/.test(o.finn) && /Not yet:.*Finn/.test(o.summary) && r !== 'allowed', obs: { ...o, nonAdminCall: r } };
+    });
     await check('admin', 'a non-admin can\'t call reset', async () => {
       const r = await ev(E, async () => { try { await firebase.functions().httpsCallable('resetTwoStep')({ uid: 'uRs' }); return 'allowed'; } catch (e) { return e.code; } });
       return { pass: r !== 'allowed', obs: r };

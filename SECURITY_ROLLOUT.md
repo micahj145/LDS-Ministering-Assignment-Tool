@@ -113,10 +113,19 @@ Right after, **you** open the app first:
 > phone" and enter your cell number. After that you'll only be asked for a code about once every two weeks
 > on each device. If you get a new phone, let Micah know and he'll reset it.
 
-## Step 2: final rules (after everyone has set up their code)
+## Step 2: final rules (a few days after step 1)
 
-Check that everyone has signed in since step 1. Admin tab: nobody should show "not on the allowed list". Then
-in `firestore.rules` change
+People don't have to have set up their code first: anyone who hasn't is asked to set it up at their next
+sign-in, under the final rules too. The wait is just to catch any surprises on real phones. What **must** be
+right before step 2, in the Admin tab:
+
+- **Everyone is on the allowed list** (no yellow "not on the allowed list" box). Anyone missing is locked out.
+- **Roles are right.** Anyone left as Ward Council who should be EQ or RS loses edit rights. The callings
+  import flags these.
+- You can also see who has set up two-step sign-in ("two-step: text ✓ / app ✓ / not set up yet" on each
+  row, and a "set up: N of M" line above the list). Use it to nudge people; it doesn't block step 2.
+
+Then in `firestore.rules` change
 
 ```
 function finalRules() { return false; }

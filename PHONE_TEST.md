@@ -7,7 +7,7 @@ messages, Duo, real phones, and the live project. Do them after **step 1** is de
 Tick each box. If anything fails, note what you saw, and don't move on to step 2.
 
 ## A. You (admin, authenticator app)
-- [ ] 1. On your phone, open the app. You're asked to **Set up two-step sign-in** (or you're signed in and then
+- [x] 1. On your phone, open the app. You're asked to **Set up two-step sign-in** (or you're signed in and then
       asked). Choose **Use an authenticator app**.
 - [ ] 2. In Duo: **+** → **Use QR code** → scan. (Or **Enter key** and type the key shown.) The account shows
       as *Ward Ministering Tool*.
@@ -18,7 +18,8 @@ Tick each box. If anything fails, note what you saw, and don't move on to step 2
       Enter it → in.
 - [ ] 6. Enter a wrong code once → "That code didn't work…" and you stay on the code screen.
 - [ ] 7. Close the app completely and reopen → still signed in, no code asked.
-- [ ] 8. Admin tab: **Add all** (allowed list) → the yellow box goes away; every approved person shows a role.
+- [ ] 8. Admin tab: **Add all** (allowed list) → the yellow box goes away; every approved person shows a role, and
+      "two-step: …" shows who has set up a code (you: "app ✓").
 - [ ] 9. Import *Members with Callings* → a ✓ line with counts; any mismatch shows a yellow flag with a fix
       button; your phone gets "N people's roles need your review." (if any were flagged).
 

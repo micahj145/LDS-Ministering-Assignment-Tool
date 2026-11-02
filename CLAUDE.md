@@ -128,7 +128,10 @@ Rollout steps and console setup: **`SECURITY_ROLLOUT.md`**; manual checks: **`PH
   note into the ward doc before/after and reuses `newTags()` / `householdChanges()`.
   `notifyRoleReview` / `notifyRoleChange` push admins "N people's roles need your review."
   `resetTwoStep` (callable) clears a person's factors + revokes sessions; caller checked by
-  `callerProblem()` (same as rules) and must be an admin. Pure helpers in `functions/access.js`.
+  `callerProblem()` (same as rules) and must be an admin (`requireAdmin()`). `twoStepStatus`
+  (callable, same check) returns each profile's enrolled factor types + last sign-in (no phone
+  numbers) for the Admin tab's "two-step: …" labels and "set up: N of M" line (`loadTwoStepStatus()`).
+  Pure helpers in `functions/access.js`.
 - **App Check**: `APP_CHECK_SITE_KEY` (empty = off) → `firebase.initializeApp(config, { appCheckSiteKey })`
   starts reCAPTCHA Enterprise App Check. Enforcement is a console switch; leave it on monitor
   only until Micah says otherwise.
