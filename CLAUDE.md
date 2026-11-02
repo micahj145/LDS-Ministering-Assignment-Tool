@@ -561,6 +561,19 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   MutationObserver); inputs are 16px (no iPhone zoom), bigger tap targets, bottom-sheet modals, sticky
   district headings. The district line inside companionship cards was dropped (lists are grouped).
   The interviews parser ignores print-date and page-number lines.
+- **Threads follow the person / household**: members and households each have Notes, Goals and Next Steps.
+  `threadOwnerOf()` sends a Covenant Path entry with a member to that member's threads and a Move Ins entry to
+  its household's (`_notesCtx.from` remembers the entry for the merged Notes view and hiddenLinks). Unlinked
+  entries keep their own. The notes window has a Notes / Goals / Next Steps switcher (`setNotesField`) for
+  members, households and entries; buttons show all three counts (`threadsButtonLabel`, `entryThread`). Names
+  on companionship cards and Move Ins people open their threads (`personThreadsLink`). `moveEntryThreads()`
+  (after load, presidencies/bishopric/admin only) moves threads left on entries onto the owner; until then
+  they show alongside. Companionship notes are no longer pulled into anyone's Notes or the follower feed.
+  follow.js / tags.js cover all three threads on members and households (member threads also reach
+  `entry:<id>` followers); `notifyNoteChange` ignores a note whose target changed (a move).
+- **Draft notifications** (`functions/drafts.js`, `notifyDrafts` + `notifyNoteChange`): a change to the brothers'
+  draft (or a note on one of its companionships) → feed entry + push (throttled, `lastDraftPushAt`) to the other
+  EQ presidency members (allowed-list role eq); sisters' draft → RS presidency. Text names only who acted.
 - **Pools follow LCR**: after a ministering import, `poolFromCurrent()` puts everyone in the new Current In
   Pool — brothers: male ministers (`m.inPool`) and households (`hh.inPool`); sisters: female ministers
   (`m.rsPool`) and assignees (`m.rsRecipient`). Nothing is taken out of a pool.

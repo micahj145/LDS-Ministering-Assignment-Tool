@@ -219,6 +219,8 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 .district-head:first-child { margin-top:0.2rem; }
 .hh-person { margin-bottom:0.2rem; line-height:1.35; }
 .hh-contact { white-space:nowrap; font-size:0.78rem; margin-left:0.25rem; }
+.person-link { cursor:pointer; border-bottom:1px dotted #9bb0c7; }
+.person-link:hover { color:#1a5c9c; border-bottom-style:solid; }
 </style>
 </head>
 <body>
@@ -2843,7 +2845,7 @@ async function resolveAuthState() {
     document.getElementById('pending-screen').style.display = 'block';
     return;
   }
-  moveNotesOut();
+  moveNotesOut().then(() => { try { moveEntryThreads(); } catch (e) { console.warn('moveEntryThreads', e); } });
   registerSelfInDirectory();
   startPrivateListeners();
   updateMovesNavBadge();
@@ -3594,7 +3596,7 @@ function renderMembers() {
         <button class="btn btn-secondary btn-sm" onclick="openLinkModal('${m.id}')">Edit</button>
       </td>
       <td style="white-space:nowrap">
-        <button class="btn btn-secondary btn-sm" onclick="openNotesModal('member','${m.id}')">${(m.notes?.length||0) ? `Notes (${m.notes.length})` : 'Notes'}</button>
+        <button class="btn btn-secondary btn-sm" onclick="openNotesModal('member','${m.id}')">${threadsButtonLabel('member', m.id)}</button>
       </td>
       <td style="white-space:nowrap">
         <button class="btn btn-danger btn-sm" onclick="deleteMember('${m.id}')">Delete</button>
@@ -3786,7 +3788,7 @@ function renderHouseholds() {
       <td>${canEditEQ() ? poolBadge : poolBadge.replace(/onclick="[^"]*"/, '').replace('cursor:pointer', 'cursor:default')}</td>
       <td>${addrBadge}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-secondary btn-sm" onclick="openNotesModal('household','${hh.id}')">${(hh.notes?.length||0) ? `Notes (${hh.notes.length})` : 'Notes'}</button>
+        <button class="btn btn-secondary btn-sm" onclick="openNotesModal('household','${hh.id}')">${threadsButtonLabel('household', hh.id)}</button>
       </td>
       <td style="white-space:nowrap">
         ${followButtonHTML(hh.id)}
@@ -3853,7 +3855,7 @@ function renderBrothers() {
       <td>${bPoolBadge}</td>
       <td><span class="badge ${a?'badge-green':'badge-red'}">${a?'Assigned':'Unassigned'}</span></td>
       <td style="white-space:nowrap">
-        <button class="btn btn-secondary btn-sm" onclick="openNotesModal('brother','${b.id}')">${(b.notes?.length||0) ? `Notes (${b.notes.length})` : 'Notes'}</button>
+        <button class="btn btn-secondary btn-sm" onclick="openNotesModal('brother','${b.id}')">${threadsButtonLabel('member', b.id)}</button>
       </td>
     </tr>`;
   });
@@ -3932,20 +3934,30 @@ function renderCurrent() {
   }
 }
 
+// A person or household named on a companionship card: tap to open their
+// Notes / Goals / Next Steps (the card's own Notes button is the companionship's).
+function personThreadsLink(label, memberId) {
+  const m = memberId ? S.members.find(x => x.id === memberId) : memByLcrName(label);
+  return m ? `<span class="person-link" role="button" tabindex="0" title="${esc(m.name)}: notes, goals and next steps" onclick="event.stopPropagation();openNotesModal('member','${esc(m.id)}')">${esc(label)}</span>` : esc(label);
+}
+function householdThreadsLink(label, h) {
+  return h ? `<span class="person-link" role="button" tabindex="0" title="${esc(h.name)}: notes, goals and next steps" onclick="event.stopPropagation();openNotesModal('household','${esc(h.id)}')">${esc(label)}</span>` : esc(label);
+}
 function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed', idx, total) {
   const rec = id ? (S[listKey] || []).find(x => x.id === id) : null;
   const canEdit = canEditList(listKey);
-  const all = rec ? ministersOf(rec).map(m => m.name) : [m1, m2].filter(Boolean);
-  const ministers = all.length > 1
-    ? all.map(n => `${esc(n)}${identDotsByName(n)}`).join(' <span style="color:#aaa">+</span> ')
-    : `${esc(all[0] || m1)}${identDotsByName(all[0] || m1)} <span class="badge badge-blue">Solo</span>`;
+  const allM = rec ? ministersOf(rec) : [m1, m2].filter(Boolean).map(name => ({ id: null, name }));
+  const all = allM.map(m => m.name);
+  const ministers = allM.length > 1
+    ? allM.map(m => `${personThreadsLink(m.name, m.id)}${identDotsByName(m.name)}`).join(' <span style="color:#aaa">+</span> ')
+    : `${personThreadsLink(allM[0]?.name || m1, allM[0]?.id)}${identDotsByName(all[0] || m1)} <span class="badge badge-blue">Solo</span>`;
 
   // Resolve household display names
   const resolveHH = ref => S.households.find(x => x.id === ref || norm(x.name) === norm(ref));
   const tags = hhList.map(h => {
     const obj = resolveHH(h);
     const label = obj ? obj.name : h;
-    return `<span class="household-tag">${esc(label)}${identDotsHH(obj)}</span>`;
+    return `<span class="household-tag">${householdThreadsLink(label, obj)}${identDotsHH(obj)}</span>`;
   }).join('') + (rec?.extraAssignees || []).map(n => `<span class="household-tag" style="opacity:0.7" title="On LCR's list but not in Members">${esc(n)}</span>`).join('')
     || '<span style="color:#aaa;font-size:0.82rem">No households</span>';
 
@@ -4879,9 +4891,69 @@ function persistNotesTarget() {
   else if (_notesCtx.type === 'group') dbUpsertGroups();
 }
 
+// ── Threads follow the person / household (Nov 2026) ──────────
+// Members and households each have Notes, Goals and Next Steps. A Covenant
+// Path entry for a member opens that member's threads; a Move Ins entry opens
+// its household's. Entries with nobody linked (People Being Taught, names not
+// in Members) keep their own. Companionships have Notes only, kept to
+// themselves. Threads still left on an entry (written before this, not yet
+// moved by moveEntryThreads()) show alongside the owner's.
+function threadOwnerOf(type, id, groupKey) {
+  if (type === 'brother') return { type: 'member', id };
+  if (type === 'group') {
+    const e = (S.groups?.[groupKey] || []).find(x => x.id === id);
+    if (e && groupKey === 'movein' && e.householdId && hhById(e.householdId)) return { type: 'household', id: e.householdId, from: { groupKey, id } };
+    if (e && e.memberId && S.members.some(m => m.id === e.memberId)) return { type: 'member', id: e.memberId, from: { groupKey, id } };
+  }
+  return { type, id, groupKey };
+}
+// One-time move of threads written on list entries onto their owner (the
+// member for Covenant Path, the household for Move Ins). Done by whoever may
+// change others' notes (the presidencies, bishopric, admin); until then the
+// entry's items show alongside the owner's. Returns how many items moved.
+function moveEntryThreads() {
+  if (!(canManageMembers() || _currentUserIsAdmin)) return 0;
+  let n = 0; const mem = new Set(), hhs = new Set();
+  GROUPS.forEach(g => groupList(g.key).forEach(e => {
+    const o = threadOwnerOf('group', e.id, g.key); if (!o.from) return;
+    const owner = getNotesTarget(o); if (!owner) return;
+    NOTE_FIELDS.forEach(f => {
+      if (!(e[f] || []).length) return;
+      const have = new Set((owner[f] || []).map(x => x.id).filter(Boolean));
+      owner[f] = [...(owner[f] || []), ...e[f].filter(x => !x.id || !have.has(x.id))].sort((a, b) => (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0));
+      n += e[f].length; e[f] = [];
+      (o.type === 'member' ? mem : hhs).add(owner.id);
+    });
+  }));
+  if (!n) return 0;
+  _quietSyncFail = true;
+  dbUpsertGroups(); if (mem.size) dbUpsertMembers(S.members); if (hhs.size) dbUpsertHouseholds(S.households);
+  scheduleSync().finally(() => { _quietSyncFail = false; });
+  return n;
+}
+// A list entry's thread as shown: the owner's items plus any left on the entry, oldest first.
+function entryThread(entry, groupKey, field) {
+  const o = threadOwnerOf('group', entry.id, groupKey), t = o.from ? getNotesTarget(o) : null;
+  return [...(t ? t[field] || [] : []), ...(entry[field] || [])].sort((a, b) => (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0));
+}
+function threadsOf(type, id, groupKey) { const o = threadOwnerOf(type, id, groupKey); return getNotesTarget(o) || {}; }
+function fromEntry() { const f = _notesCtx?.from; return f ? (S.groups?.[f.groupKey] || []).find(x => x.id === f.id) || null : null; }
+// Count for a button: the owner's thread plus anything still on the entry.
+function threadCount(type, id, groupKey, field) {
+  const o = threadOwnerOf(type, id, groupKey), t = getNotesTarget(o) || {};
+  const e = o.from ? (S.groups?.[o.from.groupKey] || []).find(x => x.id === o.from.id) : null;
+  return (t[field] || []).length + (e && e !== t ? (e[field] || []).length : 0);
+}
+function threadsButtonLabel(type, id, groupKey) {
+  const parts = [['notes', 'Notes'], ['goals', 'Goals'], ['nextSteps', 'Next Steps']].map(([f, l]) => [l, threadCount(type, id, groupKey, f)]).filter(([, n]) => n);
+  return parts.length ? parts.map(([l, n]) => `${l} ${n}`).join(' · ') : 'Notes';
+}
+function setNotesField(f) { const o = _notesCtx?._open; if (o) openNotesModal(o.type, o.id, o.groupKey, f); }
+
 // type/id as before; groupKey and field only used by ward council groups.
 function openNotesModal(type, id, groupKey, field) {
-  _notesCtx = { type, id, groupKey, field };
+  const o = threadOwnerOf(type, id, groupKey);
+  _notesCtx = { type: o.type, id: o.id, groupKey: o.groupKey, field, from: o.from, _open: { type, id, groupKey, field } };
   const target = getNotesTarget(_notesCtx);
   let label = target?.name || '';
   if ((type === 'proposed' || type === 'current') && target) {
@@ -4890,6 +4962,12 @@ function openNotesModal(type, id, groupKey, field) {
   if (type === 'group' && target) label = groupEntryName(target);
   const heading = { goals: 'Goals', nextSteps: 'Next Steps' }[notesField()] || 'Notes';
   document.getElementById('notes-modal-title').textContent = `${heading} — ${label}`;
+  const sw = document.getElementById('notes-field-switch');
+  const multi = ['member', 'household', 'group'].includes(_notesCtx.type);
+  sw.style.display = multi ? '' : 'none';
+  if (multi) sw.innerHTML = [['notes', 'Notes'], ['goals', 'Goals'], ['nextSteps', 'Next Steps']].map(([f, l]) => {
+    const n = threadCount(_notesCtx._open.type, _notesCtx._open.id, _notesCtx._open.groupKey, f);
+    return `<button type="button" class="iv-pill ${notesField() === f ? 'on' : ''}" onclick="setNotesField('${f}')">${l}${n ? ' ' + n : ''}</button>`; }).join('');
   document.getElementById('notes-add-heading').textContent = `Add a ${notesFieldLabel()}`;
   document.getElementById('note-label').textContent = notesFieldLabel();
   document.getElementById('note-text').placeholder = {
@@ -4913,11 +4991,15 @@ function renderNotesList() {
   // A ward council group's Notes thread also shows notes written elsewhere
   // about that person, so it renders from merged rows rather than a plain
   // array. Goals, and every other kind of target, take the simple path.
-  if (_notesCtx?.type === 'group' && notesField() === 'notes' && target) {
-    renderGroupNotesList(target);
+  if (notesField() === 'notes' && (fromEntry() || (_notesCtx?.type === 'group' && target))) {
+    renderGroupNotesList(fromEntry() || target);
     return;
   }
-  const notes = target?.[notesField()] || [];
+  const entry = fromEntry();
+  const rows = (target?.[notesField()] || []).map((n, i) => ({ n, i, h: 'own' }))
+    .concat(entry && entry !== target ? (entry[notesField()] || []).map((n, i) => ({ n, i, h: 'entry' })) : [])
+    .sort((a, b) => (Date.parse(a.n.date) || 0) - (Date.parse(b.n.date) || 0));
+  const notes = rows.map(r => r.n);
   const el = document.getElementById('notes-list');
   if (!notes.length) {
     el.innerHTML = `<div style="color:#aaa;font-size:0.85rem;padding:0.4rem 0">No ${notesFieldLabel().toLowerCase()}s yet.</div>`;
@@ -4931,7 +5013,7 @@ function renderNotesList() {
           &nbsp;·&nbsp; ${formatNoteDate(n.date)}
         </div>
         <button style="background:none;border:none;color:#bbb;cursor:pointer;font-size:0.85rem;padding:0.1rem 0.35rem;line-height:1"
-                onclick="deleteNote(${i})" title="Delete note">✕</button>
+                onclick="deleteNote(${rows[i].i},'${rows[i].h}')" title="Delete note">✕</button>
       </div>
       <div style="font-size:0.87rem;color:#333;white-space:pre-wrap">${esc(n.text)}</div>
       ${tagsHTML(n.tags)}
@@ -4959,7 +5041,7 @@ function renderGroupNotesList(entry) {
           &nbsp;·&nbsp; ${formatNoteDate(r.n.date)}
         </div>
         <button style="background:none;border:none;color:#bbb;cursor:pointer;font-size:0.85rem;padding:0.1rem 0.35rem;line-height:1"
-                onclick="${linked ? `dismissLinkedNote('${r.key.replace(/'/g, "\\'")}')` : `deleteNote(${r.ownIndex})`}"
+                onclick="${linked ? `dismissLinkedNote('${r.key.replace(/'/g, "\\'")}')` : `deleteNote(${r.ownIndex},'${r.holder || 'own'}')`}"
                 title="${linked ? 'Remove from this group (the original note stays where it was written)' : 'Delete note'}">✕</button>
       </div>
       <div style="font-size:0.87rem;color:#333;white-space:pre-wrap">${esc(r.n.text)}</div>
@@ -4970,7 +5052,7 @@ function renderGroupNotesList(entry) {
 }
 
 function dismissLinkedNote(key) {
-  const entry = getNotesTarget(_notesCtx);
+  const entry = fromEntry() || getNotesTarget(_notesCtx);
   if (!entry) return;
   if (!confirm('Remove this note from this group?\n\nIt was written elsewhere in the app and will stay there — this only stops it showing up here.')) return;
   if (!Array.isArray(entry.hiddenLinks)) entry.hiddenLinks = [];
@@ -5005,15 +5087,16 @@ function addNote() {
   refreshNotesSourceTab();
 }
 
-function deleteNote(index) {
-  const target = getNotesTarget(_notesCtx);
+function deleteNote(index, holder) {
+  const onEntry = holder === 'entry' && fromEntry();
+  const target = onEntry ? fromEntry() : getNotesTarget(_notesCtx);
   const field = notesField();
   if (!target?.[field]) return;
-  const t = { type: _notesCtx.type === 'brother' ? 'member' : _notesCtx.type, group: _notesCtx.groupKey };
+  const t = onEntry ? { type: 'group', group: _notesCtx.from.groupKey } : { type: _notesCtx.type === 'brother' ? 'member' : _notesCtx.type, group: _notesCtx.groupKey };
   if (!canRemoveNote({ ...target[field][index], target: t })) { alert('You can delete only notes you wrote.'); return; }
   if (!confirm(`Delete this ${notesFieldLabel().toLowerCase()}?`)) return;
   target[field].splice(index, 1);
-  persistNotesTarget();
+  if (onEntry) dbUpsertGroups(); else persistNotesTarget();
   renderNotesList();
   refreshNotesSourceTab();
 }
@@ -5026,7 +5109,8 @@ function refreshNotesSourceTab() {
   if (_notesCtx.type === 'brother')   renderBrothers();
   if (_notesCtx.type === 'proposed')  renderProposed();
   if (_notesCtx.type === 'current')   renderCurrent();
-  if (_notesCtx.type === 'group')     renderGroupViews();
+  if (_notesCtx.type === 'group' || _notesCtx.from) renderGroupViews();
+  try { if (_notesCtx.type === 'member') { renderSisters(); renderBrothers(); } if (_notesCtx.type === 'household') renderMoves(); } catch (e) {}
   updateNotifBadges();
   if (currentTabName() === 'notifications') renderNotifications();
 }
@@ -5111,7 +5195,8 @@ function linkKey(n, source) {
 }
 
 // Every note the app holds about this person: their own record, their
-// household, their companionships, and anywhere their name is written.
+// household, and anywhere their name is written (not companionship notes,
+// which stay with the companionship).
 function groupLinkedNotes(entry) {
   if (entry.householdId) return moveInLinkedNotes(entry);
   const out = [];
@@ -5141,24 +5226,19 @@ function groupLinkedNotes(entry) {
     });
   });
 
-  Object.entries(LISTS).map(([k, v]) => [k, v.label]).forEach(([key, label]) => {
-    (S[key] || []).forEach(c => {
-      const isMinister = member && (ministersOf(c).some(m => m.id === member.id) || (c.assignees || []).includes(member.id));
-      const servesHH = hhId && (c.households || []).some(h => h === hhId || (S.households.find(x => x.id === hhId)?.name === h));
-      const pair = compLabel(c);
-      (c.notes || []).forEach(n => {
-        if (isMinister || servesHH || noteMentionsName(n.text, name)) add(n, `${label} · ${pair}`);
-      });
-    });
-  });
-
+  // Companionship notes stay with the companionship (Nov 2026).
   return out;
 }
 
 // The entry's own notes plus everything pulled in, oldest first.
 function groupMergedNotes(entry) {
-  const own = (entry.notes || []).map((n, i) => ({ n, source: null, key: null, ownIndex: i }));
-  const linked = groupLinkedNotes(entry).map(l => ({ ...l, ownIndex: null }));
+  const key = GROUPS.find(g => groupList(g.key).includes(entry))?.key;
+  const o = key ? threadOwnerOf('group', entry.id, key) : { type: 'group' };
+  const owner = o.from ? getNotesTarget(o) : null;
+  const own = (owner ? (owner.notes || []).map((n, i) => ({ n, source: null, key: null, ownIndex: i, holder: 'own' })) : [])
+    .concat((entry.notes || []).map((n, i) => ({ n, source: null, key: null, ownIndex: i, holder: owner ? 'entry' : 'own' })));
+  const ownIds = new Set(own.map(r => r.n.id).filter(Boolean));
+  const linked = groupLinkedNotes(entry).filter(l => !ownIds.has(l.n.id)).map(l => ({ ...l, ownIndex: null }));
   return own.concat(linked).sort((a, b) => (Date.parse(a.n.date) || 0) - (Date.parse(b.n.date) || 0));
 }
 
@@ -5191,13 +5271,13 @@ function renderCouncil() {
     const list = [...groupList(g.key)].sort((a, b) => groupEntryName(a).localeCompare(groupEntryName(b)));
     const rows = list.map(e => {
       const mergedNotes = groupMergedNotes(e);
-      const goals = (e.goals || []).length, notes = mergedNotes.length;
+      const goalList = entryThread(e, g.key, 'goals'), goals = goalList.length, notes = mergedNotes.length;
       const added = e.addedBy ? `Added by ${esc(e.addedBy)}${e.addedDate ? ' · ' + formatNoteDate(e.addedDate) : ''}` : '';
       return `<tr>
         <td style="vertical-align:top"><strong>${esc(groupEntryName(e))}</strong>${e.memberId ? identBadgesHTML(S.members.find(m => m.id === e.memberId)) : ''}${lcrSnapshotHTML(e)}${added ? `<div style="font-size:0.74rem;color:#aaa;margin-top:0.15rem">${added}</div>` : ''}</td>
         <td style="vertical-align:top">
           <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','${g.key}','goals')">${goals ? `Goals (${goals})` : 'Goals'}</button>
-          ${latestCommentHTML((e.goals || []).map(n => ({ n, source: null })))}
+          ${latestCommentHTML(goalList.map(n => ({ n, source: null })))}
         </td>
         <td style="vertical-align:top">
           <button class="btn btn-secondary btn-sm" onclick="openNotesModal('group','${e.id}','${g.key}','notes')">${notes ? `Notes (${notes})` : 'Notes'}</button>
@@ -5591,7 +5671,7 @@ function updateMovesNavBadge() {
 function movesTaggedToMe() {
   if (!_currentUserId) return [];
   return groupList('movein').filter(e => {
-    const last = (e.nextSteps || [])[(e.nextSteps || []).length - 1];
+    const st = entryThread(e, 'movein', 'nextSteps'), last = st[st.length - 1];
     return e.status !== 'assigned' && last && (last.tags || []).some(t => t.uid === _currentUserId);
   });
 }
@@ -5614,7 +5694,7 @@ function renderMoves() {
 
   const rows = list.map(e => {
     const hh = hhById(e.householdId);
-    const people = (e.people || []).map(p => `<div style="font-size:0.8rem;color:#555">${esc(moveInPersonName(p))}
+    const people = (e.people || []).map(p => `<div style="font-size:0.8rem;color:#555">${p.memberId && S.members.some(m => m.id === p.memberId) ? personThreadsLink(moveInPersonName(p), p.memberId) : esc(moveInPersonName(p))}
         <span style="color:#999">· ${esc(shortPosition(p.position))}${p.age ? ' · ' + p.age : ''}</span>${p.memberId ? identBadgesHTML(S.members.find(m => m.id === p.memberId)) : ''}</div>`).join('');
     const addr = hh?.address || '';
     const geo = !addr ? '' : hh?.lat
@@ -5640,7 +5720,7 @@ function renderMoves() {
     const hhSisters = !hh ? [] : S.members.filter(m => m.householdId === hh.id && isFemale(m.gender));
     const rsSel = !hhSisters.length ? '<span style="font-size:0.78rem;color:#aaa">—</span>' : hhSisters.map(m =>
       `<div style="font-size:0.76rem;margin-bottom:0.2rem">${esc(m.name.split(',')[1]?.trim() || m.name)} ${poolBadge(m.rsRecipient, `toggleSisterRecipient('${m.id}')`, canEditRS(), { in: 'In', out: 'Out' })}</div>`).join('');
-    const steps = e.nextSteps || [];
+    const steps = entryThread(e, 'movein', 'nextSteps');
     const merged = groupMergedNotes(e);
     return `<tr>
       <td style="vertical-align:top">
@@ -6462,8 +6542,10 @@ function allTaggedNotes(uid) {
   const take = (list, ctx) => (list || []).forEach(n => {
     if ((n.tags || []).some(t => t.uid === uid)) out.push({ n, ...ctx });
   });
-  S.members.forEach(m => take(m.notes, { where: `Members · ${m.name}`, open: ['member', m.id] }));
-  S.households.forEach(h => take(h.notes, { where: `Households · ${h.name}`, open: ['household', h.id] }));
+  [['goals', 'Goals'], ['notes', 'Notes'], ['nextSteps', 'Next Steps']].forEach(([f, fl]) => {
+    S.members.forEach(m => take(m[f], { where: `Members · ${m.name}${f === 'notes' ? '' : ' · ' + fl}`, open: ['member', m.id, '', f] }));
+    S.households.forEach(h => take(h[f], { where: `Households · ${h.name}${f === 'notes' ? '' : ' · ' + fl}`, open: ['household', h.id, '', f] }));
+  });
   Object.entries(LISTS).map(([k, v]) => [k, v.label]).forEach(([k, label]) =>
     (S[k] || []).forEach(c => take(c.notes, { where: `${label} · ${compLabel(c)}`, open: [k, c.id] })));
   GROUPS.forEach(g => groupList(g.key).forEach(e => {
@@ -8705,7 +8787,7 @@ function renderSisters() {
         <td>${poolBadge(m.rsRecipient, `toggleSisterRecipient('${m.id}')`, can, { in: 'In Pool', out: 'Out' })}</td>
         <td><span class="badge ${ministering.has(m.id) ? 'badge-green' : 'badge-red'}">${ministering.has(m.id) ? 'Assigned' : 'Unassigned'}</span></td>
         <td>${hasMS(m) ? '<span class="badge badge-green">Yes</span>' : '<span style="color:#aaa">—</span>'}</td>
-        <td><button class="btn btn-secondary btn-sm" onclick="openNotesModal('member','${m.id}')">${(m.notes?.length || 0) ? `Notes (${m.notes.length})` : 'Notes'}</button></td></tr>`;
+        <td><button class="btn btn-secondary btn-sm" onclick="openNotesModal('member','${m.id}')">${threadsButtonLabel('member', m.id)}</button></td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
 
@@ -8722,9 +8804,9 @@ function exportSistersCSV() {
 function rsCompanionshipHTML(c, listKey, idx, total) {
   const can = canEditList(listKey);
   const names = ministersOf(c).map(m => m.name);
-  const ministers = names.map(n => `${esc(n)}${identDotsByName(n)}`).join(' <span style="color:#aaa">+</span> ') + (names.length === 1 ? ' <span class="badge badge-blue">Solo</span>' : '');
-  const hhTags = (c.households || []).map(id => { const h = hhById(id); return `<span class="household-tag">🏠 ${esc(h ? h.name : id)}${identDotsHH(h)}</span>`; }).join('');
-  const sisTags = (c.assignees || []).map(id => { const m = S.members.find(x => x.id === id); return `<span class="household-tag" style="background:#fbe9f1;color:#7a2448">${esc(m ? m.name : '?')}${identBadgesHTML(m)}</span>`; }).join('');
+  const ministers = ministersOf(c).map(m => `${personThreadsLink(m.name, m.id)}${identDotsByName(m.name)}`).join(' <span style="color:#aaa">+</span> ') + (names.length === 1 ? ' <span class="badge badge-blue">Solo</span>' : '');
+  const hhTags = (c.households || []).map(id => { const h = hhById(id); return `<span class="household-tag">🏠 ${householdThreadsLink(h ? h.name : id, h)}${identDotsHH(h)}</span>`; }).join('');
+  const sisTags = (c.assignees || []).map(id => { const m = S.members.find(x => x.id === id); return `<span class="household-tag" style="background:#fbe9f1;color:#7a2448">${m ? personThreadsLink(m.name, m.id) : '?'}${identBadgesHTML(m)}</span>`; }).join('');
   const extra = (c.extraAssignees || []).map(n => `<span class="household-tag" style="opacity:0.7" title="On LCR's list but not in Members">${esc(n)}</span>`).join('');
   const notes = c.notes || [];
   return `<div class="companionship-card" ${can ? `onclick="openRSModal('${listKey}','${c.id}')"` : ''}>
@@ -9859,7 +9941,7 @@ function renderNearby() {
           <td style="font-size:0.82rem">${esc(x.h.address || '')}</td>
           <td style="text-align:right;white-space:nowrap;font-weight:600;color:${col(x.d)}">${x.d < 0.1 ? '< 0.1' : x.d.toFixed(1)} mi</td>
           <td>${tag(x.h)}</td>
-          <td><button class="btn btn-secondary btn-sm" onclick="openNotesModal('household','${x.h.id}')">${(x.h.notes || []).length ? `Notes (${x.h.notes.length})` : 'Notes'}</button></td></tr>`).join('')}
+          <td><button class="btn btn-secondary btn-sm" onclick="openNotesModal('household','${x.h.id}')">${threadsButtonLabel('household', x.h.id)}</button></td></tr>`).join('')}
         </tbody></table></div>
         <div style="font-size:0.74rem;color:#999;margin-top:0.4rem">Straight-line distance; driving distance will be longer.</div>`
       : '<p style="color:#888;font-size:0.86rem">None of these households has map coordinates yet.</p>'}
@@ -10182,6 +10264,7 @@ function deleteHousehold(id) {
 <div class="modal-overlay" id="notes-modal">
   <div class="modal" style="max-width:520px">
     <h3 id="notes-modal-title">Notes</h3>
+    <div id="notes-field-switch" class="iv-row" style="margin:-0.5rem 0 0.7rem"></div>
     <div id="notes-list" style="max-height:280px;overflow-y:auto"></div>
     <div id="restricted-wrap"></div>
     <div style="border-top:1px solid #e0e6ed;margin-top:0.75rem;padding-top:0.85rem">

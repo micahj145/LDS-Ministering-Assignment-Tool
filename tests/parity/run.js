@@ -355,8 +355,9 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
     await flush(C);
     const g = (await ward()).groups.returning || []; const e = g.find(x => x.memberId === 'm9');
     if (e) { await ev(C, id => { openNotesModal('group', id, 'returning', 'goals'); document.getElementById('note-text').value = 'Parity goal'; addNote(); }, e.id); await flush(C); }
-    const e2 = ((await ward()).groups.returning || []).find(x => x.memberId === 'm9');
-    return { pass: !!e2 && (e2.goals || []).some(n => n.text === 'Parity goal'), obs: { added: !!e, picked: ok } };
+    // Nov 2026: a member's Goals live on the member, wherever they're opened from.
+    const m9 = (await ward()).members.find(x => x.id === 'm9');
+    return { pass: !!e && (m9.goals || []).some(n => n.text === 'Parity goal'), obs: { added: !!e, picked: ok, onMember: (m9.goals || []).length } };
   });
   await check('council', 'covenant path: remove person', async () => {
     const e = ((await ward()).groups.returning || []).find(x => x.memberId === 'm9');
@@ -365,7 +366,8 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
   });
   await check('council', 'move-in next step note', async () => {
     await ev(C, () => { openNotesModal('group', 'e1', 'movein', 'nextSteps'); document.getElementById('note-text').value = 'Parity next step'; addNote(); }); await flush(C);
-    const e = (await ward()).groups.movein.find(x => x.id === 'e1'); return { pass: (e.nextSteps || []).some(n => n.text === 'Parity next step'), obs: (e.nextSteps || []).length };
+    const w = await ward(); const e = w.groups.movein.find(x => x.id === 'e1'); const h = w.households.find(x => x.id === e.householdId);   // on the household now
+    return { pass: (h.nextSteps || []).some(n => n.text === 'Parity next step'), obs: (h.nextSteps || []).length };
   });
 
   // ── Notifications (tags) ───────────────────────────────────
@@ -869,6 +871,40 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
     });
     await flush(E);
     return { pass: o.normalised === 'same' && o.changed === 'changed' && o.button && o.rows.length === 3 && o.after === 'same' && o.offered === false, obs: o };
+  });
+  await check('round3', 'threads follow the person: Goals from Covenant Path show on Members; switcher; companionship notes stay separate', async () => {
+    const o = await ev(E, async () => {
+      showTab('members'); openNotesModal('member', 'm9', '', 'goals');
+      const goals = [...document.querySelectorAll('#notes-list > div')].map(d => d.innerText).filter(t => /Parity goal/.test(t)).length;
+      const pills = [...document.querySelectorAll('#notes-field-switch button')].map(b => b.innerText);
+      setNotesField('nextSteps'); document.getElementById('note-text').value = 'Person next step'; addNote(); closeModal('notes-modal');
+      // a companionship note naming a member doesn't appear in their Covenant Path notes
+      const c = S.current[0]; openNotesModal('current', c.id); document.getElementById('note-text').value = 'Companionship note about Tanaka, Ken'; addNote(); closeModal('notes-modal');
+      const entry = groupList('returning').find(e => e.memberId === 'm9');
+      const merged = entry ? groupMergedNotes(entry).map(r => r.n.text) : [];
+      const btn = [...document.querySelectorAll('#mrow-m9 button')].map(b => b.innerText).find(t => /Goals/.test(t));
+      return { goals, pills, merged: merged.some(t => /Companionship note/.test(t)), btn, hasEntry: !!entry };
+    });
+    await flush(E);
+    const m9 = (await ward()).members.find(x => x.id === 'm9');
+    return { pass: o.goals === 1 && o.pills.length === 3 && !o.merged && (m9.nextSteps || []).some(n => n.text === 'Person next step') && /Goals 1/.test(o.btn || ''), obs: o };
+  });
+  await check('round3', 'old list-entry threads move onto the member / household (presidency load)', async () => {
+    // a goal written on an entry the old way
+    const w0 = await ward(); const e = (w0.groups.new || [])[0];
+    if (!e) return { pass: true, obs: 'no entry in seed' };
+    await adb.collection('notes').doc('oldgoal1').set({ id: 'oldgoal1', text: 'Old-style goal', author: 'Cora Lane', authorId: 'uCouncil', date: '2026-01-01T00:00:00Z', target: { type: 'group', group: 'new', id: e.id, field: 'goals' } });
+    await E.page.reload(); await E.page.waitForFunction(() => document.getElementById('app-shell').style.display === 'block', null, { timeout: 20000 }); await sleep(1500); await flush(E);
+    const n = (await adb.collection('notes').doc('oldgoal1').get()).data();
+    return { pass: n.target.type === 'member' && n.target.id === e.memberId && n.target.field === 'goals', obs: n.target };
+  });
+  await check('round3', 'draft changes notify the other EQ presidency members (not the editor)', async () => {
+    await ev(E, () => { openNotesModal('proposed', S.proposed[0].id); document.getElementById('note-text').value = 'Draft note'; addNote(); closeModal('notes-modal'); }); await flush(E);
+    // Pushes are throttled (one per person per 3 minutes, and earlier checks edited the draft), so look for the feed entry and any push this run.
+    const f = await until(async () => ((await adb.doc('profiles/uAdmin').get()).data().feed || []).find(x => /note on a brothers' draft companionship/.test(x.text)));
+    const all = (await adb.collection('__pushLog').get()).docs.map(d => d.data()).filter(x => x.data.tag === 'ministering-draft');
+    const toAdmin = all.some(x => x.tokens.includes('tok-uAdmin')), toEditor = all.some(x => x.tokens.includes('tok-eq')), toRs = all.some(x => x.tokens.includes('tok-uRs'));
+    return { pass: !!f && f.link === '#tab=propose' && toAdmin && !toEditor && !toRs, obs: { feed: f?.text, toAdmin, toEditor, toRs, editorBodies: all.filter(x => x.tokens.includes('tok-eq')).map(x => x.data.body) } };
   });
   await check('round3', 'unmatched name: pick a household → linked and remembered for next import', async () => {
     const mk = async () => {

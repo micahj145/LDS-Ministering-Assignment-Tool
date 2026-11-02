@@ -37,7 +37,8 @@ function householdChanges(beforeDoc, afterDoc) {
   hhA.forEach((h, id) => {
     const o = hhB.get(id);
     if (!o) return;                                  // brand-new household: nobody follows it yet
-    newNotes(o.notes, h.notes).forEach(n => add(id, `${n.author || 'Someone'} added a note on ${h.name}`, `#open=household,${enc(id)}`));
+    // Households (and members) have Notes, Goals and Next Steps (Nov 2026).
+    ['notes', 'goals', 'nextSteps'].forEach(f => newNotes(o[f], h[f]).forEach(n => add(id, `${n.author || 'Someone'} added a ${KIND[f]} on ${h.name}`, `#open=household,${enc(id)}${f === 'notes' ? '' : ',,' + f}`)));
     if (poolLabel(o.inPool) !== poolLabel(h.inPool)) add(id, `${h.name}: ministering pool ${poolLabel(o.inPool)} → ${poolLabel(h.inPool)}`, '#tab=households');
     if (poolLabel(o.rsPool) !== poolLabel(h.rsPool)) add(id, `${h.name}: RS ministering pool ${poolLabel(o.rsPool)} → ${poolLabel(h.rsPool)}`, '#tab=households');
     if ((o.address || '') !== (h.address || '')) add(id, `${h.name}: address updated`, '#tab=households');
@@ -45,6 +46,8 @@ function householdChanges(beforeDoc, afterDoc) {
   });
   hhB.forEach((o, id) => { if (!hhA.has(id)) add(id, `${o.name} was removed from the households list`, '#tab=households'); });
 
+  const entryKeysFor = memberId => Object.values(A.groups || {}).flatMap(list => (Array.isArray(list) ? list : []))
+    .filter(e => e && e.memberId === memberId && !e.householdId && !(memA.get(memberId) || {}).householdId).map(e => `entry:${e.id}`);
   // Members linked to a household (before or after the save).
   const hhName = id => (hhA.get(id) || hhB.get(id) || {}).name || 'the household';
   memA.forEach((m, id) => {
@@ -54,8 +57,11 @@ function householdChanges(beforeDoc, afterDoc) {
       if (o.householdId) add(o.householdId, `${m.name} is no longer linked to ${hhName(o.householdId)}`, '#tab=members');
       if (m.householdId) add(m.householdId, `${m.name} was linked to ${hhName(m.householdId)}`, '#tab=members');
     }
+    // A member's threads reach followers of their household, and of any
+    // Covenant Path entry for them that has no household (follow key entry:<id>).
+    const keys = [m.householdId, ...entryKeysFor(id)].filter(Boolean);
+    ['notes', 'goals', 'nextSteps'].forEach(f => newNotes(o[f], m[f]).forEach(n => keys.forEach(k => add(k, `${n.author || 'Someone'} added a ${KIND[f]} on ${m.name}`, `#open=member,${enc(id)}${f === 'notes' ? '' : ',,' + f}`))));
     if (!m.householdId) return;
-    newNotes(o.notes, m.notes).forEach(n => add(m.householdId, `${n.author || 'Someone'} added a note on ${m.name}`, `#open=member,${enc(id)}`));
     if (o.inPool !== m.inPool && (o.isBrother !== false)) add(m.householdId, `${m.name}: ministering pool ${poolLabel(o.inPool)} → ${poolLabel(m.inPool)}`, '#tab=brothers');
   });
   memB.forEach((o, id) => { if (!memA.has(id) && o.householdId) add(o.householdId, `${o.name} was removed from the members list`, '#tab=members'); });
@@ -71,7 +77,7 @@ function householdChanges(beforeDoc, afterDoc) {
         const o = cB.get(id);
         const was = !!o && servesHH(o, hh), is = servesHH(c, hh);
         if (is && !was) add(hh.id, `${hh.name} assigned to ${pairName(c)} (${label})`, `#tab=${TAB[key]}`);
-        if (is && o) newNotes(o.notes, c.notes).forEach(n => add(hh.id, `${n.author || 'Someone'} added a note on the companionship serving ${hh.name} (${label})`, `#open=${key},${enc(id)}`));
+        // Companionship notes stay with the companionship: followers aren't told (Nov 2026).
         if (!is && was) add(hh.id, `${hh.name} no longer assigned to ${pairName(c)} (${label})`, `#tab=${TAB[key]}`);
       });
       cB.forEach((o, id) => { if (!cA.has(id) && servesHH(o, hh)) add(hh.id, `${pairName(o)} companionship serving ${hh.name} was removed (${label})`, `#tab=${TAB[key]}`); });

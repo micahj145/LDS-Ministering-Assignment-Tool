@@ -33,6 +33,7 @@ const { newTags, unreadCount, messageFor, accessRequestMessage } = require('./ta
 const { householdChanges, followMessage } = require('./follow');
 const { dmMessage, restrictedMessage, newViewers, threadsUnread, restrictedUnread } = require('./private');
 const { insertNotes, callerProblem, roleFlags, roleReviewMessage, twoStepSummary } = require('./access');
+const { draftSides, draftNoteSide, draftMessage, presidencyUids, TAB: DRAFT_TAB } = require('./drafts');
 
 initializeApp();
 
@@ -200,7 +201,11 @@ exports.notifyNoteChange = onDocumentWritten({ document: 'notes/{noteId}', regio
   const after = event.data?.after?.exists ? { ...event.data.after.data(), id: event.params.noteId } : null;
   if (!after) return;                             // removals tell nobody
   if (!before && after.migrated) return;
+  // A note moved to another record (list entry → member/household) is old news.
+  if (before && JSON.stringify(before.target) !== JSON.stringify(after.target)) return;
   const db = getFirestore();
+  const draftSide = draftNoteSide(before, after);
+  if (draftSide) await pushPresidency(db, draftSide, after.authorId || null, after.author || 'Someone', 'note');
   const ward = (await db.doc('wardData/shared').get()).data() || {};
   const base = insertNotes(ward, []);
   const docBefore = insertNotes(base, before ? [before] : []);
@@ -208,6 +213,48 @@ exports.notifyNoteChange = onDocumentWritten({ document: 'notes/{noteId}', regio
   const merged = await wardWithNotes(db, ward);
   await pushTags(db, newTags(docBefore, docAfter), merged);
   await pushFollowers(db, householdChanges(docBefore, docAfter), after.authorId || null, after.author || 'Someone', merged);
+});
+
+// ── Draft assignments → the presidency that owns them ──────────
+// Brothers' draft (proposed) → EQ presidency; sisters' (proposedRS) → RS
+// presidency (role on the allowed list), except whoever made the change. Each
+// gets a feed entry; the push is throttled to one per person per 3 minutes.
+async function pushPresidency(db, side, byUid, by, kind) {
+  const allowed = await allowedMap(db);
+  const uids = presidencyUids([...allowed.values()], side, byUid);
+  if (!uids.length) return;
+  const now = new Date();
+  const text = draftMessage(by, side, kind);
+  const link = `#tab=${DRAFT_TAB[side]}`;
+  const ward = await wardWithNotes(db, (await db.doc('wardData/shared').get()).data() || {});
+  for (const uid of uids) {
+    const ref = db.collection('profiles').doc(uid);
+    const snap = await ref.get();
+    if (!snap.exists || !mayReceive(snap.data(), allowed)) continue;
+    const { fresh, feed, pushNow } = await db.runTransaction(async (tx) => {
+      const cur = (await tx.get(ref)).data() || {};
+      const feed = [{ hhId: `draft:${side}`, text, link, by, ts: now.toISOString() }].concat(Array.isArray(cur.feed) ? cur.feed : []).slice(0, FEED_MAX);
+      const pushNow = now - (Date.parse(cur.lastDraftPushAt) || 0) >= FOLLOW_PUSH_GAP_MS;
+      tx.update(ref, pushNow ? { feed, lastDraftPushAt: now.toISOString() } : { feed });
+      return { fresh: cur, feed, pushNow };
+    });
+    if (!pushNow) { logger.info('notifyDraft (feed only, throttled)', { uid, side }); continue; }
+    const r = await sendToProfile(ref, { ...fresh, feed }, {
+      title: 'Ministering', body: text, tag: 'ministering-draft',
+      unread: String(await badgeCount(db, ward, uid, { ...fresh, feed })), link: `${APP}${link}`,
+    });
+    logger.info('notifyDraft', { uid, side, ...r });
+  }
+}
+
+exports.notifyDrafts = onDocumentWritten({ document: 'wardData/shared', region: REGION, maxInstances: 2 }, async (event) => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null;
+  const after = event.data?.after?.exists ? event.data.after.data() : null;
+  if (!before || !after) return;
+  const sides = draftSides(before, after);
+  if (!sides.length) return;
+  const db = getFirestore();
+  for (const side of sides) await pushPresidency(db, side, after.updatedByUid || null, after.updatedBy || 'Someone', 'change');
 });
 
 // Admins: allowed-list admins once the list exists, otherwise profiles marked isAdmin.

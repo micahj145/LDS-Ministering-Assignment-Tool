@@ -9,8 +9,7 @@ const KIND = { goals: 'goal', nextSteps: 'next step', notes: 'note' };
 // Calls fn(note, kind) for every note, goal and next step in the document.
 function forEachNote(doc, fn) {
   const d = doc || {};
-  (d.members || []).forEach(m => (m.notes || []).forEach(n => fn(n, 'note')));
-  (d.households || []).forEach(h => (h.notes || []).forEach(n => fn(n, 'note')));
+  [...(d.members || []), ...(d.households || [])].forEach(r => ['goals', 'notes', 'nextSteps'].forEach(f => (r[f] || []).forEach(n => fn(n, KIND[f]))));
   ['current', 'proposed', 'currentRS', 'proposedRS'].forEach(k => (d[k] || []).forEach(c => (c.notes || []).forEach(n => fn(n, 'note'))));
   Object.values(d.groups || {}).forEach(list => (Array.isArray(list) ? list : []).forEach(e =>
     ['goals', 'notes', 'nextSteps'].forEach(f => (e[f] || []).forEach(n => fn(n, KIND[f])))));

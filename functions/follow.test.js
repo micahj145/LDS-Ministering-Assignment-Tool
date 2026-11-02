@@ -49,7 +49,7 @@ test('companionship assigned, note, unassigned, removed — by id or older name 
   assert.ok(t.includes('Whitfield, Daniel & Grace assigned to Tom + Sam (Current Brother Assignments)'));
   const c = clone(b); c.current[0].notes.push(note('n3', 'Tom'));
   t = householdChanges(b, c).map(x => x.text);
-  assert.ok(t[0].startsWith('Tom added a note on the companionship serving Whitfield'));
+  assert.strictEqual(t.length, 0, 'companionship notes stay with the companionship (Nov 2026)');
   const d = clone(c); d.current[0].households = ['Okafor, Ruth'];      // name form
   t = householdChanges(c, d).map(x => `${x.hhId}:${x.text}`);
   assert.ok(t.includes('h2:Okafor, Ruth assigned to Tom + Sam (Current Brother Assignments)'));
@@ -111,4 +111,16 @@ test('RS household pool changes reach followers', () => {
   const h0 = { id: 'h1', name: 'Okafor, Ruth', notes: [] };
   const t = householdChanges({ households: [h0], members: [] }, { households: [{ ...h0, rsPool: true }], members: [] }).map(c => c.text);
   assert.ok(t.includes('Okafor, Ruth: RS ministering pool Out → In Pool'), t.join('\n'));
+});
+
+test('member and household goals / next steps reach followers; an entry with no household too', () => {
+  const a = base(); const b = clone(a);
+  b.households[0].nextSteps = [note('s1', 'Ana')];
+  b.members[0].goals = [note('g1', 'Ana')];
+  const t = householdChanges(a, b).map(c => `${c.hhId}|${c.text}|${c.link}`);
+  assert.ok(t.some(x => /^h1\|Ana added a next step on Whitfield, Daniel & Grace\|#open=household,h1,,nextSteps$/.test(x)), t.join('\n'));
+  assert.ok(t.some(x => /^h1\|Ana added a goal on .*\|#open=member,.*,,goals$/.test(x)), t.join('\n'));
+  const c = clone(a); c.members.push({ id: 'mx', name: 'Loner, Lee' }); c.groups = { ...(c.groups || {}), returning: [{ id: 'e9', memberId: 'mx', name: 'Loner, Lee' }] };
+  const d = clone(c); d.members.find(m => m.id === 'mx').notes = [note('n9', 'Ana')];
+  assert.ok(householdChanges(c, d).some(x => x.hhId === 'entry:e9' && /added a note on Loner, Lee/.test(x.text)));
 });
