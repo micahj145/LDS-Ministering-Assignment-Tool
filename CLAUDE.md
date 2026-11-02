@@ -71,7 +71,7 @@ Firebase, deliberately choosing a *simpler* data model than the Postgres one had
 
 ### Security: two-step sign-in, allowed list, roles (Nov 2026)
 Rollout steps and console setup: **`SECURITY_ROLLOUT.md`**; manual checks: **`PHONE_TEST.md`**.
-- **Allowed list** `allowedUsers/{lowercase email}` `{ email, uid, role: eq|rs|council, admin }` —
+- **Allowed list** `allowedUsers/{lowercase email}` `{ email, uid, role: eq|rs|bishopric|council, admin }` —
   admin-only writes (rules stop an admin dropping their own admin flag or deleting themselves);
   each person reads their own. Default deny. Approve in the Admin tab writes it (role council);
   Deny deletes it; the role select writes `role`; **Add all** (yellow box) copies approved
@@ -119,14 +119,22 @@ Rollout steps and console setup: **`SECURITY_ROLLOUT.md`**; manual checks: **`PH
 - **Members with Callings** (Admin tab): `parseCallingsReport()` (header columns; rows anchored on
   the Gender cell; wrapped cells join the nearest row), `callingNameMatch()` against approved
   profiles, `roleForCallings()` (`CALLING_ROLES`: EQ president/counselors/secretary → eq; RS
-  president/counselors/secretary/ministering secretary → rs; else council). Stored as
-  `adminData/callings` `{ users: { email: { name, callings, expected } } }` — tool users only.
-  Mismatches are flagged in the user list with a one-click fix; nothing changes automatically.
-  Verified on the Oct 2026 PDF: 146 rows, 106 people, 4 EQ + 6 RS roles found.
+  president/counselors/secretary/ministering secretary → rs; bishop + counselors → bishopric; else
+  council) and `callingsGiveAccess()` (`ACCESS_CALLINGS`, Micah's list: bishopric, ward clerk, ward
+  executive secretary, EQ/RS/YW/Primary/Sunday School presidencies incl. secretaries (RS also
+  ministering secretary), ward mission leader, ward temple and family history leader; youth class
+  presidencies and assistant secretaries deliberately not on it). Stored as `adminData/callings`
+  `{ users: { email: { name, callings, expected, accessOk } } }` — tool users only. Role mismatches
+  (one-click fix), callings not on the access list, and names not found are flagged in the user
+  list; nothing changes automatically. Verified on the Oct 2026 PDF: 146 rows, 106 people, 4 EQ +
+  6 RS + 3 bishopric roles, 27 people with an access calling (YW and Primary secretary vacant).
+- **Bishopric** role (Nov 2026): same rights as council everywhere for now (`roleOf()` keeps it;
+  rules treat any role but eq/rs as council); its own role so bishopric-only features can come later.
 - **Functions**: every push/feed recipient must be approved **and** on the allowed list
   (`mayReceive()`; profile alone until the list exists). `notifyNoteChange` (notes/{id}) places the
   note into the ward doc before/after and reuses `newTags()` / `householdChanges()`.
-  `notifyRoleReview` / `notifyRoleChange` push admins "N people's roles need your review."
+  `notifyRoleReview` / `notifyRoleChange` push admins "N people's roles or access need your review."
+  (`roleFlags()`: role ≠ expected, or `accessOk === false`).
   `resetTwoStep` (callable) clears a person's factors + revokes sessions; caller checked by
   `callerProblem()` (same as rules) and must be an admin (`requireAdmin()`). `twoStepStatus`
   (callable, same check) returns each profile's enrolled factor types + last sign-in (no phone

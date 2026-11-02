@@ -60,7 +60,10 @@ test('roleFlags lists only people on the allowed list whose role differs', () =>
   const allowed = new Map([['a@x', { role: 'eq' }], ['b@x', { role: 'rs' }], ['c@x', {}]]);
   assert.deepStrictEqual(roleFlags(callings, allowed), ['b@x', 'c@x']);
   assert.deepStrictEqual(roleFlags(null, allowed), []);
-  assert.strictEqual(roleReviewMessage(1), '1 person’s role needs your review.');
+  assert.strictEqual(roleReviewMessage(1), '1 person’s role or access needs your review.');
+  // Bishopric is its own role; an access flag counts too.
+  const c2 = { users: { 'b1@x': { expected: 'bishopric', accessOk: true }, 'b2@x': { expected: 'bishopric', accessOk: true }, 's@x': { expected: 'council', accessOk: false } } };
+  assert.deepStrictEqual(roleFlags(c2, new Map([['b1@x', { role: 'bishopric' }], ['b2@x', { role: 'council' }], ['s@x', { role: 'council' }]])), ['b2@x', 's@x']);
 });
 
 test('twoStepSummary reports the methods set up', () => {

@@ -13,7 +13,8 @@
 // What they can change depends on their role on the allowed list:
 //   eq / rs (EQ or RS presidency): member, household, move-in/out, identifier
 //     and unit data; eq the brother assignment lists, rs the sister lists.
-//   council (everyone else): notes, goals, next steps, Covenant Path Progress
+//   council and bishopric (everyone else; bishopric is its own role so it can
+//     get its own features later): notes, goals, next steps, Covenant Path Progress
 //     (groups new / returning / mission), the tag directory, their own
 //     profile (following, notification settings), messages.
 //   Admin (admin: true on the allowed list) manages people; it adds no
@@ -71,7 +72,7 @@ service cloud.firestore {
     }
 
     // ── Allowed list ───────────────────────────────────────────
-    // allowedUsers/{lowercase email}: { email, uid, role: eq|rs|council, admin, updatedAt, updatedBy }
+    // allowedUsers/{lowercase email}: { email, uid, role: eq|rs|bishopric|council, admin, updatedAt, updatedBy }
     // You can read your own entry (the app takes your role from it); only an
     // admin can write. An admin can't take their own admin flag away or delete
     // themselves (that would lock everyone out of the Admin tab). The very
@@ -80,7 +81,7 @@ service cloud.firestore {
       allow read: if (isSignedIn() && emailVerified() && request.auth.token.email is string && myEmail() == email) || isAdmin();
       allow create, update: if isAdmin()
         && request.resource.data.email == email
-        && request.resource.data.role in ['eq', 'rs', 'council']
+        && request.resource.data.role in ['eq', 'rs', 'bishopric', 'council']
         && request.resource.data.admin is bool
         && !(email == myEmail() && request.resource.data.admin != true);
       allow delete: if isAdmin() && email != myEmail();

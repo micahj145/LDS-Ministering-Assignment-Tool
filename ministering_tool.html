@@ -993,7 +993,8 @@ tr:hover td{background:#fafbfc}
   <div class="card">
     <h2>Check Roles Against Callings</h2>
     <p style="font-size:0.85rem;color:#666;margin-bottom:0.6rem">Import LCR's <b>Members with Callings</b> report. Each person with access is matched to their callings and flagged above if their role here doesn't fit:
-      EQ Presidency for the Elders Quorum president, counselors and secretary; RS Presidency for the Relief Society president, counselors, secretary and ministering secretary; Ward Council for everyone else.
+      EQ Presidency for the Elders Quorum president, counselors and secretary; RS Presidency for the Relief Society president, counselors, secretary and ministering secretary; Bishopric for the bishop and his counselors; Ward Council for everyone else.
+      It also flags anyone with access whose callings aren't on the access list: bishopric, ward clerk, ward executive secretary; the EQ, RS, Young Women, Primary and Sunday School presidencies including secretaries; ward mission leader; ward temple and family history leader.
       Nothing changes until you choose.</p>
     <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
       <a class="btn btn-secondary btn-sm" href="https://lcr.churchofjesuschrist.org/mlt/report/member-callings?lang=eng" target="_blank" rel="noopener">Open the report in LCR</a>
@@ -1823,20 +1824,26 @@ async function renderAdminPanel() {
     const a = _adminAllowed.get(emailKey(p.email));
     const role = roleOf(a?.role);
     const chk = a ? callingsCheck(p) : null;
-    const flag = chk && !chk.ok
-      ? `<div class="role-flag">Callings report: ${chk.name ? esc(chk.callings.join(', ') || 'no calling') : chk.ambiguous ? 'more than one possible match' : 'name not found'}
+    const flag = !chk ? '' : !chk.name
+      ? `<div class="role-flag">Callings report: ${chk.ambiguous ? 'more than one possible match' : 'name not found'}, so their role and calling couldn't be checked.
+          They still have access — check by hand, or deny access if they shouldn't have it.</div>`
+      : (!chk.ok ? `<div class="role-flag">Callings report: ${esc(chk.callings.join(', ') || 'no calling')}
           → suggests <b>${ROLE_LABEL[chk.expected]}</b>, but their role here is <b>${ROLE_LABEL[chk.current]}</b>.
-          ${chk.name ? `<button class="btn btn-primary btn-sm" style="margin-left:0.4rem" onclick="setUserRole('${p.id}','${chk.expected}')">Make ${ROLE_LABEL[chk.expected]}</button>` : ''}</div>` : '';
+          <button class="btn btn-primary btn-sm" style="margin-left:0.4rem" onclick="setUserRole('${p.id}','${chk.expected}')">Make ${ROLE_LABEL[chk.expected]}</button></div>` : '')
+      + (!chk.accessOk ? `<div class="role-flag">Callings report: ${esc(chk.callings.join(', ') || 'no calling')} — none of these is on the list of callings that come with access
+          (bishopric, ward clerk and executive secretary, the EQ, RS, Young Women, Primary and Sunday School presidencies with their secretaries,
+          ward mission leader, temple and family history leader). They still have access — deny it if they shouldn't.</div>` : '');
     return `
     <div style="border-bottom:1px solid #f0f0f0;padding:0.5rem 0">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:0.6rem;flex-wrap:wrap">
       <div><div style="font-weight:500">${name ? esc(name) + ' — ' : ''}${esc(p.email)}${isSelf ? ' <span style="font-weight:400;color:#888">(you)</span>' : ''}</div>
-      <div style="font-size:0.78rem;color:#888">${p.status} · ${a ? ROLE_LABEL[role] + (a.admin ? ' · admin' : '') : '<span style="color:#856404">not on the allowed list</span>'} · ${p.emailVerified ? '<span style="color:#155724">email verified</span>' : '<span style="color:#856404">email not verified yet</span>'}${chk && chk.ok ? ' · <span style="color:#155724">role matches callings</span>' : ''}${p.status === 'approved' ? ` · <span class="ts-status" data-uid="${p.id}">${twoStepLabel(p.id)}</span>` : ''}</div></div>
+      <div style="font-size:0.78rem;color:#888">${p.status} · ${a ? ROLE_LABEL[role] + (a.admin ? ' · admin' : '') : '<span style="color:#856404">not on the allowed list</span>'} · ${p.emailVerified ? '<span style="color:#155724">email verified</span>' : '<span style="color:#856404">email not verified yet</span>'}${chk && chk.name && chk.ok && chk.accessOk ? ' · <span style="color:#155724">role and calling fit</span>' : ''}${p.status === 'approved' ? ` · <span class="ts-status" data-uid="${p.id}">${twoStepLabel(p.id)}</span>` : ''}</div></div>
       <div style="display:flex;gap:0.4rem;align-items:center;flex-shrink:0;flex-wrap:wrap">
         ${a ? `<select style="font-size:0.8rem;padding:0.3rem;border:1px solid #ddd;border-radius:6px" onchange="setUserRole('${p.id}', this.value)" title="Which ministering lists this person can change (everyone can see them all)">
           <option value="council" ${role === 'council' ? 'selected' : ''}>Ward Council</option>
           <option value="eq" ${role === 'eq' ? 'selected' : ''}>EQ Presidency</option>
           <option value="rs" ${role === 'rs' ? 'selected' : ''}>RS Presidency</option>
+          <option value="bishopric" ${role === 'bishopric' ? 'selected' : ''}>Bishopric</option>
         </select>` : ''}
         ${p.status !== 'approved' || !a ? `<button class="btn btn-primary btn-sm" onclick="setUserStatus('${p.id}','approved')">Approve</button>` : ''}
         ${a && p.status === 'approved' ? `<button class="btn btn-secondary btn-sm" onclick="resetTwoStep('${p.id}')" title="For a lost or replaced phone: they set up two-step sign-in again next time they sign in">Reset two-step</button>` : ''}
@@ -1930,6 +1937,7 @@ async function setUserRole(id, role) {
   const who = [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email || 'this user';
   const detail = role === 'eq' ? 'They can change member, household, move-in/out and unit data, and the ministering brother lists. Everyone can see all the lists.'
     : role === 'rs' ? 'They can change member, household, move-in/out and unit data, and the ministering sister lists. Everyone can see all the lists.'
+    : role === 'bishopric' ? 'Bishopric: for now the same as Ward Council — they can see every tab, add notes, tags and next steps, and keep Covenant Path Progress, but not change member, household or assignment data.'
     : 'They can see every tab, add notes, tags and next steps, and keep Covenant Path Progress — but not change member, household or assignment data.';
   // Cancelling re-renders so the dropdown snaps back to the stored value.
   if (!confirm(`Set ${who} to ${ROLE_LABEL[roleOf(role)]}?\n\n${detail}`)) { renderAdminPanel(); return; }
@@ -2031,26 +2039,39 @@ async function removeUserProfile(id) {
   renderAdminPanel();
 }
 
-// ── Members with Callings → role check ─────────────────────────
+// ── Members with Callings → role and access check ─────────────────
 // The admin imports LCR's "Members with Callings" report (printed to PDF) on
-// the Admin tab. Each person with access is matched to their callings; their
-// role here should be EQ presidency for an Elders Quorum president, counselor
-// or secretary, RS presidency for a Relief Society president, counselor,
-// secretary or ministering secretary, and Ward Council otherwise. Nothing is
-// changed automatically: a role that doesn't match is flagged for the admin
-// (here and by a phone notification) to decide. Only the matches for people
-// with access are kept (adminData/callings, admin-only), not the ward's list.
+// the Admin tab. Each person with access is matched to their callings, and
+// two things are checked — nothing is changed automatically; anything that
+// doesn't fit is flagged for the admin (here and by a phone notification):
+//  - role: EQ presidency (Elders Quorum president, counselors, secretary),
+//    RS presidency (Relief Society president, counselors, secretary,
+//    ministering secretary), Bishopric (bishop and counselors), else Ward Council;
+//  - access: at least one calling on ACCESS_CALLINGS (Micah's list, Nov 2026).
+// Only the matches for people with access are kept (adminData/callings,
+// admin-only), not the ward's list.
 const CALLING_ROLES = {
   eq: ['Elders Quorum President', 'Elders Quorum First Counselor', 'Elders Quorum Second Counselor', 'Elders Quorum Secretary'],
   rs: ['Relief Society President', 'Relief Society First Counselor', 'Relief Society Second Counselor', 'Relief Society Secretary', 'Relief Society Ministering Secretary'],
+  bishopric: ['Bishop', 'Bishopric First Counselor', 'Bishopric Second Counselor'],
 };
-const ROLE_LABEL = { eq: 'EQ Presidency', rs: 'RS Presidency', council: 'Ward Council' };
+const presidency = org => ['President', 'First Counselor', 'Second Counselor', 'Secretary'].map(c => `${org} ${c}`);
+const ACCESS_CALLINGS = [
+  ...CALLING_ROLES.bishopric, 'Ward Clerk', 'Ward Executive Secretary',
+  ...CALLING_ROLES.eq, ...CALLING_ROLES.rs,
+  ...presidency('Young Women'), ...presidency('Primary'), ...presidency('Sunday School'),
+  'Ward Mission Leader', 'Ward Temple and Family History Leader',
+];
+const ROLE_LABEL = { eq: 'EQ Presidency', rs: 'RS Presidency', bishopric: 'Bishopric', council: 'Ward Council' };
 const callingNorm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 function roleForCallings(callings) {
   const set = new Set((callings || []).map(callingNorm));
-  if (CALLING_ROLES.eq.some(c => set.has(callingNorm(c)))) return 'eq';
-  if (CALLING_ROLES.rs.some(c => set.has(callingNorm(c)))) return 'rs';
+  for (const r of ['eq', 'rs', 'bishopric']) if (CALLING_ROLES[r].some(c => set.has(callingNorm(c)))) return r;
   return 'council';
+}
+function callingsGiveAccess(callings) {
+  const set = new Set((callings || []).map(callingNorm));
+  return ACCESS_CALLINGS.some(c => set.has(callingNorm(c)));
 }
 
 // Rows of the report: { name, org, calling }. Columns come from the header
@@ -2124,12 +2145,12 @@ async function handleCallingsPdf(file) {
       const best = scored[0], tie = scored[1] && scored[1].s === best?.s;
       const name = best && !tie ? best.n : null;
       const callings = name ? byName.get(name) : [];
-      users[emailKey(p.email)] = { uid: p.id, name, callings, expected: roleForCallings(callings), ambiguous: !!tie };
+      users[emailKey(p.email)] = { uid: p.id, name, callings, expected: roleForCallings(callings), accessOk: !!name && callingsGiveAccess(callings), ambiguous: !!tie };
     });
     const doc = { importedAt: new Date().toISOString(), importedBy: _currentUserName || _currentUserEmail, rows: rows.length, users };
     await db.collection('adminData').doc('callings').set(doc);
     _callingsDoc = doc;
-    const n = Object.keys(users).length, flagged = Object.values(users).filter(u => u.expected !== roleOfAccess(u.uid)).length;
+    const n = Object.keys(users).length, flagged = Object.values(users).filter(u => u.expected !== roleOfAccess(u.uid) || !u.accessOk).length;
     st.style.color = '#155724';
     st.textContent = `✓ Read ${rows.length} callings. Checked ${n} people with access — ${flagged ? flagged + ' need your review below.' : 'every role matches.'}`;
     renderAdminPanel();
@@ -2145,7 +2166,8 @@ function roleOfAccess(uid) {
 function callingsCheck(p) {
   const c = _callingsDoc?.users?.[emailKey(p.email)];
   if (!c) return null;
-  return { ...c, current: roleOfAccess(p.id), ok: c.expected === roleOfAccess(p.id) };
+  // accessOk: undefined on an import from before the access check — treat as fine.
+  return { ...c, current: roleOfAccess(p.id), ok: c.expected === roleOfAccess(p.id), accessOk: c.accessOk !== false };
 }
 
 // Reads from S.activityLog (part of the shared document) instead of a
@@ -2474,7 +2496,9 @@ const LISTS = {
   proposedRS: { min: 'rs', tab: 'proposeRS', label: 'Draft Ministering Sister Assignments' },
 };
 function canEditList(key) { return (LISTS[key]?.min === 'rs') ? canEditRS() : canEditEQ(); }
-function roleOf(r) { return r === 'eq' || r === 'rs' ? r : 'council'; }
+// Bishopric has the same rights as Ward Council for now; it's its own role so
+// bishopric-only features can be added later.
+function roleOf(r) { return r === 'eq' || r === 'rs' || r === 'bishopric' ? r : 'council'; }
 
 function applyAccessVisibility() {
   const admin = _currentUserIsAdmin ? '' : 'none';

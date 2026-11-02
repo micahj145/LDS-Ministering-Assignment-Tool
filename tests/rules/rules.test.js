@@ -25,6 +25,7 @@ const people = {
   eq: { uid: 'uE', email: 'eq@x.org', role: 'eq' },
   rs: { uid: 'uR', email: 'rs@x.org', role: 'rs' },
   council: { uid: 'uC', email: 'council@x.org', role: 'council' },
+  bishopric: { uid: 'uB', email: 'bishop@x.org', role: 'bishopric' },
   legacy: { uid: 'uL', email: 'legacy@x.org' },           // approved profile, not on the allowed list
   outsider: { uid: 'uO', email: 'out@x.org' },            // no profile, not on the list
 };
@@ -83,6 +84,7 @@ test('final: the allowed list', async t => {
   await t.test('a non-admin cannot make themselves admin', () => assertFails(updateDoc(doc(as(env, 'council'), 'allowedUsers', 'council@x.org'), { admin: true })));
   await t.test('an admin can add someone', () => assertSucceeds(setDoc(doc(as(env, 'admin'), 'allowedUsers', 'new@x.org'), { email: 'new@x.org', role: 'council', admin: false })));
   await t.test('an admin can change a role', () => assertSucceeds(updateDoc(doc(as(env, 'admin'), 'allowedUsers', 'council@x.org'), { role: 'rs' })));
+  await t.test('an admin can set the Bishopric role', () => assertSucceeds(updateDoc(doc(as(env, 'admin'), 'allowedUsers', 'council@x.org'), { role: 'bishopric' })));
   await t.test('an admin cannot use a made-up role', () => assertFails(updateDoc(doc(as(env, 'admin'), 'allowedUsers', 'rs@x.org'), { role: 'bishop' })));
   await t.test('an admin cannot drop their own admin flag', () => assertFails(updateDoc(doc(as(env, 'admin'), 'allowedUsers', 'admin@x.org'), { admin: false })));
   await t.test('an admin cannot delete themselves', () => assertFails(deleteDoc(doc(as(env, 'admin'), 'allowedUsers', 'admin@x.org'))));
@@ -122,6 +124,14 @@ test('final: ward data by role', async t => {
   });
   await t.test('council: a whole-document overwrite is refused', () =>
     assertFails(setDoc(doc(C, 'wardData', 'shared'), { members: [], groups: {}, updatedByUid: 'uC', clientVersion: 2 })));
+  await t.test('bishopric: same as council for now', async () => {
+    const B = as(env, 'bishopric');
+    await assertSucceeds(wardUpd(B, 'bishopric', { 'groups.new': [{ id: 'gb' }] }));
+    await assertFails(wardUpd(B, 'bishopric', { members: [{ id: 'x' }] }));
+    await assertFails(wardUpd(B, 'bishopric', { current: [{ id: 'x' }] }));
+    await assertFails(wardUpd(B, 'bishopric', { 'groups.movein': [{ id: 'x' }] }));
+    await assertFails(updateDoc(doc(B, 'wardData', 'stats'), { 'us.b': 1 }));
+  });
   await t.test('eq: members, households, brother lists, move-ins', async () => {
     await assertSucceeds(wardUpd(E, 'eq', { members: [{ id: 'm' }], households: [{ id: 'h' }], identMeta: { ysa: {} } }));
     await assertSucceeds(wardUpd(E, 'eq', { current: [{ id: 'c' }], proposed: [] }));

@@ -51,15 +51,16 @@ function callerProblem(token, allowEntry, nowS) {
   return null;
 }
 
-// People with access whose role doesn't match what the callings report says.
+// People with access whose role doesn't match what the callings report says,
+// or whose callings (per the report) aren't ones that come with access.
 // `callings`: adminData/callings ({ users: { email: { expected, name } } });
 // `allowed`: Map email → allowedUsers entry. Returns sorted emails.
 function roleFlags(callings, allowed) {
   const users = (callings && callings.users) || {};
   return Object.keys(users).filter(email => {
     const a = allowed.get(email); if (!a) return false;
-    const role = a.role === 'eq' || a.role === 'rs' ? a.role : 'council';
-    return users[email].expected !== role;
+    const role = ['eq', 'rs', 'bishopric'].includes(a.role) ? a.role : 'council';
+    return users[email].expected !== role || users[email].accessOk === false;
   }).sort();
 }
 
@@ -71,7 +72,7 @@ function twoStepSummary(user) {
 }
 
 function roleReviewMessage(n) {
-  return n === 1 ? '1 person’s role needs your review.' : `${n} people’s roles need your review.`;
+  return n === 1 ? '1 person’s role or access needs your review.' : `${n} people’s roles or access need your review.`;
 }
 
 module.exports = { NOTE_FIELDS, COUNCIL_GROUPS, MAX_SESSION_S, insertNotes, callerProblem, roleFlags, roleReviewMessage, twoStepSummary };

@@ -549,7 +549,8 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
         ['Lane, Cora', 'F', '45', '3 Mar 1981', 'Relief Society', 'Relief Society First Counselor'],
         ['Lane, Cora', 'F', '45', '3 Mar 1981', 'Primary', 'Primary Teacher'],
         ['Admin, Avery', 'M', '50', '4 Apr 1976', 'Elders Quorum', 'Elders Quorum First Counselor'],
-        ['Brandt, Hugo', 'M', '45', '5 May 1981', 'Sunday School', 'Sunday School Teacher']];
+        ['Brandt, Hugo', 'M', '45', '5 May 1981', 'Sunday School', 'Sunday School Teacher'],
+        ['Fresh, Finn', 'M', '30', '6 Jun 1996', 'Primary', 'Primary Teacher']];
       const pg = await browser.newPage();
       await pg.setContent(`<style>body{font:10px Arial;margin:30px}td,th{padding:6px 8px;text-align:left;vertical-align:top}</style>
         <div>Palm Bay Test Ward</div><div>Members with Callings</div><table><tr><th>Name</th><th>Gender</th><th>Age</th><th>Birth Date</th><th>Organization</th><th>Calling</th><th>Sustained</th><th>Set Apart</th></tr>
@@ -561,14 +562,26 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
       const flags = await ev(A, () => [...document.querySelectorAll('#tab-admin .role-flag')].map(e => e.innerText).filter(t => /suggests/.test(t)).length);
       const doc = (await adb.doc('adminData/callings').get()).data();
       const push = await until(async () => (await pushesFor('tok-uAdmin')).find(x => x.data.tag === 'ministering-roles'));
-      return { pass: doc?.users?.['cora@example.com']?.expected === 'rs' && doc?.users?.['sam@example.com']?.expected === 'eq' && flags >= 1 && !!push,
-        obs: { status: st.replace(/\d+ callings/, 'N callings'), flags, cora: doc?.users?.['cora@example.com']?.callings, push: push?.data?.body } };
+      // Finn's only calling (Primary Teacher) isn't on the access list: flagged, nothing changed.
+      const finnFlag = await ev(A, () => [...document.querySelectorAll('#tab-admin .role-flag')].some(e => /Primary Teacher/.test(e.innerText) && /list of callings that come with access/.test(e.innerText)));
+      if (doc?.users) Object.assign(doc, { finn: doc.users['finn@example.com'] });
+      const finnStill = (await adb.doc('allowedUsers/finn@example.com').get()).exists;
+      return { pass: doc?.users?.['cora@example.com']?.expected === 'rs' && doc?.users?.['sam@example.com']?.expected === 'eq' && flags >= 1 && !!push
+          && finnFlag && doc?.finn?.accessOk === false && doc?.users?.['sam@example.com']?.accessOk === true && finnStill,
+        obs: { status: st.replace(/\d+ callings/, 'N callings'), flags, cora: doc?.users?.['cora@example.com']?.callings, finnAccessFlag: finnFlag, finnStillAllowed: finnStill, push: push?.data?.body } };
     });
     await check('admin', '"Make RS Presidency" fixes the flagged role (then put back)', async () => {
       await ev(A, () => setUserRole('uCouncil', 'rs')); await sleep(800);
       const a = (await adb.doc('allowedUsers/cora@example.com').get()).data();
       await ev(A, () => setUserRole('uCouncil', 'council')); await sleep(800);
       return { pass: a.role === 'rs', obs: a.role };
+    });
+    await check('admin', 'Bishopric role can be set (acts as Ward Council)', async () => {
+      await ev(A, () => setUserRole('uPending', 'bishopric')); await sleep(800);
+      const a = (await adb.doc('allowedUsers/pete@example.com').get()).data();
+      const opt = await ev(A, () => !!document.querySelector('#tab-admin option[value="bishopric"]'));
+      await ev(A, () => setUserRole('uPending', 'rs')); await sleep(800);
+      return { pass: a.role === 'bishopric' && opt, obs: { role: a.role, option: opt } };
     });
     await check('admin', 'reset two-step sign-in (lost phone)', async () => {
       const before = ((await require('firebase-admin/auth').getAuth().getUser('uFresh')).multiFactor?.enrolledFactors || []).length;
