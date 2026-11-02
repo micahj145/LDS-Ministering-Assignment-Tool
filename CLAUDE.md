@@ -565,7 +565,8 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   Not copied to drafts; ignored by the before/after box and the Draft diff.
 - **Contacts**: `telHTML` (tel:+1…), `mailHTML` (mailto:), `mapHTML` (Apple Maps on iPhone/iPad/Mac, geo:
   on Android, Google Maps elsewhere) on Members, Households and Sisters; Members' household name links to
-  the household row, Households' people link to their member rows.
+  the household row. Households' Members cell lists each linked member (oldest first) with their own phone
+  and email links (`.hh-person`), the name linking to their member row.
 
 ### Identifiers tab (markers beside names)
 Four LCR name reports (Members Without Callings, Part-Member Households, YSAs, Birthdays) imported

@@ -180,6 +180,8 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 .district-head { font-size:0.82rem; font-weight:700; color:#1a3a5c; margin:0.9rem 0 0.35rem; padding-bottom:0.2rem; border-bottom:2px solid #e0e6ed; }
 .district-head span { font-weight:400; color:#888; }
 .district-head:first-child { margin-top:0.2rem; }
+.hh-person { margin-bottom:0.2rem; line-height:1.35; }
+.hh-contact { white-space:nowrap; font-size:0.78rem; margin-left:0.25rem; }
 </style>
 </head>
 <body>
@@ -3729,8 +3731,10 @@ function renderHouseholds() {
                     :                         `<span class="badge badge-red"    style="cursor:pointer" title="Out — click to add to pool"        onclick="toggleHHPool('${hh.id}')">Out</span>`;
     t += `<tr id="hrow-${esc(hh.id)}">
       <td><strong>${esc(hh.name)}</strong>${identDotsHH(hh)}</td>
-      <td style="font-size:0.82rem;max-width:180px;white-space:normal">${(() => { const linked = S.members.filter(m => m.householdId === hh.id);
-        return linked.length ? linked.map(m => `<button class="ident-link" onclick="showMemberRow('${esc(m.id)}')" title="Show on Members">${esc(m.name)}</button>`).join(', ')
+      <td style="font-size:0.82rem;min-width:200px;white-space:normal">${(() => { const linked = S.members.filter(m => m.householdId === hh.id).sort((a, b) => (b.age || 0) - (a.age || 0));
+        // Each linked member on a line: name (→ Members row), then their own phone and email, tap to call / write.
+        return linked.length ? linked.map(m => `<div class="hh-person"><button class="ident-link" onclick="showMemberRow('${esc(m.id)}')" title="Show on Members">${esc(m.name)}</button>${
+            m.phone ? ` <span class="hh-contact">📞 ${telHTML(m.phone)}</span>` : ''}${m.email ? ` <span class="hh-contact">✉️ ${mailHTML(m.email)}</span>` : ''}</div>`).join('')
           : esc(memberList) || '<span style="color:#aaa">—</span>'; })()}</td>
       <td style="font-size:0.82rem">${esc(hh.head||'')}</td>
       <td style="font-size:0.82rem">

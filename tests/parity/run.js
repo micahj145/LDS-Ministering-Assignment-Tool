@@ -949,9 +949,11 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
     await ev(E, () => applyRecPlan()); await flush(E);
     const w = await until(async () => { const x = await ward(); return x.households.some(h => /Newcomer/.test(h.name)) && x; }) || await ward(); const h1 = w.households.find(h => h.id === 'h1'), h2 = w.households.find(h => h.id === 'h2'), nh = w.households.find(h => /Newcomer/.test(h.name));
     const kofi = w.members.find(m => m.id === 'm11'), nina = w.members.find(m => m.name === 'Newcomer, Nina Rose');
+    const row = await ev(E, id => { showTab('households'); const r = document.getElementById('hrow-' + id); const p = [...(r?.querySelectorAll('.hh-person') || [])].find(x => /Newcomer/.test(x.innerText));
+      return p ? { tel: p.querySelector('a[href^="tel:"]')?.getAttribute('href'), mail: p.querySelector('a[href^="mailto:"]')?.getAttribute('href') } : null; }, nh?.id);
     return { pass: o.total === 3 && o.renames.length === 1 && o.renames[0][0] === 'h1' && o.changes.includes('h2:address') && !o.changes.includes('h1:address') && o.adds.join() === 'Newcomer, Nina Rose'
-        && h1.name.startsWith('Whitfield, Daniel James') && h1.lat && h2.address.startsWith('46 Example') && !h2.lat && nh && kofi.householdId === nh.id && nina.householdId === nh.id,
-      obs: { ...o, h1: h1?.name, h1geo: !!h1?.lat, h2: h2?.address, h2geo: !!h2?.lat, kofiMoved: kofi?.householdId === nh?.id, nina: nina?.householdId === nh?.id } };
+        && row?.tel === 'tel:+13215550303' && row?.mail === 'mailto:nina@example.org' && h1.name.startsWith('Whitfield, Daniel James') && h1.lat && h2.address.startsWith('46 Example') && !h2.lat && nh && kofi.householdId === nh.id && nina.householdId === nh.id,
+      obs: { ...o, row, h1: h1?.name, h1geo: !!h1?.lat, h2: h2?.address, h2geo: !!h2?.lat, kofiMoved: kofi?.householdId === nh?.id, nina: nina?.householdId === nh?.id } };
   });
 
   // Last, since it wipes the shared doc: can a council member delete it?
