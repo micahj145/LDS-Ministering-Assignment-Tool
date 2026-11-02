@@ -906,6 +906,19 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
     const toAdmin = all.some(x => x.tokens.includes('tok-uAdmin')), toEditor = all.some(x => x.tokens.includes('tok-eq')), toRs = all.some(x => x.tokens.includes('tok-uRs'));
     return { pass: !!f && f.link === '#tab=propose' && toAdmin && !toEditor && !toRs, obs: { feed: f?.text, toAdmin, toEditor, toRs, editorBodies: all.filter(x => x.tokens.includes('tok-eq')).map(x => x.data.body) } };
   });
+  await check('round3', 'a companionship removed from the draft is marked on Current and shown greyed in the draft', async () => {
+    const o = await ev(E, async () => {
+      window.confirm = () => true; S.proposed = []; await copyCurrentToProposed();
+      const gone = S.current[0]; S.proposed = S.proposed.filter(p => p.fromId !== gone.id);
+      showTab('current'); renderCurrent();
+      const curCard = [...document.querySelectorAll('#current-list .companionship-card')].find(el => el.innerHTML.includes(esc(compLabel(gone)).split(' + ')[0]) && el.classList.contains('diff-removed'));
+      showTab('propose'); renderProposed();
+      const ghost = [...document.querySelectorAll('#proposed-list .companionship-card.diff-removed')].map(el => el.innerText);
+      return { cur: !!curCard && /Removed in the draft/.test(curCard.innerText), ghost: ghost.length, ghostText: (ghost[0] || '').slice(0, 80), otherMarked: document.querySelectorAll('#current-list .diff-removed').length };
+    });
+    await flush(E);
+    return { pass: o.cur && o.ghost === 1 && /Removed — in Current/.test(o.ghostText), obs: o };
+  });
   await check('round3', 'unmatched name: pick a household → linked and remembered for next import', async () => {
     const mk = async () => {
       const cell = 'padding:2px 0 2px 2px;vertical-align:middle;font:10px Arial';

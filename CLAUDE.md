@@ -571,6 +571,9 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   they show alongside. Companionship notes are no longer pulled into anyone's Notes or the follower feed.
   follow.js / tags.js cover all three threads on members and households (member threads also reach
   `entry:<id>` followers); `notifyNoteChange` ignores a note whose target changed (a move).
+- **Removed in the draft**: Current companionships no draft matches are marked "Removed in the draft" on the
+  Current tabs (when that side has a draft) and shown as greyed cards (`removedCardHTML`) in their district on
+  the Draft tabs (with the changed ones when sorted by changes).
 - **Draft notifications** (`functions/drafts.js`, `notifyDrafts` + `notifyNoteChange`): a change to the brothers'
   draft (or a note on one of its companionships) → feed entry + push (throttled, `lastDraftPushAt`) to the other
   EQ presidency members (allowed-list role eq); sisters' draft → RS presidency. Text names only who acted.

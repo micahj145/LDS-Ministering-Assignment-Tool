@@ -205,6 +205,8 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 .diff-chip.rem { background:#fde8e8; color:#a12a2a; text-decoration:line-through; }
 .companionship-card.diff-new { border-left:4px solid #28a745; }
 .companionship-card.diff-changed { border-left:4px solid #e0a800; }
+.companionship-card.diff-removed { border-left:4px solid #dc3545; background:#fdf6f6; }
+.diff-chip.st-removed { background:#f8d7da; color:#842029; font-weight:600; }
 .import-last { font-size:0.74rem; color:#888; margin-top:0.4rem; }
 .import-last:empty { display:none; }
 .iv-row { display:flex; flex-wrap:wrap; gap:0.3rem; align-items:center; font-size:0.76rem; color:#666; margin-top:0.4rem; }
@@ -9838,28 +9840,52 @@ function fillDistrictSelect(id, listKey, sel) {
 
 // cardFn(c, idx, total): idx/total are the position within the district
 // (undefined while searching or sorted by changes, which hides ▲▼).
+// A Current companionship the draft no longer has, shown greyed in the draft
+// list (in its district) so what LCR will lose is visible where the plan is made.
+function removedCardHTML(c) {
+  const hh = (c.households || []).map(r => hhByRef(r)?.name || r);
+  const ppl = (c.assignees || []).map(id => S.members.find(m => m.id === id)?.name).filter(Boolean).concat(c.extraAssignees || []);
+  return `<div class="companionship-card diff-removed" title="In Current, not in this draft">
+    <div class="diff-bar"><span class="diff-chip st-removed">Removed — in Current, not in this draft</span></div>
+    <div class="ministers" style="text-decoration:line-through;color:#8a6d6d">${esc(compLabel(c) || 'Companionship')}</div>
+    <div style="margin-top:0.3rem">${[...hh.map(n => `🏠 ${esc(n)}`), ...ppl.map(esc)].map(t => `<span class="household-tag" style="opacity:0.6">${t}</span>`).join('') || '<span style="color:#aaa;font-size:0.82rem">No one assigned</span>'}</div>
+  </div>`;
+}
+const DRAFT_FOR = { current: 'proposed', currentRS: 'proposedRS' };
+
 function compSearchRender(key, list, cardFn) {
-  let float = null;
+  let float = null, removed = [];
   if (DRAFT_OF[key]) {
     const diff = draftDiff(key);
     renderDiffSummary(key, diff);
     diff.byId.forEach((v, id) => { v.listKey = key; v.id = id; });
     const inner = cardFn; cardFn = (c, i, n) => withDiff(inner(c, i, n), diff.byId.get(c.id));
     if (document.getElementById('cs-sort-' + key)?.value === 'changes') float = c => diff.byId.get(c.id)?.status !== 'same';
+    removed = diff.missing;
+  } else if (DRAFT_FOR[key] && (S[DRAFT_FOR[key]] || []).length) {
+    // Current: mark the companionships the draft has dropped.
+    const gone = new Set(draftDiff(DRAFT_FOR[key]).missing.map(c => c.id));
+    const inner = cardFn; cardFn = (c, i, n) => gone.has(c.id)
+      ? inner(c, i, n).replace(/^(\s*<div class="companionship-card)"/, '$1 diff-removed"').replace(/^(\s*<div class="companionship-card[^>]*>)/, '$1<div class="diff-bar"><span class="diff-chip st-removed">Removed in the draft</span></div>')
+      : inner(c, i, n);
   }
   const q = document.getElementById('cs-q-' + key)?.value || '';
   const mode = document.getElementById('cs-mode-' + key)?.value || 'any';
   const cnt = document.getElementById('cs-count-' + key);
   const shown = q.trim() ? list.filter(c => compMatches(c, q, mode)) : list;
+  const ghosts = q.trim() ? removed.filter(c => compMatches(c, q, mode)) : removed;
   if (cnt) cnt.textContent = q.trim() ? `${shown.length} of ${list.length}` : '';
-  if (!shown.length) return `<div class="empty-state" style="padding:1.2rem"><p>No companionship ${mode === 'minister' ? 'has a minister' : mode === 'served' ? 'ministers to anyone' : 'includes anyone'} matching “${esc(q)}”.</p></div>`;
-  const groups = districtGroups(key, shown);
+  if (!shown.length && !ghosts.length) return `<div class="empty-state" style="padding:1.2rem"><p>No companionship ${mode === 'minister' ? 'has a minister' : mode === 'served' ? 'ministers to anyone' : 'includes anyone'} matching “${esc(q)}”.</p></div>`;
+  const ghostSet = new Set(ghosts);
+  const groups = districtGroups(key, [...shown, ...ghosts]);
   return groups.map(g => {
-    let items = g.items;
-    // Sorted by changes: within each district, changed/new first, each part in saved order.
+    let items = g.items.filter(c => !ghostSet.has(c)); const gone = g.items.filter(c => ghostSet.has(c));
+    // Sorted by changes: within each district, changed/new (and removed) first, each part in saved order.
     if (float) items = [...items.filter(float), ...items.filter(c => !float(c))];
     const arrows = !q.trim() && !float;
-    return districtHeadHTML(key, g, groups.length) + items.map((c, i) => arrows ? cardFn(c, i, items.length) : cardFn(c, undefined)).join('');
+    const cards = items.map((c, i) => arrows ? cardFn(c, i, items.length) : cardFn(c, undefined)), ghostCards = gone.map(removedCardHTML);
+    const n = float ? items.filter(float).length : items.length;
+    return districtHeadHTML(key, { ...g, items }, groups.length) + (float ? [...cards.slice(0, n), ...ghostCards, ...cards.slice(n)] : [...cards, ...ghostCards]).join('');
   }).join('');
 }
 
