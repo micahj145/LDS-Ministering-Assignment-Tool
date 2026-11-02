@@ -177,6 +177,9 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 .iv-done { color:#155724; font-weight:600; }
 .contact-link { color:#1a5c9c; text-decoration:none; }
 .contact-link:hover { text-decoration:underline; }
+.district-head { font-size:0.82rem; font-weight:700; color:#1a3a5c; margin:0.9rem 0 0.35rem; padding-bottom:0.2rem; border-bottom:2px solid #e0e6ed; }
+.district-head span { font-weight:400; color:#888; }
+.district-head:first-child { margin-top:0.2rem; }
 </style>
 </head>
 <body>
@@ -848,6 +851,19 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
   </div>
 </div>
 
+<!-- Match a draft companionship to Current -->
+<div class="modal-overlay" id="match-modal">
+  <div class="modal">
+    <h3>Match to Current</h3>
+    <div id="match-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="applyMatch(false)" title="Keep the draft as it is and stop suggesting this match">Disregard</button>
+      <button class="btn btn-secondary" onclick="closeModal('match-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="applyMatch(true)">Accept ticked</button>
+    </div>
+  </div>
+</div>
+
 <!-- RS companionship modal -->
 <div class="modal-overlay" id="rs-modal">
   <div class="modal wide">
@@ -856,6 +872,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
     <div class="form-group"><label>Ministering sister 2</label><select id="rs-m2"></select></div>
     <div id="rs-more"></div>
     <button type="button" class="btn btn-secondary btn-sm" style="margin:-0.3rem 0 0.8rem" onclick="addCompanionSelect('rs')">+ Add another companion</button>
+    <div class="form-group"><label>District</label><select id="rs-district"></select></div>
     <div class="form-group">
       <label>Sisters they minister to</label>
       <input type="text" id="rs-asg-search" placeholder="Search sisters…" oninput="renderRSAssigneePicker()" style="margin-bottom:0.35rem">
@@ -1106,6 +1123,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
     <div id="add-more"></div>
     <button type="button" class="btn btn-secondary btn-sm" style="margin:-0.3rem 0 0.8rem" onclick="addCompanionSelect('add')">+ Add another companion</button>
     <div id="add-proximity"></div>
+    <div class="form-group"><label>District</label><select id="add-district"></select></div>
     <div class="form-group">
       <label>Households to Minister To</label>
       <input type="text" id="add-hh-search" placeholder="Search households…" style="margin-bottom:0.35rem;font-size:0.84rem;padding:0.35rem 0.6rem;border:1px solid #ddd;border-radius:6px;width:100%" oninput="filterHHList('add')">
@@ -1133,6 +1151,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
     <div id="edit-more"></div>
     <button type="button" class="btn btn-secondary btn-sm" style="margin:-0.3rem 0 0.8rem" onclick="addCompanionSelect('edit')">+ Add another companion</button>
     <div id="edit-proximity"></div>
+    <div class="form-group"><label>District</label><select id="edit-district"></select></div>
     <div class="form-group">
       <label>Households to Minister To</label>
       <input type="text" id="edit-hh-search" placeholder="Search households…" style="margin-bottom:0.35rem;font-size:0.84rem;padding:0.35rem 0.6rem;border:1px solid #ddd;border-radius:6px;width:100%" oninput="filterHHList('edit')">
@@ -3831,7 +3850,7 @@ function renderCurrent() {
 
   document.getElementById('current-list').innerHTML = !list.length
     ? '<div class="empty-state"><div class="icon">🤝</div><p>No current assignments yet — import them from LCR above.</p></div>'
-    : compSearchRender('current', list, (c, i) => companionshipHTML(c.m1Name, c.m2Name, c.households, c.district, c.id, 'current', i, list.length));
+    : compSearchRender('current', list, (c, i, n) => companionshipHTML(c.m1Name, c.m2Name, c.households, c.district, c.id, 'current', i, n));
 
   const unDiv = document.getElementById('current-unassigned-list');
   if (unDiv) {
@@ -4001,7 +4020,7 @@ function renderProposed() {
 
   document.getElementById('proposed-list').innerHTML = !list.length
     ? '<div class="empty-state"><div class="icon">✏️</div><p>No proposals yet. Click "+ Add" to start.</p></div>'
-    : compSearchRender('proposed', list, (p, i) => companionshipHTML(p.m1Name, p.m2Name, p.households, p.district || '', p.id, 'proposed', i, list.length));
+    : compSearchRender('proposed', list, (p, i, n) => companionshipHTML(p.m1Name, p.m2Name, p.households, p.district || '', p.id, 'proposed', i, n));
 
   if (!unassigned.length) {
     document.getElementById('unassigned-list').innerHTML = bList.length === 0
@@ -4085,6 +4104,7 @@ function openAddModal(listKey = 'proposed') {
   _modalListKey = listKey;
   populateBrotherSelects('add-m1','add-m2', null, null, undefined, null);
   fillMoreCompanions('add', null);
+  fillDistrictSelect('add-district', _modalListKey, '');
   document.getElementById('add-hh-search').value = '';
   updateProximityInfo('add', []);
   document.getElementById('add-modal').classList.add('open');
@@ -4096,6 +4116,7 @@ function openEditModal(id, listKey = 'proposed') {
   _modalListKey = listKey;
   populateBrotherSelects('edit-m1','edit-m2', p.m1Id, p.m2Id, p.m2Name||'', id);
   fillMoreCompanions('edit', p);
+  fillDistrictSelect('edit-district', _modalListKey, p.district || '');
   document.getElementById('edit-id').value = id;
   document.getElementById('edit-hh-search').value = '';
   updateProximityInfo('edit', p.households);
@@ -4298,6 +4319,7 @@ function saveNewCompanionship() {
   const m1  = S.members.find(b => b.id === m1Id);
   const record = setMinisters({ id:uid(), households:hhs, notes:[], position:S[_modalListKey].length },
     [{ id: m1Id, name: m1?.name || '' }, m2, ...moreCompanions('add')]);
+  setDraftDistrict(record, _modalListKey, document.getElementById('add-district').value);
   S[_modalListKey].push(record);
   dbUpsertCompanionship(_modalListKey, record); closeModal('add-modal'); renderModalList();
 }
@@ -4315,6 +4337,8 @@ function saveEditCompanionship() {
   // Keep what the form doesn't edit (a third minister or LCR names from an import).
   const record = setMinisters({ ...S[_modalListKey][idx], id, households:hhs, notes:existingNotes, position:existingPosition },
     [{ id: m1Id, name: m1?.name || '' }, m2, ...moreCompanions('edit')]);
+  const dSel = document.getElementById('edit-district').value;
+  if (dSel !== (record.district || '')) setDraftDistrict(record, _modalListKey, dSel);
   S[_modalListKey][idx] = record;
   dbUpsertCompanionship(_modalListKey, record); closeModal('edit-modal'); renderModalList();
 }
@@ -4331,7 +4355,9 @@ async function moveCompanionship(listKey, id, direction) {
   const list = S[listKey];
   const idx = list.findIndex(x => x.id === id);
   if (idx < 0) return;
-  const swapIdx = idx + direction;
+  // Next companionship in the same district (lists are shown grouped by district).
+  let swapIdx = idx + direction;
+  while (swapIdx >= 0 && swapIdx < list.length && (list[swapIdx].district || '') !== (list[idx].district || '')) swapIdx += direction;
   if (swapIdx < 0 || swapIdx >= list.length) return;
   [list[idx], list[swapIdx]] = [list[swapIdx], list[idx]];
   list.forEach((c, i) => { c.position = i; });
@@ -8690,7 +8716,7 @@ function renderRSList(listKey, prefix) {
     <div class="stat-card"><div class="number">${pool.length - unMin.length}/${pool.length}</div><div class="label">Pool Sisters Ministering</div></div>
     <div class="stat-card"><div class="number">${recip.length - unRecip.length}/${recip.length}</div><div class="label">Receives-Pool Sisters Assigned</div></div>
     ${listKey === 'currentRS' ? interviewStat(list) : ''}`;
-  document.getElementById(listKey + '-list').innerHTML = list.length ? compSearchRender(listKey, list, (c, i) => rsCompanionshipHTML(c, listKey, i, list.length))
+  document.getElementById(listKey + '-list').innerHTML = list.length ? compSearchRender(listKey, list, (c, i, n) => rsCompanionshipHTML(c, listKey, i, n))
     : `<div class="empty-state"><div class="icon">✏️</div><p>${listKey === 'currentRS' ? 'No current sister assignments yet — import them from LCR above.' : 'No draft yet. Click "+ Add", or copy Current to the draft.'}</p></div>`;
   const li = (inner) => `<li style="padding:0.35rem 0;border-bottom:1px solid #f0f0f0;font-size:0.88rem">${inner}</li>`;
   document.getElementById(prefix + '-unassigned').innerHTML = !pool.length
@@ -8724,6 +8750,7 @@ function openRSModal(listKey, id) {
   document.getElementById('rs-m1').innerHTML = rsMinisterOptions(c?.m1Id);
   document.getElementById('rs-m2').innerHTML = rsMinisterOptions(c?.m2Id);
   fillMoreCompanions('rs', c);
+  fillDistrictSelect('rs-district', listKey, c?.district || '');
   document.getElementById('rs-asg-search').value = '';
   document.getElementById('rs-extra').textContent = c?.extraAssignees?.length ? `Also on LCR's list (not in Members): ${c.extraAssignees.join(', ')}` : '★ = in the ministering pool, ☆ = maybe.';
   document.getElementById('rs-delete').style.display = c ? '' : 'none';
@@ -8758,6 +8785,8 @@ function saveRSCompanionship() {
   const rec = { ...(old || { id: uid(), notes: [], position: list.length }),
     households: [...ctx.hh], assignees: [...ctx.mem] };
   setMinisters(rec, ms.map(m => ({ id: m.id, name: m.name })));
+  const dSel = document.getElementById('rs-district').value;
+  if (dSel !== (rec.district || '')) setDraftDistrict(rec, ctx.listKey, dSel);
   if (old) list[list.indexOf(old)] = rec; else list.push(rec);
   dbUpsertCompanionship(ctx.listKey, rec);
   closeModal('rs-modal');
@@ -9464,15 +9493,48 @@ function compMatches(c, q, mode) {
 // draft matched are listed as "in Current, not in the Draft". Parts compared:
 // ministers, households, individuals (assignees) and others not in Members.
 const DRAFT_OF = { proposed: 'current', proposedRS: 'currentRS' };
-function compParts(c) {
-  const ms = new Map(ministersOf(c).map(m => [m.id || 'n:' + normNameKey(m.name), m.name]));
-  const hh = new Map((c.households || []).map(r => { const h = S.households.find(x => x.id === r || norm(x.name) === norm(r)); return [h ? h.id : 'n:' + norm(r), h ? h.name : r]; }));
-  const ppl = new Map((c.assignees || []).map(id => [id, S.members.find(m => m.id === id)?.name || '?']));
-  (c.extraAssignees || []).forEach(n => ppl.set('n:' + normNameKey(n), n));
+// The parts compared, normalised so that the same people stored differently
+// (an id vs. just a name, a name LCR spells differently, a household vs. the
+// people in it — older imports used other LCR pages) don't count as changes:
+// names resolve to members/households (alternate names included); for brothers
+// people are counted as their household, for sisters a household counts as its
+// sisters.
+let _nameIdxCache = null;   // reset at the start of each comparison (draftDiff)
+function nameIdxCached() { return _nameIdxCache || (_nameIdxCache = { m: memberNameIdx(), h: householdNameIdx() }); }
+function memByLcrName(n) { return identFind(identNorm(n), nameIdxCached().m)?.m || null; }
+function hhByRef(r) { return hhById(r) || identFind(identNorm(r), nameIdxCached().h)?.h || null; }
+function ministerKey(m) { const r = (m.id && S.members.find(x => x.id === m.id)) || memByLcrName(m.name); return r ? r.id : 'n:' + normNameKey(m.name); }
+function compParts(c, side) {
+  const memByName = memByLcrName;
+  const ms = new Map(ministersOf(c).map(m => { const k = ministerKey(m); return [k, S.members.find(x => x.id === k)?.name || m.name]; }));
+  const hh = new Map(), ppl = new Map();
+  (c.households || []).forEach(r => { const h = hhByRef(r); hh.set(h ? h.id : 'n:' + norm(r), h ? h.name : r); });
+  const people = [...(c.assignees || []).map(id => S.members.find(m => m.id === id) || { id, name: '?' }),
+    ...(c.extraAssignees || []).map(n => memByName(n) || hhByRef(n) || { id: 'n:' + normNameKey(n), name: n })];
+  people.forEach(x => {
+    if (x.members !== undefined || (x.id && hhById(x.id))) { hh.set(x.id, x.name); return; }   // a household name kept as text
+    ppl.set(x.id, x.name);
+  });
+  if (side === 'eq') {   // brothers: individuals count as their household
+    [...ppl].forEach(([id, name]) => { const m = S.members.find(y => y.id === id); const h = m?.householdId && hhById(m.householdId); if (h) { hh.set(h.id, h.name); ppl.delete(id); } });
+  } else if (side === 'rs') {   // sisters: a household counts as its sisters
+    [...hh].forEach(([id]) => { const sis = S.members.filter(m => m.householdId === id && isFemale(m.gender) && (!m.age || m.age >= 18)); if (sis.length) { sis.forEach(m => ppl.set(m.id, m.name)); hh.delete(id); } });
+  }
   return { ms, hh, ppl };
+}
+function diffParts(cur, d, side) {
+  const a = compParts(cur, side), b = compParts(d, side), changes = [];
+  [['ms', 'minister'], ['hh', 'household'], ['ppl', 'individual']].forEach(([k, what]) => {
+    b[k].forEach((name, id) => { if (!a[k].has(id)) changes.push({ add: true, what, name, id }); });
+    a[k].forEach((name, id) => { if (!b[k].has(id)) changes.push({ add: false, what, name, id }); });
+  });
+  if ((cur.district || '') !== (d.district || '')) changes.push({ what: 'district', name: `${cur.district || 'no district'} → ${d.district || 'no district'}`, to: cur.district || '' });
+  return changes;
 }
 function draftDiff(draftKey) {
   const draft = S[draftKey] || [], cur = S[DRAFT_OF[draftKey]] || [];
+  const side = draftKey === 'proposedRS' ? 'rs' : 'eq';
+  _nameIdxCache = null;
   const used = new Set(), match = new Map();
   const curById = new Map(cur.map(c => [c.id, c]));
   draft.forEach(d => { const c = d.fromId && curById.get(d.fromId); if (c && !used.has(c.id)) { match.set(d.id, c); used.add(c.id); } });
@@ -9480,29 +9542,94 @@ function draftDiff(draftKey) {
   draft.forEach(d => { if (match.has(d.id)) return; const k = key(d); const c = cur.find(x => !used.has(x.id) && key(x) === k); if (c) { match.set(d.id, c); used.add(c.id); } });
   draft.forEach(d => {
     if (match.has(d.id)) return;
-    const dm = compParts(d).ms; let best = null, n = 0;
-    cur.forEach(x => { if (used.has(x.id)) return; const k = [...compParts(x).ms.keys()].filter(id => dm.has(id)).length; if (k > n) { n = k; best = x; } });
+    const dm = compParts(d, side).ms; let best = null, n = 0;
+    cur.forEach(x => { if (used.has(x.id)) return; const k = [...compParts(x, side).ms.keys()].filter(id => dm.has(id)).length; if (k > n) { n = k; best = x; } });
     if (best) { match.set(d.id, best); used.add(best.id); }
   });
   const byId = new Map();
   draft.forEach(d => {
     const c = match.get(d.id);
     if (!c) { byId.set(d.id, { status: 'new', changes: [] }); return; }
-    const a = compParts(c), b = compParts(d), changes = [];
-    [['ms', 'minister'], ['hh', 'household'], ['ppl', 'individual']].forEach(([k, what]) => {
-      b[k].forEach((name, id) => { if (!a[k].has(id)) changes.push({ add: true, what, name }); });
-      a[k].forEach((name, id) => { if (!b[k].has(id)) changes.push({ add: false, what, name }); });
-    });
+    const changes = diffParts(c, d, side);
     byId.set(d.id, { status: changes.length ? 'changed' : 'same', changes, cur: c });
   });
-  return { byId, missing: cur.filter(c => !used.has(c.id)) };
+  const missing = cur.filter(c => !used.has(c.id));
+  draft.forEach(d => {
+    const info = byId.get(d.id); if (info.status !== 'new') return;
+    const b = compParts(d, side); let best = null, n = 0;
+    missing.forEach(x => { const a = compParts(x, side); const k = [...a.hh.keys()].filter(id => b.hh.has(id)).length + [...a.ppl.keys()].filter(id => b.ppl.has(id)).length; if (k > n) { n = k; best = x; } });
+    if (best) info.cand = best;
+  });
+  byId.forEach((info, id) => { const d = draft.find(x => x.id === id); const c = info.cur || info.cand;
+    info.offer = !!c && (info.status === 'changed' || info.status === 'new') && d?.matchDismissed !== c.id; });
+  return { byId, missing };
 }
 function diffBarHTML(info) {
   if (!info) return '';
   const label = { new: 'New — not in Current', changed: 'Changed from Current', same: 'Same as Current' }[info.status];
   const icon = { minister: '👤', household: '🏠', individual: '🙋' };
-  return `<div class="diff-bar"><span class="diff-chip st-${info.status}">${label}</span>${info.changes.map(ch =>
-    `<span class="diff-chip ${ch.add ? 'add' : 'rem'}" title="${ch.add ? 'Added' : 'Removed'} ${ch.what}">${ch.add ? '+' : '−'} ${icon[ch.what]} ${esc(ch.name)}</span>`).join('')}</div>`;
+  return `<div class="diff-bar"><span class="diff-chip st-${info.status}">${label}</span>${info.changes.map(ch => ch.what === 'district'
+    ? `<span class="diff-chip" title="District changed">🗺️ ${esc(ch.name)}</span>`
+    : `<span class="diff-chip ${ch.add ? 'add' : 'rem'}" title="${ch.add ? 'Added' : 'Removed'} ${ch.what}">${ch.add ? '+' : '−'} ${icon[ch.what]} ${esc(ch.name)}</span>`).join('')}${info.offer && info.listKey && canEditList(info.listKey)
+      ? `<button type="button" class="btn btn-secondary btn-sm" style="padding:0.05rem 0.5rem;font-size:0.74rem" onclick="event.stopPropagation();openMatchModal('${info.listKey}','${info.id}')">Match to Current…</button>` : ''}</div>`;
+}
+// ── Match to Current ─────────────────────────────────────────
+// For a draft flagged Changed (or New with a close Current companionship), the
+// differences are listed; each ticked one is made to match Current. Disregard
+// keeps the draft as it is and stops offering this match.
+let _matchCtx = null;
+function openMatchModal(listKey, id) {
+  if (!canEditList(listKey)) return;
+  const info = draftDiff(listKey).byId.get(id); const d = (S[listKey] || []).find(x => x.id === id);
+  const cur = info?.cur || info?.cand; if (!d || !cur) return;
+  const side = listKey === 'proposedRS' ? 'rs' : 'eq';
+  _nameIdxCache = null;
+  const changes = diffParts(cur, d, side);
+  _matchCtx = { listKey, id, curId: cur.id, changes, link: !info.cur };
+  const icon = { minister: '👤', household: '🏠', individual: '🙋' };
+  const verb = ch => ch.what === 'district' ? `District: use Current's (${esc(cur.district || 'no district')})`
+    : ch.add ? `Remove ${icon[ch.what]} <b>${esc(ch.name)}</b> (not in Current)` : `Add ${icon[ch.what]} <b>${esc(ch.name)}</b> (in Current)`;
+  document.getElementById('match-body').innerHTML = `<p style="font-size:0.85rem;margin:0 0 0.5rem">Draft: <b>${esc(compLabel(d))}</b><br>Current: <b>${esc(compLabel(cur))}</b>${cur.district ? ` <span style="color:#888">(${esc(cur.district)})</span>` : ''}</p>
+    ${_matchCtx.link ? '<p style="font-size:0.8rem;color:#555;margin:0 0 0.5rem">This draft is marked New, but it looks like this Current companionship. Accepting also links them, so later changes are compared with it.</p>' : ''}
+    ${changes.length ? `<div style="font-size:0.8rem;color:#888;margin-bottom:0.3rem">Ticked = change the draft to match Current. Untick anything that's a real planned change.</div>` +
+      changes.map((ch, i) => `<label style="display:flex;gap:0.45rem;align-items:flex-start;font-weight:400;font-size:0.84rem;padding:0.25rem 0;border-bottom:1px solid #f0f0f0">
+        <input type="checkbox" style="width:auto;margin-top:0.15rem" checked data-i="${i}"><span>${verb(ch)}</span></label>`).join('')
+      : '<p style="font-size:0.84rem;color:#155724">Nothing differs once names are matched — Accept just links them.</p>'}`;
+  document.getElementById('match-modal').classList.add('open');
+}
+function applyMatch(accept) {
+  const ctx = _matchCtx; if (!ctx) return;
+  const list = S[ctx.listKey], d = list.find(x => x.id === ctx.id), cur = (S[CURRENT_OF[ctx.listKey]] || []).find(x => x.id === ctx.curId);
+  if (!d || !cur) { closeModal('match-modal'); return; }
+  if (!accept) { d.matchDismissed = cur.id; }
+  else {
+    const picked = [...document.querySelectorAll('#match-body input[type=checkbox]')].filter(x => x.checked).map(x => ctx.changes[+x.dataset.i]);
+    let ms = ministersOf(d);
+    picked.forEach(ch => {
+      if (ch.what === 'district') { if (ch.to) setDraftDistrict(d, ctx.listKey, ch.to); else { delete d.district; delete d.districtLeader; } return; }
+      if (ch.what === 'minister') {
+        if (ch.add) ms = ms.filter(m => ministerKey(m) !== ch.id);
+        else { const m = S.members.find(x => x.id === ch.id); ms.push(m ? { id: m.id, name: m.name } : { id: null, name: ch.name }); }
+        return;
+      }
+      if (ch.what === 'household') {
+        if (ch.add) { d.households = (d.households || []).filter(r => (hhByRef(r)?.id || 'n:' + norm(r)) !== ch.id);
+          d.extraAssignees = (d.extraAssignees || []).filter(n => (hhByRef(n)?.id || '') !== ch.id && norm(n) !== norm(ch.name));
+          if (ctx.listKey === 'proposed') d.assignees = (d.assignees || []).filter(id => S.members.find(m => m.id === id)?.householdId !== ch.id); }
+        else d.households = [...new Set([...(d.households || []), ch.id.startsWith('n:') ? ch.name : ch.id])];
+        return;
+      }
+      if (ch.add) { d.assignees = (d.assignees || []).filter(id => id !== ch.id); d.extraAssignees = (d.extraAssignees || []).filter(n => (memByLcrName(n)?.id || 'n:' + normNameKey(n)) !== ch.id);
+        if (ctx.listKey === 'proposedRS') { const m = S.members.find(x => x.id === ch.id); if (m?.householdId) d.households = (d.households || []).filter(r => r !== m.householdId); } }
+      else if (ch.id.startsWith('n:')) d.extraAssignees = [...new Set([...(d.extraAssignees || []), ch.name])];
+      else d.assignees = [...new Set([...(d.assignees || []), ch.id])];
+    });
+    setMinisters(d, ms);
+    d.fromId = cur.id; delete d.matchDismissed;
+  }
+  dbUpsertCompanionship(ctx.listKey, d);
+  _matchCtx = null; closeModal('match-modal');
+  if (ctx.listKey === 'proposed') renderProposed(); else renderProposedRS();
 }
 function withDiff(html, info) {
   if (!info) return html;
@@ -9518,27 +9645,69 @@ function renderDiffSummary(key, diff) {
       <details><summary>Show them</summary><ul style="margin:0.3rem 0 0 1.2rem">${diff.missing.map(c => `<li>${esc(compLabel(c) || 'Companionship')}</li>`).join('')}</ul></details>` : '.');
 }
 
+// ── Districts ────────────────────────────────────────────────
+// Districts come only from LCR (the Current lists); the tool never creates or
+// removes one. Lists are shown grouped by district — Current in LCR's order,
+// drafts in their saved order — and ▲▼ only move a companionship within its
+// district. A draft's district can be changed to any district Current has.
+const CURRENT_OF = { current: 'current', proposed: 'current', currentRS: 'currentRS', proposedRS: 'currentRS' };
+function districtsFor(listKey) {   // [{ name, leader }] in LCR's order
+  const out = []; (S[CURRENT_OF[listKey]] || []).forEach(c => { if (c.district && !out.some(d => d.name === c.district)) out.push({ name: c.district, leader: c.districtLeader || '' }); });
+  return out;
+}
+function districtGroups(listKey, list) {
+  const order = districtsFor(listKey).map(d => d.name);
+  list.forEach(c => { if (c.district && !order.includes(c.district)) order.push(c.district); });
+  const groups = order.map(name => ({ name, items: [] })), none = { name: '', items: [] };
+  list.forEach(c => (groups.find(g => g.name === (c.district || '')) || none).items.push(c));
+  return [...groups, none].filter(g => g.items.length);
+}
+function districtHeadHTML(listKey, g, shown) {
+  if (!g.name && shown === 1 && !districtsFor(listKey).length) return '';
+  const lead = districtsFor(listKey).find(d => d.name === g.name)?.leader;
+  return `<div class="district-head">${g.name ? esc(g.name) : 'No district'}${lead && lead !== 'Unassigned' ? ` <span>· ${esc(lead)}</span>` : ''} <span>· ${g.items.length}</span></div>`;
+}
+function setDraftDistrict(rec, listKey, name) {
+  const d = districtsFor(listKey).find(x => x.name === name);
+  if (d) { rec.district = d.name; if (d.leader) rec.districtLeader = d.leader; else delete rec.districtLeader; }
+  else { delete rec.district; delete rec.districtLeader; }
+}
+function districtOptionsHTML(listKey, sel) {
+  const ds = districtsFor(listKey);
+  return `<option value="">No district</option>` + ds.map(d => `<option value="${esc(d.name)}" ${d.name === sel ? 'selected' : ''}>${esc(d.name)}${d.leader && d.leader !== 'Unassigned' ? ' · ' + esc(d.leader) : ''}</option>`).join('')
+    + (sel && !ds.some(d => d.name === sel) ? `<option value="${esc(sel)}" selected>${esc(sel)} (no longer in LCR)</option>` : '');
+}
+function fillDistrictSelect(id, listKey, sel) {
+  const el = document.getElementById(id); if (!el) return;
+  el.innerHTML = districtOptionsHTML(listKey, sel);
+  el.closest('.form-group').style.display = districtsFor(listKey).length || sel ? '' : 'none';
+}
+
+// cardFn(c, idx, total): idx/total are the position within the district
+// (undefined while searching or sorted by changes, which hides ▲▼).
 function compSearchRender(key, list, cardFn) {
+  let float = null;
   if (DRAFT_OF[key]) {
     const diff = draftDiff(key);
     renderDiffSummary(key, diff);
-    const inner = cardFn; cardFn = (c, i) => withDiff(inner(c, i), diff.byId.get(c.id));
-    if (document.getElementById('cs-sort-' + key)?.value === 'changes') {
-      const rank = { changed: 0, new: 1, same: 2 };
-      const sorted = list.map((c, i) => ({ c, i })).sort((x, y) => (rank[diff.byId.get(x.c.id)?.status] ?? 3) - (rank[diff.byId.get(y.c.id)?.status] ?? 3) || x.i - y.i);
-      const fn2 = cardFn; cardFn = (c) => fn2(c, undefined);   // no ▲▼ while sorted
-      list = sorted.map(x => x.c);
-    }
+    diff.byId.forEach((v, id) => { v.listKey = key; v.id = id; });
+    const inner = cardFn; cardFn = (c, i, n) => withDiff(inner(c, i, n), diff.byId.get(c.id));
+    if (document.getElementById('cs-sort-' + key)?.value === 'changes') float = c => diff.byId.get(c.id)?.status !== 'same';
   }
-
   const q = document.getElementById('cs-q-' + key)?.value || '';
   const mode = document.getElementById('cs-mode-' + key)?.value || 'any';
   const cnt = document.getElementById('cs-count-' + key);
-  if (!q.trim()) { if (cnt) cnt.textContent = ''; return list.map((c, i) => cardFn(c, i)).join(''); }
-  const shown = list.map((c, i) => ({ c, i })).filter(x => compMatches(x.c, q, mode));
-  if (cnt) cnt.textContent = `${shown.length} of ${list.length}`;
-  return shown.length ? shown.map(x => cardFn(x.c, undefined)).join('')
-    : `<div class="empty-state" style="padding:1.2rem"><p>No companionship ${mode === 'minister' ? 'has a minister' : mode === 'served' ? 'ministers to anyone' : 'includes anyone'} matching “${esc(q)}”.</p></div>`;
+  const shown = q.trim() ? list.filter(c => compMatches(c, q, mode)) : list;
+  if (cnt) cnt.textContent = q.trim() ? `${shown.length} of ${list.length}` : '';
+  if (!shown.length) return `<div class="empty-state" style="padding:1.2rem"><p>No companionship ${mode === 'minister' ? 'has a minister' : mode === 'served' ? 'ministers to anyone' : 'includes anyone'} matching “${esc(q)}”.</p></div>`;
+  const groups = districtGroups(key, shown);
+  return groups.map(g => {
+    let items = g.items;
+    // Sorted by changes: within each district, changed/new first, each part in saved order.
+    if (float) items = [...items.filter(float), ...items.filter(c => !float(c))];
+    const arrows = !q.trim() && !float;
+    return districtHeadHTML(key, g, groups.length) + items.map((c, i) => arrows ? cardFn(c, i, items.length) : cardFn(c, undefined)).join('');
+  }).join('');
 }
 
 // ── Find members nearby ───────────────────────────────────────

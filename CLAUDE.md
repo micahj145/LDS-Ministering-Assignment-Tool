@@ -541,6 +541,20 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   its adult sisters. Find nearby (RS) = households of receives-pool sisters.
 - **Temporary**: `ADMIN_RS_SETUP` (app) + `adminRsSetup()` (rules) let the admin import/edit the sisters'
   lists during the initial setup. Micah will turn both off afterwards.
+- **Districts**: come only from LCR (Current lists); the tool never makes or removes one. `compSearchRender`
+  groups every list by district (`districtGroups`: Current's LCR order, then draft-only names, then "No
+  district") with a `.district-head`; ▲▼ get the position within the district and `moveCompanionship`
+  swaps only with the next one in the same district. Drafts: a District picker in the brother add/edit and
+  sister windows (`fillDistrictSelect`; `setDraftDistrict` copies the leader from Current). A district
+  change is a Draft-vs-Current change (🗺️ chip). "Changes from Current first" keeps the district groups and
+  saved order, with changed/new floated to the top of each district.
+- **Draft vs Current comparison is normalised** (`compParts(c, side)`): ministers/households/people resolve
+  by id or name incl. altNames (`ministerKey`, `memByLcrName`, `hhByRef`; `_nameIdxCache` per comparison);
+  brothers count people as their household, sisters count a household as its adult sisters — so records
+  from older imports (Individuals tab) don't show as changes. **Match to Current…** (on Changed drafts, and
+  New ones that share anyone served with an unmatched Current one): `openMatchModal` lists `diffParts`;
+  ticked ones are made to match Current, `fromId` links them; Disregard sets `matchDismissed` (no offer for
+  that pairing again).
 - **Pools follow LCR**: after a ministering import, `poolFromCurrent()` puts everyone in the new Current In
   Pool — brothers: male ministers (`m.inPool`) and households (`hh.inPool`); sisters: female ministers
   (`m.rsPool`) and assignees (`m.rsRecipient`). Nothing is taken out of a pool.

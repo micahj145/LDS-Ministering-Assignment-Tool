@@ -829,6 +829,47 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
       obs: { pooled, n: cur.length, a: a && [a.m2Id, a.households, a.extraAssignees, a.district, a.districtLeader], b: b && [b.households, b.district], solo: solo && solo.households, review: review.slice(0, 120) } };
   });
 
+  await check('round3', 'districts: grouped, ▲▼ only within a district, draft district changeable and marked', async () => {
+    await ev(E, () => { window.confirm = () => true; S.proposed = []; return copyCurrentToProposed(); }); await sleep(300); await flush(E);
+    const o = await ev(E, async () => {
+      showTab('current'); const curHeads = [...document.querySelectorAll('#current-list .district-head')].map(h => h.innerText.split('·')[0].trim());
+      showTab('propose'); const heads = [...document.querySelectorAll('#proposed-list .district-head')].map(h => h.innerText.split('·')[0].trim());
+      const d1 = S.proposed.filter(c => c.district === 'District 1'), d2 = S.proposed.find(c => c.district === 'District 2');
+      // the one in District 2 can't move up into District 1
+      const before = S.proposed.map(c => c.id).join(); await moveCompanionship('proposed', d2.id, -1); const blocked = S.proposed.map(c => c.id).join() === before;
+      if (d1.length > 1) await moveCompanionship('proposed', d1[1].id, -1);
+      const moved = d1.length > 1 ? S.proposed.filter(c => c.district === 'District 1')[0].id === d1[1].id : true;
+      openEditModal(d2.id, 'proposed'); const opts = [...document.querySelectorAll('#edit-district option')].map(x => x.value);
+      document.getElementById('edit-district').value = 'District 1'; saveEditCompanionship();
+      const rec = S.proposed.find(c => c.id === d2.id);
+      const chip = [...document.querySelectorAll('#proposed-list .companionship-card')].find(el => el.innerHTML.includes(d2.id))?.innerText || '';
+      return { curHeads, heads, blocked, moved, opts, district: rec.district, leader: rec.districtLeader, chip: /District 2 → District 1/.test(chip) };
+    });
+    await flush(E);
+    return { pass: o.curHeads.join() === 'District 1,District 2' && o.heads.join() === 'District 1,District 2' && o.blocked && o.moved && o.opts.join() === ',District 1,District 2' && o.district === 'District 1' && o.leader === 'Lindqvist, Erik' && o.chip, obs: o };
+  });
+  await check('round3', 'Draft vs Current: same people stored differently aren\'t changes; Match to Current fixes or dismisses', async () => {
+    const o = await ev(E, async () => {
+      window.confirm = () => true; S.proposed = []; await copyCurrentToProposed();
+      const st = id => draftDiff('proposed').byId.get(id)?.status;
+      const d = S.proposed.find(c => c.m1Id === 'm5');
+      // same minister by name only (no id), and a household written by name instead of id
+      d.m2Id = null; d.households = d.households.map(h => S.households.find(x => x.id === h)?.name || h);
+      const normalised = st(d.id);
+      // real-looking differences: drop a household, add another, change district
+      d.households = d.households.slice(1).concat(['h8']); d.district = 'District 2';
+      const changed = st(d.id);
+      renderProposed(); const btn = [...document.querySelectorAll('#proposed-list .companionship-card')].find(el => el.innerHTML.includes(d.id))?.querySelector('button[onclick*="openMatchModal"]');
+      btn?.click(); const rows = [...document.querySelectorAll('#match-body label')].map(l => l.innerText.trim());
+      applyMatch(true); const after = st(d.id);
+      // dismiss: make it differ again, disregard, and the offer goes away
+      d.households = [...d.households, 'h3']; renderProposed(); openMatchModal('proposed', d.id); applyMatch(false);
+      const offered = draftDiff('proposed').byId.get(d.id).offer;
+      return { normalised, changed, button: !!btn, rows, after, offered, dismissed: d.matchDismissed };
+    });
+    await flush(E);
+    return { pass: o.normalised === 'same' && o.changed === 'changed' && o.button && o.rows.length === 3 && o.after === 'same' && o.offered === false, obs: o };
+  });
   await check('round3', 'unmatched name: pick a household → linked and remembered for next import', async () => {
     const mk = async () => {
       const cell = 'padding:2px 0 2px 2px;vertical-align:middle;font:10px Arial';
