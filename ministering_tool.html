@@ -3505,6 +3505,7 @@ function renderMembers() {
     <div class="stat-card"><div class="number">${linkedCount}</div><div class="label">Household Linked</div></div>
     <div class="stat-card"><div class="number">${list.length - linkedCount}</div><div class="label">Not Linked</div></div>
     <div class="stat-card"><div class="number">${brothers().length}</div><div class="label">Brothers</div></div>
+    <div class="stat-card"><div class="number">${sisters().length}</div><div class="label">Sisters</div></div>
   `;
 
   if (!filtered.length) {
@@ -8615,9 +8616,10 @@ function renderSisters() {
   document.getElementById('sisters-stats').innerHTML = `
     <div class="stat-card"><div class="number">${list.length}</div><div class="label">Sisters</div></div>
     <div class="stat-card"><div class="number">${rsPoolSisters().length}</div><div class="label">Ministering Pool</div></div>
-    <div class="stat-card"><div class="number">${rsMaybeSisters().length}</div><div class="label">Maybe</div></div>
+    <div class="stat-card"><div class="number">${rsMaybeSisters().length}</div><div class="label">Ministering Pool: Maybe</div></div>
     <div class="stat-card"><div class="number">${list.filter(m => ministering.has(m.id)).length}</div><div class="label">Currently Ministering</div></div>
-    <div class="stat-card"><div class="number">${rsRecipientSisters().length}${rsRecipientMaybe().length ? ` <span style="font-size:0.7em;color:#888">+${rsRecipientMaybe().length} maybe</span>` : ''}</div><div class="label">In Receives Pool</div></div>
+    <div class="stat-card"><div class="number">${rsRecipientSisters().length}</div><div class="label">In Receives Pool</div></div>
+    <div class="stat-card"><div class="number">${rsRecipientMaybe().length}</div><div class="label">Receives Pool: Maybe</div></div>
     <div class="stat-card"><div class="number">${list.filter(hasMS).length}</div><div class="label">Have Ministering Sisters</div></div>`;
   if (!rows.length) {
     document.getElementById('sisters-table').innerHTML = list.length ? '<div class="empty-state"><div class="icon">🔍</div><p>No results.</p></div>'
@@ -8985,7 +8987,7 @@ function renderMinReview() {
         Replace <strong>Current Ministering Brother Assignments</strong> (${S.current.length} now → ${eq.length})${canEditEQ() ? '' : ' — EQ presidency only'}</label>`}
       ${p.kind === 'interviews' && p.comps[0]?.side !== 'rs' ? '' : `<label style="font-weight:400;display:flex;gap:0.4rem;align-items:center"><input type="checkbox" style="width:auto" ${p.doRs ? 'checked' : ''} ${canEditRS() ? '' : 'disabled'} onchange="_minPlan.doRs=this.checked">
         Replace <strong>Current Ministering Sister Assignments</strong> (${(S.currentRS || []).length} now → ${rs.length})${canEditRS() ? '' : ' — RS presidency only'}</label>`}
-      <div style="font-size:0.76rem;color:#888;margin-top:0.2rem">Notes on a companionship with the same ministers are kept. ${p.kind === 'interviews' ? 'Households are matched by name; districts are kept.' : "Brothers' assignments become those people's households; sisters' stay as individual sisters."} Drafts aren't touched.</div>
+      <div style="font-size:0.76rem;color:#888;margin-top:0.2rem">Notes on a companionship with the same ministers are kept. ${p.kind === 'interviews' ? 'Households are matched by name; districts are kept.' : "Brothers' assignments become those people's households; sisters' stay as individual sisters."} Anyone in these companionships who isn't In Pool yet is put In Pool. Drafts aren't touched.</div>
     </div>
     <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.6rem">
       <button class="btn btn-secondary btn-sm" onclick="cancelMinImport()">Cancel</button>
@@ -9007,6 +9009,26 @@ function minUnmatchedHTML(p) {
 }
 function cancelMinImport() { const f = _minPlan?.from; _minPlan = null; if (f) { document.getElementById('min-review-' + f).innerHTML = ''; document.getElementById('min-status-' + f).textContent = ''; } }
 function minKey(names) { return names.filter(Boolean).map(n => normNameKey(n)).sort().join(' | '); }
+// After an LCR import: everyone LCR has ministering or ministered to is put In
+// Pool — brothers: ministers (Brothers pool, m.inPool) and households (EQ pool,
+// hh.inPool; a wife listed with her husband is left alone); sisters: ministering sisters (m.rsPool) and the sisters they
+// minister to (receives pool, m.rsRecipient). A husband in a sisters'
+// companionship isn't a sister, so his pools are left alone. Returns the count.
+function poolFromCurrent(doEq, doRs) {
+  let n = 0; const mem = new Set(), hhs = new Set();
+  const put = (o, k, set) => { if (o && o[k] !== true) { o[k] = true; n++; set.add(o.id); } };
+  if (doEq) (S.current || []).forEach(c => {
+    ministersOf(c).forEach(x => { const m = S.members.find(y => y.id === x.id); if (m && !isFemale(m.gender)) put(m, 'inPool', mem); });   // a wife in a couple isn't a brother
+    (c.households || []).forEach(id => put(hhById(id), 'inPool', hhs));
+  });
+  if (doRs) (S.currentRS || []).forEach(c => {
+    ministersOf(c).forEach(x => { const m = S.members.find(y => y.id === x.id); if (m && isFemale(m.gender)) put(m, 'rsPool', mem); });
+    (c.assignees || []).forEach(id => put(S.members.find(m => m.id === id), 'rsRecipient', mem));
+  });
+  if (mem.size) dbUpsertMembers(S.members);
+  if (hhs.size) dbUpsertHouseholds(S.households);
+  return n;
+}
 async function applyMinPlan() {
   const p = _minPlan; if (!p || (!p.doEq && !p.doRs)) { alert('Nothing ticked to replace.'); return; }
   const now = new Date().toISOString();
@@ -9043,9 +9065,10 @@ async function applyMinPlan() {
   const done = [];
   if (p.doEq && canEditEQ()) { S.current = build('eq', S.current); noteImport('ministering-eq', S.current.length); await dbReplaceCompanionshipList('current', S.current); done.push(`${S.current.length} brothers' companionships`); }
   if (p.doRs && canEditRS()) { S.currentRS = build('rs', S.currentRS); noteImport('ministering-rs', S.currentRS.length); await dbReplaceCompanionshipList('currentRS', S.currentRS); done.push(`${S.currentRS.length} sisters' companionships`); }
+  const pooled = poolFromCurrent(p.doEq && canEditEQ(), p.doRs && canEditRS());
   const f = p.from; _minPlan = null;
   document.getElementById('min-review-' + f).innerHTML = '';
-  const st = document.getElementById('min-status-' + f); st.style.color = '#155724'; st.textContent = '✓ Saved ' + done.join(' and ') + '.' + (fixed ? ` ${fixed} name${fixed === 1 ? '' : 's'} linked and remembered.` : '');
+  const st = document.getElementById('min-status-' + f); st.style.color = '#155724'; st.textContent = '✓ Saved ' + done.join(' and ') + '.' + (pooled ? ` ${pooled} added to the pools (they're assigned in LCR).` : '') + (fixed ? ` ${fixed} name${fixed === 1 ? '' : 's'} linked and remembered.` : '');
   renderCurrent(); renderCurrentRS(); renderBrothers(); renderSisters();
 }
 

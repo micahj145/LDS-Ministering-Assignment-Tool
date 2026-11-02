@@ -541,6 +541,9 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   its adult sisters. Find nearby (RS) = households of receives-pool sisters.
 - **Temporary**: `ADMIN_RS_SETUP` (app) + `adminRsSetup()` (rules) let the admin import/edit the sisters'
   lists during the initial setup. Micah will turn both off afterwards.
+- **Pools follow LCR**: after a ministering import, `poolFromCurrent()` puts everyone in the new Current In
+  Pool — brothers: male ministers (`m.inPool`) and households (`hh.inPool`); sisters: female ministers
+  (`m.rsPool`) and assignees (`m.rsRecipient`). Nothing is taken out of a pool.
 - **Interviews**: `c.interviews[YYYYQn] = { months: { Oct: [names] }, done, src, by, at }` on Current
   companionships. Import: filled circle per minister per month + the Quarter check (`parseInterviewReport`);
   `mergeInterviews` adds LCR's months, never removes. Current cards: month pills (`interviewRowHTML`,

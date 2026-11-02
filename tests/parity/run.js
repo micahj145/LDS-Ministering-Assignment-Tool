@@ -822,9 +822,11 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
     const cur = (await ward()).current;
     const a = cur.find(c => c.m1Id === 'm5'), b = cur.find(c => c.m1Id === 'm11'), solo = cur.find(c => c.m1Id === 'm1');
     const meta = (await ward()).importMeta?.['ministering-eq'];
+    const wp = await until(async () => { const x = await ward(); return x.members.find(m => m.id === 'm11')?.inPool === true && x; }) || await ward();
+    const pooled = { osei: wp.members.find(m => m.id === 'm11').inPool, h7: wp.households.find(h => h.id === 'h7').inPool, h2: wp.households.find(h => h.id === 'h2').inPool };
     return { pass: cur.length === 3 && a && a.m2Id === 'm7' && a.households.join() === 'h4,h6' && a.extraAssignees.join() === 'Nobody, Notin Ward' && a.district === 'District 1' && a.districtLeader === 'Lindqvist, Erik'
-        && b && b.households.join() === 'h1' && b.district === 'District 2' && solo && solo.households.join() === 'h2,h7' && /3 companionships/.test(review) && /Nobody, Notin Ward/.test(review) && meta?.count === 3,
-      obs: { n: cur.length, a: a && [a.m2Id, a.households, a.extraAssignees, a.district, a.districtLeader], b: b && [b.households, b.district], solo: solo && solo.households, review: review.slice(0, 120) } };
+        && b && b.households.join() === 'h1' && b.district === 'District 2' && solo && solo.households.join() === 'h2,h7' && /3 companionships/.test(review) && /Nobody, Notin Ward/.test(review) && meta?.count === 3 && pooled.osei === true && pooled.h7 === true && pooled.h2 === true,
+      obs: { pooled, n: cur.length, a: a && [a.m2Id, a.households, a.extraAssignees, a.district, a.districtLeader], b: b && [b.households, b.district], solo: solo && solo.households, review: review.slice(0, 120) } };
   });
 
   await check('round3', 'unmatched name: pick a household → linked and remembered for next import', async () => {
@@ -868,8 +870,10 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
     const boxes = await ev(R, () => document.getElementById('min-review-rs').innerText.match(/Replace/g)?.length || 0);
     await ev(R, () => applyMinPlan()); await flush(R);
     const c = (await until(async () => { const x = await ward(); return x.currentRS.some(y => y.m1Id === 'm6') && x; }) || await ward()).currentRS.find(x => x.m1Id === 'm6');
-    return { pass: !!c && c.m2Id === 'm8' && c.assignees.join() === 'm3,m12,m10' && !c.households.length && c.district === 'District 4 - Do not contact' && boxes === 1,
-      obs: { assignees: c?.assignees, hh: c?.households, district: c?.district, replaceBoxes: boxes } };
+    const wr = await until(async () => { const x = await ward(); return x.members.find(m => m.id === 'm10')?.rsRecipient === true && x; }) || await ward();
+    const rp = ['m3', 'm12', 'm10'].map(id => wr.members.find(m => m.id === id).rsRecipient);
+    return { pass: rp.every(v => v === true) && !!c && c.m2Id === 'm8' && c.assignees.join() === 'm3,m12,m10' && !c.households.length && c.district === 'District 4 - Do not contact' && boxes === 1,
+      obs: { receivesPool: rp, assignees: c?.assignees, hh: c?.households, district: c?.district, replaceBoxes: boxes } };
   });
   await check('round3', 'Member List PDF: rename kept as the same person, changes chosen, new and gone listed', async () => {
     const rows = [['Whitfield, Daniel James', 'M', 34, '(321) 555-0101'], ['Whitfield, Grace', 'F', 32, '(321) 555-0999'], ['Okafor, Ruth', 'F', 71, ''], ['Lindqvist, Erik', 'M', 28, ''], ['Brandt, Hugo', 'M', 46, ''], ['Brandt, Ilse', 'F', 44, ''],
