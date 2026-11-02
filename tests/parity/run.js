@@ -441,6 +441,79 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
       obs: o };
   });
 
+  // ── Nov 2026 round: Current import-only, diffs, more companions, last import ──
+  if (await ev(E, () => typeof ministersOf === 'function')) {
+    await check('round3', 'Current is import-only (no Add / Promote / edit)', async () => {
+      const o = await ev(E, () => { showTab('current');
+        const vis = el => el && el.offsetParent !== null;
+        const btns = [...document.querySelectorAll('#tab-current button, #tab-currentRS button')].filter(vis).map(b => b.innerText.trim());
+        const n = S.current.length; window.__alertMsg = null; const oa = window.alert; window.alert = m => { window.__alertMsg = m; };
+        promoteProposedToCurrent(); window.alert = oa;
+        return { canEdit: canEditList('current') || canEditList('currentRS'), add: btns.some(b => /^\+ Add$/.test(b)), promote: btns.some(b => /Promote/.test(b)), clear: btns.some(b => /Clear All/.test(b)), same: S.current.length === n, alerted: !!window.__alertMsg }; });
+      return { pass: !o.canEdit && !o.add && !o.promote && !o.clear && o.same && o.alerted, obs: o };
+    });
+    await check('round3', 'geocoding is on the Households tab, not the Draft tab', async () => {
+      const o = await ev(E, () => ({ hh: !!document.querySelector('#tab-households #geo-status'), draft: !!document.querySelector('#tab-propose #geo-status') }));
+      return { pass: o.hh && !o.draft, obs: o };
+    });
+    await check('round3', 'brothers: + Add another companion saves 4 ministers', async () => {
+      const ids = await ev(E, () => { showTab('propose'); openAddModal('proposed');
+        const a = [...document.getElementById('add-m1').options].filter(o => !o.disabled).map(o => o.value).filter(Boolean);
+        document.getElementById('add-m1').value = a[0]; refreshAddM2();
+        const b = [...document.getElementById('add-m2').options].filter(o => !o.disabled).map(o => o.value).filter(v => v && v !== '__spouse__' && v !== a[0]);
+        if (b[0]) document.getElementById('add-m2').value = b[0];
+        const rest = brothers().map(x => x.id).filter(id => id !== a[0] && id !== b[0]).slice(0, b[0] ? 2 : 3);
+        rest.forEach(() => addCompanionSelect('add'));
+        document.querySelectorAll('#add-more select.more-min').forEach((sel, i) => { sel.value = rest[i]; });
+        return [a[0], ...(b[0] ? [b[0]] : []), ...rest]; });
+      await ev(E, () => saveNewCompanionship()); await flush(E);
+      const c = (await ward()).proposed.find(c => c.m1Id === ids[0] && (c.moreMinisters || [])[0]?.id === ids[3]);
+      const card = await ev(E, id => { renderProposed(); return [...document.querySelectorAll('#proposed-list .companionship-card')].find(el => el.innerHTML.includes(id))?.innerText || ''; }, c?.id);
+      const edit = await ev(E, id => { openEditModal(id, 'proposed'); const n = document.querySelectorAll('#edit-more select.more-min').length; closeModal('edit-modal'); return n; }, c?.id);
+      return { pass: !!c && c.m2Id === ids[1] && c.m3Id === ids[2] && c.moreMinisters.length === 1 && edit === 2 && /New — not in Current/.test(card),
+        obs: { saved: !!c, more: c?.moreMinisters?.length, editPickers: edit, newChip: /New — not in Current/.test(card) } };
+    });
+    await check('round3', 'sisters: + Add another companion saves a 3rd sister', async () => {
+      const ids = await ev(R, () => sisters().map(m => m.id).slice(0, 3));
+      await ev(R, () => { showTab('proposeRS'); openRSModal('proposedRS'); });
+      await R.page.selectOption('#rs-m1', ids[0]); await R.page.selectOption('#rs-m2', ids[1]).catch(() => {});
+      await ev(R, id => { addCompanionSelect('rs'); document.querySelector('#rs-more select.more-min').value = id; rsPick('hh', 'h5', true); saveRSCompanionship(); }, ids[2]); await flush(R);
+      const c = (await ward()).proposedRS.find(c => c.m3Id === ids[2]);
+      return { pass: !!c && c.m1Id === ids[0] && c.m3Id === ids[2], obs: { saved: !!c, m3: !!c?.m3Id } };
+    });
+    await check('round3', 'Draft vs Current: changed parts marked, changes sort first', async () => {
+      const o = await ev(E, () => {
+        const d = S.proposed.find(p => p.fromId); const extra = S.households.find(h => !d.households.includes(h.id));
+        d.households = [...d.households, extra.id]; showTab('propose');
+        document.getElementById('cs-sort-proposed').value = 'changes'; renderProposed();
+        const cards = [...document.querySelectorAll('#proposed-list .companionship-card')];
+        const first = cards[0]?.innerText || '', summary = document.getElementById('diff-summary-proposed').innerText;
+        const arrows = cards.some(c => /▲/.test(c.innerText));
+        document.getElementById('cs-sort-proposed').value = ''; renderProposed();
+        const arrowsBack = [...document.querySelectorAll('#proposed-list .companionship-card')].some(c => /▲/.test(c.innerText));
+        d.households = d.households.filter(h => h !== extra.id); renderProposed();
+        return { first: first.slice(0, 120), hasChip: first.includes('+ 🏠 ' + extra.name), changedFirst: /Changed from Current/.test(first), summary, arrows, arrowsBack };
+      });
+      return { pass: o.hasChip && o.changedFirst && /1<\/b>|1 changed/.test(o.summary.replace(/\s+/g, ' ')) && !o.arrows && o.arrowsBack, obs: { ...o, first: undefined } };
+    });
+    await check('round3', 'last import shows when and by whom; each line only by its owners', async () => {
+      await ev(C, () => { noteImport('cp-new', 3); noteImport('members-csv', 9); scheduleSync(); }); await flush(C);
+      const m = (await ward()).importMeta?.['cp-new'], notMine = (await ward()).importMeta?.['members-csv'];
+      await ev(E, () => { noteImport('ministering-eq', 2); scheduleSync(); }); await flush(E);
+      const eqLine = (await ward()).importMeta?.['ministering-eq'];
+      const shown = await ev(C, () => { showTab('council'); return document.querySelector('.import-last[data-imp="cp-new"]')?.innerText || ''; });
+      const other = await ev(C, () => document.querySelector('.import-last[data-imp="movein"]')?.innerText || '');
+      return { pass: !!m && !notMine && eqLine?.count === 2 && m.count === 3 && /Last imported .* by .*\(3 on the page\)/.test(shown) && /Not imported/.test(other), obs: { stored: !!m, councilWroteMembersLine: !!notMine, eqLine: !!eqLine, by: m?.by, shown, other } };
+    });
+    await check('round3', 'birthday names link to the member row', async () => {
+      const o = await ev(C, async () => { const t = new Date(); const m0 = S.members.find(m => m.householdId); m0.ident = { ...(m0.ident || {}), bday: String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0') }; showTab('idents'); const b = [...document.querySelectorAll('#ident-body .card')].find(c => /Birthday/i.test(c.querySelector('h2')?.innerText || ''));
+        const link = b?.querySelector('.ident-link'); if (!link) return { link: false };
+        const name = link.innerText; link.click(); await new Promise(r => setTimeout(r, 300));
+        const row = document.querySelector('#tab-members tr.row-flash'); return { link: true, name, row: row?.querySelector('strong')?.innerText }; });
+      return { pass: o.link && o.row && o.name.includes(o.row.split(',')[0]), obs: o };
+    });
+  }
+
   // ── Search + nearby ────────────────────────────────────────
   await check('search', 'companionship search (minister / served / either)', async () => {
     const o = await ev(E, () => { showTab('current'); const q = document.getElementById('cs-q-current'), m = document.getElementById('cs-mode-current'); const out = {};

@@ -130,7 +130,7 @@ service cloud.firestore {
       return request.resource.data.get('clientVersion', 0) >= 2 || !('clientVersion' in resource.data);
     }
     function wardKeysFor(r) {
-      return ['users', 'activityLog', 'updatedAt', 'updatedBy', 'updatedByUid', 'clientVersion', 'groups']
+      return ['users', 'activityLog', 'updatedAt', 'updatedBy', 'updatedByUid', 'clientVersion', 'groups', 'importMeta']
         .concat(r in ['eq', 'rs', 'bishopric'] ? ['members', 'households'] : [])
         .concat(r in ['eq', 'rs'] ? ['identMeta'] : [])
         .concat(r == 'eq' ? ['current', 'proposed'] : [])
@@ -139,12 +139,22 @@ service cloud.firestore {
     function groupKeysFor(r) {
       return r in ['eq', 'rs', 'bishopric'] ? ['new', 'returning', 'mission', 'movein', 'moveout'] : ['new', 'returning', 'mission'];
     }
+    // importMeta.<key> = { at, by, count }: who last ran each import. Each line
+    // belongs to whoever may run that import.
+    function importKeysFor(r) {
+      return ['cp-new', 'cp-returning', 'cp-mission']
+        .concat(r in ['eq', 'rs', 'bishopric'] ? ['members-csv', 'households-csv', 'movein', 'moveout'] : [])
+        .concat(r == 'eq' ? ['ministering-eq'] : [])
+        .concat(r == 'rs' ? ['ministering-rs'] : []);
+    }
     function allowedWardChange() {
       let r = role();
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       let groups = request.resource.data.get('groups', {}).diff(resource.data.get('groups', {})).affectedKeys();
+      let imports = request.resource.data.get('importMeta', {}).diff(resource.data.get('importMeta', {})).affectedKeys();
       return changed.hasOnly(wardKeysFor(r))
         && groups.hasOnly(groupKeysFor(r))
+        && imports.hasOnly(importKeysFor(r))
         && request.resource.data.get('updatedByUid', '') == request.auth.uid;
     }
     match /wardData/shared {

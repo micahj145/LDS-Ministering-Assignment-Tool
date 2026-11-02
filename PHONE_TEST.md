@@ -40,7 +40,18 @@ Tick each box. If anything fails, note what you saw, and don't move on to step 2
        out and the new one → **Cancel** → the old address is back.
 - [ ] 18. Do it again → **Save these changes** → saved; Refresh shows it.
 - [ ] 19. Toggling a pool (In Pool / Maybe / Out) or adding a note saves straight away, no box.
-- [ ] 20. Draft assignments: reorder or edit → no box. Current assignments: edit households → box.
+- [ ] 20. Draft assignments: reorder or edit → no box. Current assignments: no Add / Promote / Clear All, and tapping a
+       card doesn't open an editor (Current changes only by importing from LCR).
+
+## C2. Assignment planning (Nov 2026)
+- [ ] C2a. Draft brothers: **Copy to Draft** → every card says *Same as Current*; the line above says "0 changed, 0 new".
+- [ ] C2b. Edit one draft card (add a household) → it turns *Changed* with a **+ 🏠** chip; choose *Changes from Current
+       first* → it's at the top and the ▲▼ buttons are gone; back to *Saved order* → ▲▼ return.
+- [ ] C2c. **+ Add** → pick two brothers → **+ Add another companion** → pick a third → Save → the card shows all three
+       and *New*. Edit it → the third picker is filled in. Same in the sisters' window.
+- [ ] C2d. Households tab → **Map locations** card is there (and no longer on Draft brothers).
+- [ ] C2e. Any import card (e.g. Covenant Path, after an import) → "Last imported <date> by <you>".
+- [ ] C2f. Identifiers tab → a Birthdays name → jumps to that member on the Members tab.
 
 ## D. Lost phone
 - [ ] 21. Admin tab → helper's row → **Reset two-step** → OK → "Done…".

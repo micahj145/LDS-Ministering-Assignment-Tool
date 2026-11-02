@@ -114,6 +114,12 @@ test('final: ward data by role', async t => {
   await t.test('council: Covenant Path lists, directory, log', async () => {
     await assertSucceeds(wardUpd(C, 'council', { 'groups.new': [{ id: 'g1' }], users: [{ uid: 'uC', name: 'C' }], activityLog: [{ ts: 1 }] }));
     await assertSucceeds(wardUpd(C, 'council', { 'groups.returning': [], 'groups.mission': [{ id: 'p' }] }));
+    await assertSucceeds(wardUpd(C, 'council', { 'importMeta.cp-new': { at: 'x', by: 'C' } }));
+    await assertFails(wardUpd(C, 'council', { 'importMeta.members-csv': { at: 'x', by: 'C' } }));
+    await assertFails(wardUpd(C, 'council', { 'importMeta.ministering-eq': { at: 'x', by: 'C' } }));
+    await assertSucceeds(wardUpd(E, 'eq', { 'importMeta.ministering-eq': { at: 'x', by: 'E' }, 'importMeta.movein': { at: 'x', by: 'E' } }));
+    await assertFails(wardUpd(E, 'eq', { 'importMeta.ministering-rs': { at: 'x', by: 'E' } }));
+    await assertSucceeds(wardUpd(R, 'rs', { 'importMeta.ministering-rs': { at: 'x', by: 'R' } }));
   });
   await t.test('council: not members, households, identifiers, assignments, move-ins', async () => {
     for (const f of ['members', 'households', 'current', 'proposed', 'currentRS', 'proposedRS'])

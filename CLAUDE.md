@@ -29,14 +29,29 @@ within a minute or so — that's how the ward team gets updates.
   was never used and was removed, since assignments are built in the app (Proposed → Promote, or
   "+ Add") and that import replaced Current Assignments wholesale. It was the only writer of the
   optional `district` field, which older companionships may still carry and still display.
-- **Geocoding**: household addresses are geocoded via Nominatim (OpenStreetMap), rate-limited to
+- **Geocoding** (card on the Households tab since Nov 2026; it was on the brothers' Draft tab): household addresses are geocoded via Nominatim (OpenStreetMap), rate-limited to
   ~1 req/sec, cached in `S.households[].lat/lng`. Used to compute minister-to-minister and
   minister-to-household distances shown on companionship cards.
 - **Notes**: multi-author, dated notes arrays on members, households, and companionships (both
   current and proposed) — not a single free-text field.
-- **Current vs. Proposed**: two independent, fully-editable companionship lists (add/edit/delete/
-  notes/distances all work on both). "Promote All from Proposed" copies Proposed into Current
-  (replacing it) without touching Proposed. "Copy to Proposed" goes the other direction.
+- **Current vs. Draft (Proposed)**: Current always matches LCR — since Nov 2026 it changes only
+  through the LCR ministering import (`canEditList('current'|'currentRS')` is false: no Add, edit,
+  delete, reorder, Clear All or Promote; `promoteProposedToCurrent` / `promoteRS` just explain that).
+  Notes on Current still work. "Copy Current → Draft" copies the other way and stamps each copy
+  with `fromId` (the Current companionship's id). A Draft → LCR change list is planned (next round).
+- **Draft vs Current indicators** (`draftDiff()`, both Draft tabs): each draft is matched to a
+  Current companionship by `fromId`, then identical minister set (`minKey`), then most shared
+  ministers. Cards get New / Changed / Same (`.diff-*`, coloured left edge) and chips per part
+  added/removed (ministers 👤, households 🏠, individuals 🙋 incl. extraAssignees);
+  `#diff-summary-{key}` counts them and lists Current companionships no draft matched.
+  `#cs-sort-{key}` "Changes from Current first" sorts changed → new → same and hides ▲▼.
+- **Last import** (`S.importMeta`, saved per entry as `importMeta.<key>` field paths like groups):
+  `{ at, by, count? }` for members-csv, households-csv, ministering-eq/-rs, cp-new/returning/mission,
+  movein, moveout, written by `noteImport()` and shown in every `.import-last[data-imp]` slot
+  (`renderImportLast()`). Each line belongs to whoever may run that import (`canRecordImport()` in
+  the app, `importKeysFor()` in the rules: cp-* everyone; members/households/moves eq/rs/bishopric;
+  ministering-eq eq; ministering-rs rs). Identifiers (`identMeta`), Unit Statistics and the callings
+  check already recorded their own.
 - **Session export/import**: a "Share / Collaborate" panel can still export the whole `S` object
   as a dated JSON file and load it back in — kept as a standing manual backup/portability option
   even though it's no longer the primary sync mechanism (see below).
@@ -101,7 +116,7 @@ Rollout steps and console setup: **`SECURITY_ROLLOUT.md`**; manual checks: **`PH
   caller, no deletes ever; `wardData/stats` presidency-only writes; notes own-only except presidency
   (+ admin delete, + anyone deletes notes on new/returning/mission entries). `fromCurrentApp()`
   refuses saves without `clientVersion >= 2` once the doc has it (old tabs can't re-embed notes).
-  Tests: **`tests/rules/`** (`./run.sh`, 61 cases, both steps).
+  Tests: **`tests/rules/`** (`./run.sh`, 64 cases, both steps).
 - **Roles in the app**: `canManageMembers()` (eq, rs or bishopric) for member/household/move-in/out
   data — `memberEditGuard()` at the top of every such entry point, `.member-edit` controls hidden
   otherwise; `canEditWard()` (eq or rs) for identifiers and unit stats — `wardEditGuard()`, `.ward-edit`. `canWriteKey()` / `canRemoveNote()` / `canWriteNote()` mirror the rules; `syncOnce()`
@@ -463,7 +478,13 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   toggled in `applyAccessVisibility()`. Client-side only — the rules don't know roles.
 - **Pools**: brothers `m.inPool`; sisters `m.rsPool` (ministering) and `m.rsRecipient` (receives);
   households `hh.inPool` (EQ) and `hh.rsPool` (RS). `sisters()` = female members 18+ (or no age).
-- **Companionship shape**: `{ id, m1Id, m1Name, m2Id, m2Name, m3Id?, m3Name?, households: [hhId],
+- **Any number of companions** (Nov 2026): m1/m2/m3 hold the first three, `moreMinisters: [{ id, name }]`
+  the 4th and beyond. Always read them with `ministersOf(c)`, write with `setMinisters(rec, list)`,
+  label with `compLabel(c)`. "+ Add another companion" (`addCompanionSelect(prefix)`, pickers in
+  `#add-more` / `#edit-more` / `#rs-more`) in the brother add/edit windows and the sister window
+  (which used to have a fixed 3rd picker). follow.js `pairName` lists them all; CSV exports add an
+  OtherCompanions column (brothers) / put 3rd+ in the third column (sisters).
+- **Companionship shape**: `{ id, m1Id, m1Name, m2Id, m2Name, m3Id?, m3Name?, moreMinisters?, fromId?, households: [hhId],
   assignees?: [memberId], extraAssignees?: [names not in Members], notes, position, source? }`.
   Brother cards (`companionshipHTML`) show m3 and extras; `saveEditCompanionship` keeps unedited
   fields. Sister cards (`rsCompanionshipHTML`) show households 🏠 and individual sisters; edited in
@@ -504,7 +525,7 @@ Covenant Path Progress and Move Ins; each of those tabs has a `.ident-legend-slo
 `renderIdentLegends()` (hidden until something has been imported). 🎂 = birthday within the next 14 days
 (`BDAY_WINDOW_DAYS`), computed at render time. Filters: Members `id-*`, Households `part-member`.
 The Identifiers tab lists Members Without Callings, YSAs and Part-Member Households one per line as
-links: `showMemberRow(id)` / `showHouseholdRow(id)` clear that tab's search and filter, switch tab,
+links (the Birthdays card's names too): `showMemberRow(id)` / `showHouseholdRow(id)` clear that tab's search and filter, switch tab,
 scroll to `#mrow-{id}` / `#hrow-{id}` and flash it (`.row-flash`).
 follow.js doesn't diff `ident`, so imports don't notify followers.
 

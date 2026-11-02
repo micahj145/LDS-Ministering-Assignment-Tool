@@ -157,6 +157,19 @@ tr:hover td{background:#fafbfc}
 .ident-link{background:none;border:none;padding:0.15rem 0;color:#1a3a5c;text-decoration:underline;cursor:pointer;font-size:0.85rem;text-align:left;font-family:inherit}
 .ident-link:hover{color:#0d6efd}
 tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
+.diff-summary { font-size:0.84rem; color:#444; margin:0 0 0.6rem; }
+.diff-summary details { margin-top:0.3rem; }
+.diff-bar { display:flex; flex-wrap:wrap; gap:0.3rem; align-items:center; margin:0 0 0.45rem; font-size:0.76rem; }
+.diff-chip { padding:0.1rem 0.45rem; border-radius:10px; background:#eef1f5; color:#333; white-space:nowrap; }
+.diff-chip.st-new { background:#d4edda; color:#155724; font-weight:600; }
+.diff-chip.st-changed { background:#fff3cd; color:#7a5a00; font-weight:600; }
+.diff-chip.st-same { background:#f1f3f5; color:#888; }
+.diff-chip.add { background:#e6f4ea; color:#1e6b34; }
+.diff-chip.rem { background:#fde8e8; color:#a12a2a; text-decoration:line-through; }
+.companionship-card.diff-new { border-left:4px solid #28a745; }
+.companionship-card.diff-changed { border-left:4px solid #e0a800; }
+.import-last { font-size:0.74rem; color:#888; margin-top:0.4rem; }
+.import-last:empty { display:none; }
 </style>
 </head>
 <body>
@@ -382,6 +395,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
           The Members column may contain multiple names separated by line breaks — the app handles this automatically.
         </div>
         <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importHouseholds()">Import / Sync Households</button>
+        <div class="import-last" data-imp="households-csv"></div>
         <div style="font-size:0.76rem;color:#888;margin-top:0.5rem">Merges with your current list: adds new households, refreshes existing ones (notes &amp; geocoding kept), warns before a changed address drops coordinates, and asks before removing any missing from the file.</div>
       </div>
       <div id="hh-link-status" class="link-bar" style="display:none"></div>
@@ -411,6 +425,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
           Only include males as "Brothers"
         </label>
         <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importMembers()">Import / Sync Members</button>
+        <div class="import-last" data-imp="members-csv"></div>
         <div style="font-size:0.76rem;color:#888;margin-top:0.5rem">Merges with your current list: adds new people, refreshes existing ones (notes &amp; links kept), and asks before removing anyone missing from the file.</div>
       </div>
       <div id="member-link-status" class="link-bar" style="display:none"></div>
@@ -483,6 +498,25 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 <div id="tab-households" class="tab-content">
   <div class="ident-legend-slot"></div>
   <div id="households-stats" class="stats-row"></div>
+  <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
+    <div style="font-weight:600;color:#1a3a5c;margin-bottom:0.5rem">Map locations (for distances on companionships and Find members nearby)</div>
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <button class="member-edit btn btn-secondary btn-sm" onclick="calculateDistances()">Calculate Distances</button>
+      <div id="geo-status" style="font-size:0.85rem;color:#666"></div>
+      <button class="btn btn-secondary btn-sm" onclick="saveGeoFile()">Save Coords</button>
+      <label class="member-edit btn btn-secondary btn-sm" style="cursor:pointer">Load Coords<input type="file" accept=".json" style="display:none" onchange="loadGeoFile(this.files[0])"></label>
+      <button class="member-edit btn btn-secondary btn-sm" onclick="clearGeoCache()" style="margin-left:auto">Clear Cache</button>
+    </div>
+    <div id="geo-progress" style="display:none;margin-top:0.6rem">
+      <div style="background:#e0e6ed;border-radius:4px;height:5px">
+        <div id="geo-bar" style="background:#1a3a5c;height:5px;border-radius:4px;width:0%;transition:width 0.4s"></div>
+      </div>
+    </div>
+    <div id="geo-failures" style="display:none;margin-top:0.5rem;font-size:0.8rem;color:#856404;background:#fff3cd;padding:0.4rem 0.7rem;border-radius:6px"></div>
+    <div style="font-size:0.78rem;color:#aaa;margin-top:0.4rem">
+      Uses Nominatim (OpenStreetMap) — requires internet. Runs at ~1 address/sec; results cached locally. For failures, edit the address in the Households tab and retry.
+    </div>
+  </div>
   <div class="card">
     <div class="filter-bar">
       <input type="text" id="hh-search" placeholder="Search household name or address..." oninput="renderHouseholds()" style="flex:1;min-width:200px">
@@ -566,14 +600,15 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
         <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('min-file-eq').click()">Import</button>
       </div>
     </div>
+    <div class="import-last" data-imp="ministering-eq"></div>
     <div id="min-status-eq" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
     <div id="min-review-eq"></div>
   </div>
 
   <div class="card eq-edit" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
     <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap">
-      <button class="btn btn-secondary btn-sm" onclick="promoteProposedToCurrent()">&larr; Promote All from Draft</button>
       <button class="btn btn-secondary btn-sm" onclick="copyCurrentToProposed()">Copy to Draft &rarr;</button>
+      <span style="font-size:0.8rem;color:#888">Current always matches LCR: it changes only through the LCR import above. Plan changes in the Draft.</span>
     </div>
   </div>
 
@@ -582,7 +617,6 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
       <div class="card">
         <div class="flex-between">
           <h2 style="margin:0;border:none;padding:0">Current Companionships</h2>
-          <button class="btn btn-primary btn-sm eq-edit" onclick="openAddModal('current')">+ Add</button>
         </div>
         <div class="comp-search" style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin:0.6rem 0 0.5rem">
           <input type="text" id="cs-q-current" placeholder="Search companionships by name…" oninput="renderCurrent()" style="flex:1;min-width:150px;padding:0.4rem 0.6rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem">
@@ -595,7 +629,6 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
       <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="exportCurrent()">Export CSV</button>
         <button class="btn btn-secondary" onclick="window.print()">Print</button>
-        <button class="btn btn-danger btn-sm eq-edit" onclick="clearData('assignments')">Clear All</button>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:1rem">
@@ -617,24 +650,6 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
   <div class="alert alert-info eq-viewonly" style="display:none">You can see this working draft; the EQ presidency changes it.</div>
   <div id="propose-stats" class="stats-row"></div>
 
-  <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-      <button class="member-edit btn btn-secondary btn-sm" onclick="calculateDistances()">Calculate Distances</button>
-      <div id="geo-status" style="font-size:0.85rem;color:#666"></div>
-      <button class="btn btn-secondary btn-sm" onclick="saveGeoFile()">Save Coords</button>
-      <label class="member-edit btn btn-secondary btn-sm" style="cursor:pointer">Load Coords<input type="file" accept=".json" style="display:none" onchange="loadGeoFile(this.files[0])"></label>
-      <button class="member-edit btn btn-secondary btn-sm" onclick="clearGeoCache()" style="margin-left:auto">Clear Cache</button>
-    </div>
-    <div id="geo-progress" style="display:none;margin-top:0.6rem">
-      <div style="background:#e0e6ed;border-radius:4px;height:5px">
-        <div id="geo-bar" style="background:#1a3a5c;height:5px;border-radius:4px;width:0%;transition:width 0.4s"></div>
-      </div>
-    </div>
-    <div id="geo-failures" style="display:none;margin-top:0.5rem;font-size:0.8rem;color:#856404;background:#fff3cd;padding:0.4rem 0.7rem;border-radius:6px"></div>
-    <div style="font-size:0.78rem;color:#aaa;margin-top:0.4rem">
-      Uses Nominatim (OpenStreetMap) — requires internet. Runs at ~1 address/sec; results cached locally. For failures, edit the address in the Households tab and retry.
-    </div>
-  </div>
 
   <div class="two-col">
     <div>
@@ -647,8 +662,11 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
           <input type="text" id="cs-q-proposed" placeholder="Search companionships by name…" oninput="renderProposed()" style="flex:1;min-width:150px;padding:0.4rem 0.6rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem">
           <select id="cs-mode-proposed" onchange="renderProposed()" style="padding:0.38rem;border:1px solid #ddd;border-radius:6px;font-size:0.82rem" title="Which side of the companionship to search">
             <option value="any">Minister or ministered to</option><option value="minister">Minister</option><option value="served">Ministered to</option></select>
+          <select id="cs-sort-proposed" onchange="renderProposed()" style="padding:0.38rem;border:1px solid #ddd;border-radius:6px;font-size:0.82rem" title="Order of the list">
+            <option value="">Saved order</option><option value="changes">Changes from Current first</option></select>
           <span id="cs-count-proposed" style="font-size:0.78rem;color:#888"></span>
         </div>
+        <div id="diff-summary-proposed" class="diff-summary"></div>
         <div id="proposed-list"></div>
       </div>
       <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
@@ -720,14 +738,15 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
         <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('min-file-rs').click()">Import</button>
       </div>
     </div>
+    <div class="import-last" data-imp="ministering-rs"></div>
     <div id="min-status-rs" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
     <div id="min-review-rs"></div>
   </div>
 
   <div class="card rs-edit" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
     <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap">
-      <button class="btn btn-secondary btn-sm" onclick="promoteRS()">&larr; Promote All from Draft</button>
       <button class="btn btn-secondary btn-sm" onclick="copyRSToDraft()">Copy to Draft &rarr;</button>
+      <span style="font-size:0.8rem;color:#888">Current always matches LCR: it changes only through the LCR import above. Plan changes in the Draft.</span>
     </div>
   </div>
   <div class="two-col">
@@ -735,7 +754,6 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
       <div class="card">
         <div class="flex-between">
           <h2 style="margin:0;border:none;padding:0">Current Companionships</h2>
-          <button class="btn btn-primary btn-sm rs-edit" onclick="openRSModal('currentRS')">+ Add</button>
         </div>
         <div class="comp-search" style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin:0.6rem 0 0.5rem">
           <input type="text" id="cs-q-currentRS" placeholder="Search companionships by name…" oninput="renderCurrentRS()" style="flex:1;min-width:150px;padding:0.4rem 0.6rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem">
@@ -774,8 +792,11 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
           <input type="text" id="cs-q-proposedRS" placeholder="Search companionships by name…" oninput="renderProposedRS()" style="flex:1;min-width:150px;padding:0.4rem 0.6rem;border:1px solid #ddd;border-radius:6px;font-size:0.85rem">
           <select id="cs-mode-proposedRS" onchange="renderProposedRS()" style="padding:0.38rem;border:1px solid #ddd;border-radius:6px;font-size:0.82rem" title="Which side of the companionship to search">
             <option value="any">Minister or ministered to</option><option value="minister">Minister</option><option value="served">Ministered to</option></select>
+          <select id="cs-sort-proposedRS" onchange="renderProposedRS()" style="padding:0.38rem;border:1px solid #ddd;border-radius:6px;font-size:0.82rem" title="Order of the list">
+            <option value="">Saved order</option><option value="changes">Changes from Current first</option></select>
           <span id="cs-count-proposedRS" style="font-size:0.78rem;color:#888"></span>
         </div>
+        <div id="diff-summary-proposedRS" class="diff-summary"></div>
         <div id="proposedRS-list"></div>
       </div>
       <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
@@ -797,7 +818,8 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
     <h3 id="rs-modal-title">Companionship</h3>
     <div class="form-group"><label>Ministering sister 1</label><select id="rs-m1"></select></div>
     <div class="form-group"><label>Ministering sister 2</label><select id="rs-m2"></select></div>
-    <div class="form-group"><label>Ministering sister 3 <span style="font-weight:400;color:#888">(optional)</span></label><select id="rs-m3"></select></div>
+    <div id="rs-more"></div>
+    <button type="button" class="btn btn-secondary btn-sm" style="margin:-0.3rem 0 0.8rem" onclick="addCompanionSelect('rs')">+ Add another companion</button>
     <div class="form-group">
       <label>Sisters they minister to</label>
       <input type="text" id="rs-asg-search" placeholder="Search sisters…" oninput="renderRSAssigneePicker()" style="margin-bottom:0.35rem">
@@ -827,18 +849,21 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
         <input type="file" id="cp-file-new" accept=".pdf,application/pdf" style="display:none" onchange="handleCovenantPdf('new', this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="cp-new" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
         <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('cp-file-new').click()">Import</button>
+        <div class="import-last" data-imp="cp-new"></div>
       </div>
       <div style="flex:1;min-width:150px">
         <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">Returning Members</div>
         <input type="file" id="cp-file-returning" accept=".pdf,application/pdf" style="display:none" onchange="handleCovenantPdf('returning', this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="cp-returning" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
         <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('cp-file-returning').click()">Import</button>
+        <div class="import-last" data-imp="cp-returning"></div>
       </div>
       <div style="flex:1;min-width:150px">
         <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.3rem">People Being Taught</div>
         <input type="file" id="cp-file-mission" accept=".pdf,application/pdf" style="display:none" onchange="handleCovenantPdf('mission', this.files[0])">
         <a class="btn btn-secondary lcr-fetch" data-report="cp-mission" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:0.4rem">Fetch/Print/Download</a>
         <button class="btn btn-primary" style="display:block;width:100%" onclick="document.getElementById('cp-file-mission').click()">Import</button>
+        <div class="import-last" data-imp="cp-mission"></div>
       </div>
     </div>
     <p style="font-size:0.82rem;color:#888;margin:0.6rem 0 0">Tap <strong>Fetch/Print/Download</strong> to open that tab of LCR's Covenant Path Progress
@@ -873,6 +898,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
     </div>
     <p style="font-size:0.82rem;color:#888;margin:0.4rem 0 0">Tap <strong>Fetch/Print/Download</strong> to open the Members Moved In report in LCR (sign in if asked) and print or save it as a PDF (on Android: Share → Print → Save as PDF), then tap <strong>Import</strong> and pick that file. The PDF is read in your
       browser and isn't uploaded; only the households you confirm are saved to the ward data.</p>
+    <div class="import-last" data-imp="movein"></div>
     <div id="movein-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
     <div id="movein-review"></div>
   </div>
@@ -888,6 +914,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
     </div>
     <p style="font-size:0.82rem;color:#888;margin:0.4rem 0 0">Tap <strong>Fetch/Print/Download</strong> to open the Members Moved Out report in LCR and save it as a PDF, then tap <strong>Import</strong>. Everyone in it is matched to
       Members (by name, checked against the age on file) and to their household; nothing is removed until you confirm.</p>
+    <div class="import-last" data-imp="moveout"></div>
     <div id="moveout-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
     <div id="moveout-review"></div>
   </div>
@@ -1039,6 +1066,8 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
       <label>Minister 2 (Companion)</label>
       <select id="add-m2" onchange="updateProximityInfo('add')"><option value="">None (solo)</option></select>
     </div>
+    <div id="add-more"></div>
+    <button type="button" class="btn btn-secondary btn-sm" style="margin:-0.3rem 0 0.8rem" onclick="addCompanionSelect('add')">+ Add another companion</button>
     <div id="add-proximity"></div>
     <div class="form-group">
       <label>Households to Minister To</label>
@@ -1064,6 +1093,8 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
       <label>Minister 2 (Companion)</label>
       <select id="edit-m2" onchange="updateProximityInfo('edit')"><option value="">None (solo)</option></select>
     </div>
+    <div id="edit-more"></div>
+    <button type="button" class="btn btn-secondary btn-sm" style="margin:-0.3rem 0 0.8rem" onclick="addCompanionSelect('edit')">+ Add another companion</button>
     <div id="edit-proximity"></div>
     <div class="form-group">
       <label>Households to Minister To</label>
@@ -1177,7 +1208,7 @@ function dbFail(error) {
 
 // ── Notes, split out of the ward document ─────────────────────
 const NOTE_FIELDS = ['notes', 'goals', 'nextSteps'];
-const WARD_KEYS = ['members', 'households', 'current', 'proposed', 'currentRS', 'proposedRS', 'users', 'identMeta'];
+const WARD_KEYS = ['members', 'households', 'current', 'proposed', 'currentRS', 'proposedRS', 'users', 'identMeta'];   // importMeta is saved per entry: 'importMeta.<key>'
 // Bumped when the stored format changes. firestore.rules refuses saves from an
 // older copy of the app (one left open in a tab), which would otherwise put
 // notes back into the ward document.
@@ -1244,12 +1275,13 @@ function cloudShape() {
   const d = JSON.parse(JSON.stringify({
     members: S.members, households: S.households, current: S.current, proposed: S.proposed,
     currentRS: S.currentRS || [], proposedRS: S.proposedRS || [],
-    groups: normalizeGroups(S.groups), users: S.users || [], identMeta: S.identMeta || {},
+    groups: normalizeGroups(S.groups), users: S.users || [], identMeta: S.identMeta || {}, importMeta: S.importMeta || {},
   }));
   const notes = splitNotes(d);
   const ward = {};
   WARD_KEYS.forEach(k => { ward[k] = JSON.stringify(d[k]); });
   Object.keys(d.groups).forEach(g => { ward['groups.' + g] = JSON.stringify(d.groups[g]); });
+  Object.keys(d.importMeta || {}).forEach(k => { ward['importMeta.' + k] = JSON.stringify(d.importMeta[k]); });
   const noteJson = new Map([...notes].map(([id, n]) => [id, JSON.stringify(n)]));
   return { d, ward, notes, noteJson };
 }
@@ -1333,7 +1365,7 @@ async function syncOnce() {
       await WARD_DOC.set({ ...now.d, ...stamp, notesMigrated: true });
     } else {
       const upd = { ...stamp };
-      keys.forEach(k => { upd[k] = k.startsWith('groups.') ? now.d.groups[k.slice(7)] : now.d[k]; });
+      keys.forEach(k => { upd[k] = k.startsWith('groups.') ? now.d.groups[k.slice(7)] : k.startsWith('importMeta.') ? now.d.importMeta[k.slice(11)] : now.d[k]; });
       await WARD_DOC.update(upd);
     }
     S.activityLog = log;
@@ -1364,11 +1396,12 @@ function revertWardKeys(keys) {
     const raw = String(_synced.ward[k] ?? 'null').replace(/#embedded$/, '');
     const v = JSON.parse(raw);
     if (k.startsWith('groups.')) { S.groups = S.groups || {}; S.groups[k.slice(7)] = v || []; }
+    else if (k.startsWith('importMeta.')) { S.importMeta = { ...(S.importMeta || {}) }; if (v) S.importMeta[k.slice(11)] = v; else delete S.importMeta[k.slice(11)]; }
     else S[k] = v ?? (k === 'identMeta' ? {} : []);
   });
   S.groups = normalizeGroups(S.groups);
   const sub = { groups: {} };
-  keys.forEach(k => { if (k.startsWith('groups.')) sub.groups[k.slice(7)] = S.groups[k.slice(7)]; else sub[k] = S[k]; });
+  keys.forEach(k => { if (k.startsWith('groups.')) sub.groups[k.slice(7)] = S.groups[k.slice(7)]; else if (!k.startsWith('importMeta.')) sub[k] = S[k]; });
   const back = new Set(); forEachNoteHolder(sub, (o, t) => back.add(holderKey(t)));
   _synced.notes.forEach((j, id) => { if (notes.has(id)) return; const n = JSON.parse(j); if (back.has(holderKey(n.target || {}))) notes.set(id, n); });
   setNotesInS(notes);
@@ -1411,6 +1444,8 @@ async function loadAllData() {
   S.groups      = normalizeGroups(data.groups);
   S.users       = Array.isArray(data.users) ? data.users : [];
   S.identMeta   = data.identMeta && typeof data.identMeta === 'object' ? data.identMeta : {};
+  S.importMeta  = data.importMeta && typeof data.importMeta === 'object' ? data.importMeta : {};
+  try { renderImportLast(); } catch (e) {}
 
   // Notes still inside the ward document (written by the app before notes had
   // their own collection) are taken out here; the collection's copy wins.
@@ -1472,12 +1507,13 @@ let _confirmBypass = false;
 
 function recordLabel(key, r) {
   if (!r) return '';
-  if (key === 'current' || key === 'currentRS') return [r.m1Name, r.m2Name, r.m3Name].filter(Boolean).join(' + ') || 'Companionship';
+  if (key === 'current' || key === 'currentRS') return compLabel(r) || 'Companionship';
   return r.name || r.id || '';
 }
 function fmtVal(key, field, v) {
   if (v === undefined || v === null || v === '') return '—';
   if (field === 'households' && Array.isArray(v)) return v.map(h => hhById(h)?.name || h).join('; ') || '—';
+  if (field === 'moreMinisters' && Array.isArray(v)) return v.map(m => m.name).join('; ') || '—';
   if ((field === 'assignees') && Array.isArray(v)) return v.map(id => S.members.find(m => m.id === id)?.name || id).join('; ') || '—';
   if (field === 'householdId') return hhById(v)?.name || v;
   if (Array.isArray(v)) return v.map(x => typeof x === 'object' ? JSON.stringify(x) : x).join('; ') || '—';
@@ -1508,7 +1544,7 @@ function wardDiff(keys, now) {
 }
 
 const FIELD_LABEL = { name: 'Name', gender: 'Gender', age: 'Age', phone: 'Phone', email: 'Email', address: 'Address', householdId: 'Household',
-  members: 'People', head: 'Head', m1Name: 'Minister 1', m2Name: 'Minister 2', m3Name: 'Minister 3', m1Id: 'Minister 1 (link)', m2Id: 'Minister 2 (link)',
+  members: 'People', head: 'Head', moreMinisters: 'More companions', m1Name: 'Minister 1', m2Name: 'Minister 2', m3Name: 'Minister 3', m1Id: 'Minister 1 (link)', m2Id: 'Minister 2 (link)',
   m3Id: 'Minister 3 (link)', households: 'Households', assignees: 'Individuals', extraAssignees: 'Others (not in Members)', ident: 'Identifiers',
   partMember: 'Part-member household', isBrother: 'Brother', moveInDate: 'Move-in date' };
 
@@ -2487,6 +2523,7 @@ const COUNCIL_GROUPS = ['new', 'returning', 'mission'];
 // Which parts of wardData/shared this person may save (see firestore.rules).
 function canWriteKey(k) {
   if (k === 'users') return true;
+  if (k.startsWith('importMeta.')) return canRecordImport(k.slice(11));
   if (k.startsWith('groups.')) return COUNCIL_GROUPS.includes(k.slice(7)) || canManageMembers();
   if (k === 'current' || k === 'proposed') return canEditEQ();
   if (k === 'currentRS' || k === 'proposedRS') return canEditRS();
@@ -2509,7 +2546,77 @@ const LISTS = {
   currentRS:  { min: 'rs', tab: 'currentRS', label: 'Current Ministering Sister Assignments' },
   proposedRS: { min: 'rs', tab: 'proposeRS', label: 'Draft Ministering Sister Assignments' },
 };
-function canEditList(key) { return (LISTS[key]?.min === 'rs') ? canEditRS() : canEditEQ(); }
+// Everyone ministering in a companionship, in order. Stored as m1 / m2 / m3
+// (the first three, as LCR imports always have) and moreMinisters for a 4th
+// and beyond, so older records and code that reads m1/m2 keep working.
+function ministersOf(c) {
+  if (!c) return [];
+  return [[c.m1Id, c.m1Name], [c.m2Id, c.m2Name], [c.m3Id, c.m3Name]].map(([id, name]) => ({ id: id || null, name: name || '' }))
+    .concat((c.moreMinisters || []).map(m => ({ id: m.id || null, name: m.name || '' }))).filter(m => m.name);
+}
+function setMinisters(rec, list) {
+  const l = (list || []).filter(m => m && m.name);
+  ['m1', 'm2', 'm3'].forEach((k, i) => { rec[k + 'Id'] = l[i]?.id || null; rec[k + 'Name'] = l[i]?.name || ''; });
+  const more = l.slice(3).map(m => ({ id: m.id || null, name: m.name }));
+  if (more.length) rec.moreMinisters = more; else delete rec.moreMinisters;
+  return rec;
+}
+function compLabel(c) { return ministersOf(c).map(m => m.name).join(' + '); }
+
+// "+ Add another companion" in the brother (add/edit) and sister (rs) windows:
+// one more picker per click; ✕ removes it. Prefilled when editing.
+function addCompanionSelect(prefix, selectedId) {
+  const box = document.getElementById(prefix + '-more');
+  const row = document.createElement('div');
+  row.className = 'form-group more-min-row';
+  row.style.cssText = 'display:flex;gap:0.4rem;align-items:flex-end';
+  const n = box.children.length + 3;
+  const opts = prefix === 'rs' ? rsMinisterOptions(selectedId)
+    : '<option value="">Select...</option>' + brothers().slice().sort((a, b) => a.name.localeCompare(b.name)).map(b => {
+        const hh = memberHousehold(b);
+        return `<option value="${esc(b.id)}" ${b.id === selectedId ? 'selected' : ''}>${esc(b.name)}${hh ? ' (' + esc(hh.name) + ')' : ''}</option>`; }).join('');
+  row.innerHTML = `<div style="flex:1"><label>${prefix === 'rs' ? 'Ministering sister' : 'Minister'} ${n}</label><select class="more-min">${opts}</select></div>
+    <button type="button" class="btn btn-secondary btn-sm" title="Remove this companion" onclick="this.parentElement.remove()">✕</button>`;
+  box.appendChild(row);
+}
+function moreCompanions(prefix) {
+  return [...document.querySelectorAll('#' + prefix + '-more select.more-min')].map(sel => sel.value).filter(Boolean)
+    .map(id => S.members.find(m => m.id === id)).filter(Boolean).map(m => ({ id: m.id, name: m.name }));
+}
+function fillMoreCompanions(prefix, rec) {
+  document.getElementById(prefix + '-more').innerHTML = '';
+  ministersOf(rec).slice(2).forEach(m => addCompanionSelect(prefix, m.id));
+}
+
+// ── Last import of each kind (who and when) ──────────────────
+// S.importMeta[key] = { at, by, count? }, saved in the ward doc; any role may
+// write their own import's entry (see canRecordImport). Shown in every
+// .import-last[data-imp=key] slot.
+const IMPORT_COUNT_LABEL = { 'members-csv': 'members', 'households-csv': 'households', 'ministering-eq': 'companionships',
+  'ministering-rs': 'companionships', 'cp-new': 'on the page', 'cp-returning': 'on the page', 'cp-mission': 'on the page',
+  movein: 'households', moveout: 'people' };
+// Each import's line belongs to whoever may run that import (same in firestore.rules, importKeysFor).
+function canRecordImport(key) {
+  if (key.startsWith('cp-')) return true;
+  if (key === 'ministering-eq') return canEditEQ();
+  if (key === 'ministering-rs') return canEditRS();
+  return canManageMembers();   // members-csv, households-csv, movein, moveout
+}
+function noteImport(key, count) {
+  if (!canRecordImport(key)) return;
+  S.importMeta = { ...(S.importMeta || {}), [key]: { at: new Date().toISOString(), by: _currentUserName || _currentUserEmail || 'Unknown', ...(count != null ? { count } : {}) } };
+  renderImportLast();
+}
+function renderImportLast() {
+  document.querySelectorAll('.import-last[data-imp]').forEach(el => {
+    const m = (S.importMeta || {})[el.dataset.imp];
+    el.textContent = m ? `Last imported ${formatNoteDate(m.at)} by ${m.by}` + (m.count != null ? ` (${m.count} ${IMPORT_COUNT_LABEL[el.dataset.imp] || ''})`.replace(' )', ')') : '') : 'Not imported here yet';
+  });
+}
+
+// Current lists mirror LCR: they change only through the LCR import, never by
+// hand (Nov 2026). Notes on Current companionships are still allowed.
+function canEditList(key) { if (key === 'current' || key === 'currentRS') return false; return (LISTS[key]?.min === 'rs') ? canEditRS() : canEditEQ(); }
 // Bishopric has the same rights as Ward Council for now; it's its own role so
 // bishopric-only features can be added later.
 function roleOf(r) { return r === 'eq' || r === 'rs' || r === 'bishopric' ? r : 'council'; }
@@ -2701,6 +2808,7 @@ function showTab(name) {
   if (name === 'messages')   { renderMessagesTab(); markRestrictedSeen(); }
   if (name === 'idents')     renderIdentsTab();
   renderIdentLegends();
+  renderImportLast();
   if (name === 'stats')      renderStatsTab();
   if (name === 'admin')      renderAdminPanel();
 }
@@ -2865,6 +2973,7 @@ function importMembers() {
     const toRemove = new Set(decs.filter(d => d.choice === 'remove').map(d => d.id));
     if (toRemove.size) S.members = S.members.filter(m => !toRemove.has(m.id));
     linkMembersToHouseholds(true);
+    noteImport('members-csv', S.members.length);
     await dbUpsertMembers(S.members);
     await dbDeleteMembers([...toRemove]);
     refreshBadge(); renderMembers(); renderBrothers();
@@ -3021,6 +3130,7 @@ function importHouseholds() {
       S.members.forEach(m => { if (m.householdId && toRemove.has(m.householdId)) m.householdId = null; });
     }
     linkMembersToHouseholds(true);
+    noteImport('households-csv', S.households.length);
     await dbUpsertHouseholds(S.households);
     await dbDeleteHouseholds([...toRemove]);
     await dbUpsertMembers(S.members);
@@ -3274,14 +3384,14 @@ function memberHousehold(member) {
 
 function currentMinisterNames() {
   const s = new Set();
-  S.current.forEach(c => { s.add(norm(c.m1Name)); if(c.m2Name) s.add(norm(c.m2Name)); if(c.m3Name) s.add(norm(c.m3Name)); });
+  S.current.forEach(c => ministersOf(c).forEach(m => s.add(norm(m.name))));
   return s;
 }
 function assignedMinisters(listKey = 'proposed', excludeId) {
   const s = new Set();
   S[listKey].forEach(c => {
     if (c.id === excludeId) return;
-    if(c.m1Id) s.add(c.m1Id); if(c.m2Id) s.add(c.m2Id); if(c.m3Id) s.add(c.m3Id);
+    ministersOf(c).forEach(m => { if (m.id) s.add(m.id); });
   });
   return s;
 }
@@ -3670,7 +3780,7 @@ function renderCurrent() {
   `;
 
   document.getElementById('current-list').innerHTML = !list.length
-    ? '<div class="empty-state"><div class="icon">🤝</div><p>No current assignments yet. Promote from Proposed or click "+ Add".</p></div>'
+    ? '<div class="empty-state"><div class="icon">🤝</div><p>No current assignments yet — import them from LCR above.</p></div>'
     : compSearchRender('current', list, (c, i) => companionshipHTML(c.m1Name, c.m2Name, c.households, c.district, c.id, 'current', i, list.length));
 
   const unDiv = document.getElementById('current-unassigned-list');
@@ -3714,10 +3824,10 @@ function renderCurrent() {
 function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed', idx, total) {
   const rec = id ? (S[listKey] || []).find(x => x.id === id) : null;
   const canEdit = canEditList(listKey);
-  const m3 = rec?.m3Name || '';
-  const ministers = m2
-    ? `${esc(m1)}${identDotsByName(m1)} <span style="color:#aaa">+</span> ${esc(m2)}${identDotsByName(m2)}${m3 ? ` <span style="color:#aaa">+</span> ${esc(m3)}${identDotsByName(m3)}` : ''}`
-    : `${esc(m1)}${identDotsByName(m1)} <span class="badge badge-blue">Solo</span>`;
+  const all = rec ? ministersOf(rec).map(m => m.name) : [m1, m2].filter(Boolean);
+  const ministers = all.length > 1
+    ? all.map(n => `${esc(n)}${identDotsByName(n)}`).join(' <span style="color:#aaa">+</span> ')
+    : `${esc(all[0] || m1)}${identDotsByName(all[0] || m1)} <span class="badge badge-blue">Solo</span>`;
 
   // Resolve household display names
   const resolveHH = ref => S.households.find(x => x.id === ref || norm(x.name) === norm(ref));
@@ -3798,13 +3908,16 @@ async function copyCurrentToProposed() {
     const m2 = c.m2Name ? bList.find(b => norm(b.name)===norm(c.m2Name)) : null;
     // Resolve household names to IDs if possible
     const hhs = c.households.map(n => hhLookup.get(norm(n)) || n);
-    return { id:uid(), m1Id:m1?.id||null, m1Name:c.m1Name, m2Id:m2?.id||null, m2Name:c.m2Name||'', m3Id:c.m3Id||null, m3Name:c.m3Name||'', households:hhs, extraAssignees:c.extraAssignees||[] };
+    const rec = { id:uid(), fromId: c.id, m1Id:m1?.id||null, m1Name:c.m1Name, m2Id:m2?.id||null, m2Name:c.m2Name||'', m3Id:c.m3Id||null, m3Name:c.m3Name||'', households:hhs, extraAssignees:[...(c.extraAssignees||[])], assignees:[...(c.assignees||[])] };
+    if (c.moreMinisters?.length) rec.moreMinisters = c.moreMinisters.map(m => ({ ...m }));
+    return rec;
   });
   await dbReplaceCompanionshipList('proposed', S.proposed);
   showTab('propose');
 }
 
 async function promoteProposedToCurrent() {
+  alert('Current is updated only from LCR (the Import above). Enter the draft\'s changes in LCR, then re-import.'); return;
   if (!canEditEQ()) return;
   if (!S.proposed.length) { alert('No proposed companionships to promote.'); return; }
   if (!confirm(`Replace Current Ministering Brother Assignments with all ${S.proposed.length} draft companionship(s)? The draft is left unchanged.`)) return;
@@ -3918,6 +4031,7 @@ function openAddModal(listKey = 'proposed') {
   if (!S.members.length) { alert('Import member data first.'); return; }
   _modalListKey = listKey;
   populateBrotherSelects('add-m1','add-m2', null, null, undefined, null);
+  fillMoreCompanions('add', null);
   document.getElementById('add-hh-search').value = '';
   updateProximityInfo('add', []);
   document.getElementById('add-modal').classList.add('open');
@@ -3928,6 +4042,7 @@ function openEditModal(id, listKey = 'proposed') {
   const p = S[listKey].find(x => x.id === id); if (!p) return;
   _modalListKey = listKey;
   populateBrotherSelects('edit-m1','edit-m2', p.m1Id, p.m2Id, p.m2Name||'', id);
+  fillMoreCompanions('edit', p);
   document.getElementById('edit-id').value = id;
   document.getElementById('edit-hh-search').value = '';
   updateProximityInfo('edit', p.households);
@@ -4128,7 +4243,8 @@ function saveNewCompanionship() {
   const m2  = resolveM2(document.getElementById('add-m2').value);
   const hhs = getSelectedHHIds('add');
   const m1  = S.members.find(b => b.id === m1Id);
-  const record = { id:uid(), m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:[], position:S[_modalListKey].length };
+  const record = setMinisters({ id:uid(), households:hhs, notes:[], position:S[_modalListKey].length },
+    [{ id: m1Id, name: m1?.name || '' }, m2, ...moreCompanions('add')]);
   S[_modalListKey].push(record);
   dbUpsertCompanionship(_modalListKey, record); closeModal('add-modal'); renderModalList();
 }
@@ -4144,7 +4260,8 @@ function saveEditCompanionship() {
   const existingNotes = S[_modalListKey][idx].notes || [];
   const existingPosition = S[_modalListKey][idx].position;
   // Keep what the form doesn't edit (a third minister or LCR names from an import).
-  const record = { ...S[_modalListKey][idx], id, m1Id, m1Name:m1?.name||'', m2Id:m2.id, m2Name:m2.name, households:hhs, notes:existingNotes, position:existingPosition };
+  const record = setMinisters({ ...S[_modalListKey][idx], id, households:hhs, notes:existingNotes, position:existingPosition },
+    [{ id: m1Id, name: m1?.name || '' }, m2, ...moreCompanions('edit')]);
   S[_modalListKey][idx] = record;
   dbUpsertCompanionship(_modalListKey, record); closeModal('edit-modal'); renderModalList();
 }
@@ -4455,14 +4572,14 @@ function loadGeoFile(file) {
 // ── Export ────────────────────────────────────────────────────
 function exportProposed() {
   if (!S.proposed.length) { alert('No proposals to export.'); return; }
-  let csv = 'Minister1,Minister2,AssignedHousehold,HouseholdAddress\n';
+  let csv = 'Minister1,Minister2,OtherCompanions,AssignedHousehold,HouseholdAddress\n';
   S.proposed.forEach(p => {
     const rows = p.households.length ? p.households : [''];
     rows.forEach(hhRef => {
       const obj = S.households.find(h => h.id===hhRef || norm(h.name)===norm(hhRef));
       const hhName = obj ? obj.name : hhRef;
       const addr   = obj ? obj.address : '';
-      csv += [p.m1Name, p.m2Name||'', hhName, addr]
+      csv += [p.m1Name, p.m2Name||'', ministersOf(p).slice(2).map(m => m.name).join('; '), hhName, addr]
         .map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(',') + '\n';
     });
   });
@@ -4479,14 +4596,14 @@ async function clearProposed() {
 
 function exportCurrent() {
   if (!S.current.length) { alert('No current assignments to export.'); return; }
-  let csv = 'Minister1,Minister2,AssignedHousehold,HouseholdAddress\n';
+  let csv = 'Minister1,Minister2,OtherCompanions,AssignedHousehold,HouseholdAddress\n';
   S.current.forEach(p => {
     const rows = p.households.length ? p.households : [''];
     rows.forEach(hhRef => {
       const obj = S.households.find(h => h.id===hhRef || norm(h.name)===norm(hhRef));
       const hhName = obj ? obj.name : hhRef;
       const addr   = obj ? obj.address : '';
-      csv += [p.m1Name, p.m2Name||'', hhName, addr]
+      csv += [p.m1Name, p.m2Name||'', ministersOf(p).slice(2).map(m => m.name).join('; '), hhName, addr]
         .map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(',') + '\n';
     });
   });
@@ -4648,7 +4765,7 @@ function openNotesModal(type, id, groupKey, field) {
   const target = getNotesTarget(_notesCtx);
   let label = target?.name || '';
   if ((type === 'proposed' || type === 'current') && target) {
-    label = target.m1Name + (target.m2Name ? ' + ' + target.m2Name : '');
+    label = compLabel(target);
   }
   if (type === 'group' && target) label = groupEntryName(target);
   const heading = { goals: 'Goals', nextSteps: 'Next Steps' }[notesField()] || 'Notes';
@@ -4906,9 +5023,9 @@ function groupLinkedNotes(entry) {
 
   Object.entries(LISTS).map(([k, v]) => [k, v.label]).forEach(([key, label]) => {
     (S[key] || []).forEach(c => {
-      const isMinister = member && (c.m1Id === member.id || c.m2Id === member.id || c.m3Id === member.id || (c.assignees || []).includes(member.id));
+      const isMinister = member && (ministersOf(c).some(m => m.id === member.id) || (c.assignees || []).includes(member.id));
       const servesHH = hhId && (c.households || []).some(h => h === hhId || (S.households.find(x => x.id === hhId)?.name === h));
-      const pair = c.m1Name + (c.m2Name ? ' + ' + c.m2Name : '');
+      const pair = compLabel(c);
       (c.notes || []).forEach(n => {
         if (isMinister || servesHH || noteMentionsName(n.text, name)) add(n, `${label} · ${pair}`);
       });
@@ -5901,6 +6018,7 @@ async function applyMoveInPlan() {
 
   _moveInPlan = null;
   document.getElementById('movein-review').innerHTML = '';
+  noteImport('movein', items.length);
   await dbUpsertMembers(S.members);
   refreshBadge(); renderMoves();
 
@@ -5944,7 +6062,7 @@ function ageFromBirth(iso) {
 }
 
 function companionshipsAsMinister(memberId) {
-  return Object.keys(LISTS).reduce((n, k) => n + (S[k] || []).filter(c => c.m1Id === memberId || c.m2Id === memberId || c.m3Id === memberId).length, 0);
+  return Object.keys(LISTS).reduce((n, k) => n + (S[k] || []).filter(c => ministersOf(c).some(m => m.id === memberId)).length, 0);
 }
 
 function companionshipsServing(hh) {
@@ -6163,6 +6281,7 @@ async function applyMoveOutPlan() {
   _moveOutPlan = null;
   _moveOutHHChoice = {};
   document.getElementById('moveout-review').innerHTML = '';
+  noteImport('moveout', members.length);
   await dbDeleteMembers([...memberIds]);
   refreshBadge(); renderMembers(); renderBrothers(); renderHouseholds(); renderMoves();
   const statusEl = document.getElementById('moveout-status');
@@ -6231,7 +6350,7 @@ function allTaggedNotes(uid) {
   S.members.forEach(m => take(m.notes, { where: `Members · ${m.name}`, open: ['member', m.id] }));
   S.households.forEach(h => take(h.notes, { where: `Households · ${h.name}`, open: ['household', h.id] }));
   Object.entries(LISTS).map(([k, v]) => [k, v.label]).forEach(([k, label]) =>
-    (S[k] || []).forEach(c => take(c.notes, { where: `${label} · ${c.m1Name}${c.m2Name ? ' + ' + c.m2Name : ''}`, open: [k, c.id] })));
+    (S[k] || []).forEach(c => take(c.notes, { where: `${label} · ${compLabel(c)}`, open: [k, c.id] })));
   GROUPS.forEach(g => groupList(g.key).forEach(e => {
     [['goals', 'Goals'], ['notes', 'Notes'], ['nextSteps', 'Next Steps']].forEach(([f, fl]) =>
       take(e[f], { where: `${g.label} · ${groupEntryName(e)} · ${fl}`, open: ['group', e.id, g.key, f] }));
@@ -6946,7 +7065,7 @@ function openRestrictedModal(id) {
   if (!n) {
     const target = getNotesTarget(_notesCtx);
     about = _notesCtx.type === 'group' ? groupEntryName(target)
-      : (_notesCtx.type === 'current' || _notesCtx.type === 'proposed') ? (target ? target.m1Name + (target.m2Name ? ' + ' + target.m2Name : '') : '')
+      : (_notesCtx.type === 'current' || _notesCtx.type === 'proposed') ? (target ? compLabel(target) : '')
       : target?.name || '';
   }
   document.getElementById('restricted-modal-title').textContent = n ? '🔒 Edit restricted note' : '🔒 New restricted note';
@@ -7239,6 +7358,7 @@ function applyCovenantPlan() {
   if (ids.size) S.groups[key] = groupList(key).filter(e => !ids.has(e.id));
   _cpPlan = null;
   document.getElementById('cp-review').innerHTML = '';
+  noteImport('cp-' + key, plan.rows?.length);
   dbUpsertGroups();
   renderGroupViews();
   const statusEl = document.getElementById('cp-status');
@@ -7674,7 +7794,8 @@ async function renderStatsTab() {
   document.getElementById('stats-last-fh').innerHTML = statsWho(S2.fh);
   document.getElementById('stats-last-ki').innerHTML = S2.ki?.updatedAt ? `Updated ${formatNoteDate(S2.ki.updatedAt)}${S2.ki.updatedBy ? ' by ' + esc(S2.ki.updatedBy) : ''}` : 'Not imported yet';
   const qrs = Object.keys(S2.qr || {}).sort();
-  document.getElementById('stats-last-qr').innerHTML = qrs.length ? `${qrs.length} quarter${qrs.length === 1 ? '' : 's'} imported (latest ${qLabel(qrs[qrs.length - 1])})` : 'Not imported yet';
+  const qrLast = qrs.map(q => S2.qr[q]).filter(o => o && o.importedAt).sort((a, b) => String(a.importedAt).localeCompare(String(b.importedAt))).pop();
+  document.getElementById('stats-last-qr').innerHTML = qrs.length ? `${qrs.length} quarter${qrs.length === 1 ? '' : 's'} imported (latest ${qLabel(qrs[qrs.length - 1])})` + (qrLast ? `<br>${statsWho(qrLast)}` : '') : 'Not imported yet';
   const snaps = S2.us?.snapshots || [];
   document.getElementById('stats-last-us').innerHTML = snaps.length ? `Imported ${formatNoteDate(snaps[snaps.length - 1].date)}${snaps[snaps.length - 1].by ? ' by ' + esc(snaps[snaps.length - 1].by) : ''}` : 'Not imported yet';
   host.innerHTML = statsUnitHTML(S2) + statsQuarterlyHTML(S2) + statsKiHTML(S2) + statsFhHTML(S2);
@@ -8236,7 +8357,7 @@ function renderIdentsTab() {
   const unm = k => meta[k]?.unmatched?.length ? `<div style="font-size:0.76rem;color:#856404;margin-top:0.5rem">Not in Members at the last import: ${meta[k].unmatched.map(esc).join(' · ')}</div>` : '';
   host.innerHTML =
     card('🎂 Birthdays in the next two weeks', soon.length ? nm(soon.length, 'person').replace('persons', 'people') : '', soon.length ? soon.map(m => { const d = bdayDaysAway(m.ident.bday);
-      return `<div style="display:flex;justify-content:space-between;gap:0.5rem;font-size:0.85rem;padding:0.25rem 0;border-bottom:1px solid #f0f2f5"><span>${esc(m.name)}</span>
+      return `<div style="display:flex;justify-content:space-between;gap:0.5rem;font-size:0.85rem;padding:0.25rem 0;border-bottom:1px solid #f0f2f5"><button class="ident-link" onclick="showMemberRow('${esc(m.id)}')" title="Show on the Members tab">${esc(m.name)}</button>
       <span style="color:#9c1d4f;white-space:nowrap">${bdayLabel(m.ident.bday)} · ${d === 0 ? 'today' : d === 1 ? 'tomorrow' : 'in ' + d + ' days'}</span></div>`; }).join('')
       : '<span style="color:#aaa;font-size:0.82rem">None in the next two weeks.</span>' + unm('bday'), 'From the last Birthdays import (month and day only).') +
     card('Members without callings', nm(identCurrentMembers('noCalling').length, 'member'), nameList(identCurrentMembers('noCalling').sort(byName)) + unm('noCalling')) +
@@ -8366,7 +8487,7 @@ function rsPoolSisters() { return sisters().filter(m => m.rsPool === true); }
 function rsMaybeSisters() { return sisters().filter(m => m.rsPool === 'maybe'); }
 function rsRecipientSisters() { return sisters().filter(m => m.rsRecipient === true); }
 function rsPoolHouseholds() { return S.households.filter(h => h.rsPool === true); }
-function rsMinisterIds(list) { const s = new Set(); (list || []).forEach(c => [c.m1Id, c.m2Id, c.m3Id].forEach(id => id && s.add(id))); return s; }
+function rsMinisterIds(list) { const s = new Set(); (list || []).forEach(c => ministersOf(c).forEach(m => m.id && s.add(m.id))); return s; }
 function rsServed(list) {
   const hh = new Set(), mem = new Set();
   (list || []).forEach(c => { (c.households || []).forEach(h => hh.add(h)); (c.assignees || []).forEach(a => mem.add(a)); });
@@ -8451,8 +8572,8 @@ function exportSistersCSV() {
 }
 
 function rsCompanionshipHTML(c, listKey, idx, total) {
-  const can = canEditRS();
-  const names = [c.m1Name, c.m2Name, c.m3Name].filter(Boolean);
+  const can = canEditList(listKey);
+  const names = ministersOf(c).map(m => m.name);
   const ministers = names.map(n => `${esc(n)}${identDotsByName(n)}`).join(' <span style="color:#aaa">+</span> ') + (names.length === 1 ? ' <span class="badge badge-blue">Solo</span>' : '');
   const hhTags = (c.households || []).map(id => { const h = hhById(id); return `<span class="household-tag">🏠 ${esc(h ? h.name : id)}${identDotsHH(h)}</span>`; }).join('');
   const sisTags = (c.assignees || []).map(id => { const m = S.members.find(x => x.id === id); return `<span class="household-tag" style="background:#fbe9f1;color:#7a2448">${esc(m ? m.name : '?')}${identBadgesHTML(m)}</span>`; }).join('');
@@ -8515,14 +8636,14 @@ function rsMinisterOptions(sel) {
   return `<option value="">—</option>` + list.map(m => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${pool.has(m.id) ? '★ ' : maybe.has(m.id) ? '☆ ' : ''}${esc(m.name)}</option>`).join('');
 }
 function openRSModal(listKey, id) {
-  if (!canEditRS()) return;
+  if (!canEditList(listKey)) return;
   if (!S.members.length) { alert('Import member data first.'); return; }
   const c = id ? (S[listKey] || []).find(x => x.id === id) : null;
   _rsCtx = { listKey, id: c ? c.id : null, hh: new Set(c ? c.households || [] : []), mem: new Set(c ? c.assignees || [] : []) };
   document.getElementById('rs-modal-title').textContent = c ? 'Edit companionship' : 'New companionship';
   document.getElementById('rs-m1').innerHTML = rsMinisterOptions(c?.m1Id);
   document.getElementById('rs-m2').innerHTML = rsMinisterOptions(c?.m2Id);
-  document.getElementById('rs-m3').innerHTML = rsMinisterOptions(c?.m3Id);
+  fillMoreCompanions('rs', c);
   document.getElementById('rs-asg-search').value = '';
   document.getElementById('rs-extra').textContent = c?.extraAssignees?.length ? `Also on LCR's list (not in Members): ${c.extraAssignees.join(', ')}` : '★ = in the ministering pool, ☆ = maybe.';
   document.getElementById('rs-delete').style.display = c ? '' : 'none';
@@ -8546,15 +8667,15 @@ function renderRSAssigneePicker() {
 function rsPick(kind, id, on) { const set = _rsCtx[kind]; on ? set.add(id) : set.delete(id); }
 function saveRSCompanionship() {
   const ctx = _rsCtx; if (!ctx || !canEditRS()) return;
-  const ids = ['rs-m1', 'rs-m2', 'rs-m3'].map(k => document.getElementById(k).value).filter(Boolean);
+  const ids = [...['rs-m1', 'rs-m2'].map(k => document.getElementById(k).value), ...[...document.querySelectorAll('#rs-more select.more-min')].map(x => x.value)].filter(Boolean);
   const uniq = [...new Set(ids)];
   if (!uniq.length) { alert('Pick at least one ministering sister.'); return; }
   const ms = uniq.map(id => S.members.find(m => m.id === id));
   const list = S[ctx.listKey];
   const old = ctx.id ? list.find(x => x.id === ctx.id) : null;
   const rec = { ...(old || { id: uid(), notes: [], position: list.length }),
-    m1Id: ms[0]?.id || null, m1Name: ms[0]?.name || '', m2Id: ms[1]?.id || null, m2Name: ms[1]?.name || '', m3Id: ms[2]?.id || null, m3Name: ms[2]?.name || '',
     households: [...ctx.hh], assignees: [...ctx.mem] };
+  setMinisters(rec, ms.map(m => ({ id: m.id, name: m.name })));
   if (old) list[list.indexOf(old)] = rec; else list.push(rec);
   dbUpsertCompanionship(ctx.listKey, rec);
   closeModal('rs-modal');
@@ -8567,7 +8688,8 @@ function deleteRSCompanionship() {
   closeModal('rs-modal');
   ctx.listKey === 'currentRS' ? renderCurrentRS() : renderProposedRS();
 }
-const rsCopy = c => ({ ...c, id: uid(), notes: [], households: [...(c.households || [])], assignees: [...(c.assignees || [])], extraAssignees: [...(c.extraAssignees || [])] });
+const rsCopy = c => ({ ...c, id: uid(), fromId: c.id, notes: [], households: [...(c.households || [])], assignees: [...(c.assignees || [])], extraAssignees: [...(c.extraAssignees || [])],
+  ...(c.moreMinisters ? { moreMinisters: c.moreMinisters.map(m => ({ ...m })) } : {}) });
 async function copyRSToDraft() {
   if (!canEditRS()) return;
   if (!S.currentRS.length) { alert('No current sister assignments to copy.'); return; }
@@ -8576,6 +8698,7 @@ async function copyRSToDraft() {
   await dbReplaceCompanionshipList('proposedRS', S.proposedRS); showTab('proposeRS');
 }
 async function promoteRS() {
+  alert('Current is updated only from LCR (the Import above). Enter the draft\'s changes in LCR, then re-import.'); return;
   if (!canEditRS()) return;
   if (!S.proposedRS.length) { alert('No draft companionships to promote.'); return; }
   if (!confirm(`Replace Current Ministering Sister Assignments with all ${S.proposedRS.length} draft companionship(s)? The draft is left unchanged.`)) return;
@@ -8594,7 +8717,7 @@ function exportRS(listKey) {
     const rows = [...(c.households || []).map(id => { const h = hhById(id); return ['Household', h ? h.name : id, h?.address || '']; }),
                   ...(c.assignees || []).map(id => { const m = S.members.find(x => x.id === id); return ['Sister', m ? m.name : id, memberHousehold(m)?.address || '']; }),
                   ...(c.extraAssignees || []).map(n => ['Sister (not in Members)', n, ''])];
-    (rows.length ? rows : [['', '', '']]).forEach(r => { csv += [c.m1Name, c.m2Name, c.m3Name, ...r].map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',') + '\n'; });
+    (rows.length ? rows : [['', '', '']]).forEach(r => { csv += [c.m1Name, c.m2Name, ministersOf(c).slice(2).map(m => m.name).join('; '), ...r].map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',') + '\n'; });
   });
   dlCSV(csv, listKey === 'currentRS' ? 'current_sister_assignments.csv' : 'draft_sister_assignments.csv');
 }
@@ -8665,13 +8788,13 @@ async function applyMinPlan() {
   const p = _minPlan; if (!p || (!p.doEq && !p.doRs)) { alert('Nothing ticked to replace.'); return; }
   const now = new Date().toISOString();
   const build = (side, oldList) => {
-    const old = new Map((oldList || []).map(c => [minKey([c.m1Name, c.m2Name, c.m3Name]), c]));
+    const old = new Map((oldList || []).map(c => [minKey(ministersOf(c).map(m => m.name)), c]));
     return p.comps.filter(c => c.side === side).map((c, i) => {
       const ms = c.ministers.map(x => ({ id: x.m?.id || null, name: x.m?.name || x.name }));
       const prev = old.get(minKey(ms.map(x => x.name)));
       const rec = { id: prev?.id || uid(), notes: prev?.notes || [], position: i, source: 'LCR', importedAt: now,
-        m1Id: ms[0]?.id || null, m1Name: ms[0]?.name || '', m2Id: ms[1]?.id || null, m2Name: ms[1]?.name || '', m3Id: ms[2]?.id || null, m3Name: ms[2]?.name || '',
         extraAssignees: c.assignees.filter(a => !a.m).map(a => a.name) };
+      setMinisters(rec, ms);
       const matched = c.assignees.filter(a => a.m).map(a => a.m);
       if (side === 'eq') {
         rec.assignees = matched.map(m => m.id);
@@ -8685,8 +8808,8 @@ async function applyMinPlan() {
     });
   };
   const done = [];
-  if (p.doEq && canEditEQ()) { S.current = build('eq', S.current); await dbReplaceCompanionshipList('current', S.current); done.push(`${S.current.length} brothers' companionships`); }
-  if (p.doRs && canEditRS()) { S.currentRS = build('rs', S.currentRS); await dbReplaceCompanionshipList('currentRS', S.currentRS); done.push(`${S.currentRS.length} sisters' companionships`); }
+  if (p.doEq && canEditEQ()) { S.current = build('eq', S.current); noteImport('ministering-eq', S.current.length); await dbReplaceCompanionshipList('current', S.current); done.push(`${S.current.length} brothers' companionships`); }
+  if (p.doRs && canEditRS()) { S.currentRS = build('rs', S.currentRS); noteImport('ministering-rs', S.currentRS.length); await dbReplaceCompanionshipList('currentRS', S.currentRS); done.push(`${S.currentRS.length} sisters' companionships`); }
   const f = p.from; _minPlan = null;
   document.getElementById('min-review-' + f).innerHTML = '';
   const st = document.getElementById('min-status-' + f); st.style.color = '#155724'; st.textContent = '✓ Saved ' + done.join(' and ') + '.';
@@ -8698,7 +8821,7 @@ async function applyMinPlan() {
 // (by household name or the name of anyone living there), individual sisters
 // assigned, and LCR names not in Members. Matches each word of the search
 // anywhere in a name, so "Okafor" or "Ruth Okafor" both find "Okafor, Ruth".
-function compMinisterNames(c) { return [c.m1Name, c.m2Name, c.m3Name].filter(Boolean); }
+function compMinisterNames(c) { return ministersOf(c).map(m => m.name); }
 function compServedNames(c) {
   const out = [];
   (c.households || []).forEach(ref => {
@@ -8718,7 +8841,80 @@ function compMatches(c, q, mode) {
 }
 // Filters, keeps each card's real position (so ▲▼ still move it within the
 // whole list), and hides the move buttons while a search is narrowing it.
+// ── Draft vs Current ──────────────────────────────────────────
+// Each draft companionship is matched to a Current one: first the one it was
+// copied from (fromId), then one with exactly the same ministers, then the
+// one sharing the most ministers. Unmatched drafts are New; Current ones no
+// draft matched are listed as "in Current, not in the Draft". Parts compared:
+// ministers, households, individuals (assignees) and others not in Members.
+const DRAFT_OF = { proposed: 'current', proposedRS: 'currentRS' };
+function compParts(c) {
+  const ms = new Map(ministersOf(c).map(m => [m.id || 'n:' + normNameKey(m.name), m.name]));
+  const hh = new Map((c.households || []).map(r => { const h = S.households.find(x => x.id === r || norm(x.name) === norm(r)); return [h ? h.id : 'n:' + norm(r), h ? h.name : r]; }));
+  const ppl = new Map((c.assignees || []).map(id => [id, S.members.find(m => m.id === id)?.name || '?']));
+  (c.extraAssignees || []).forEach(n => ppl.set('n:' + normNameKey(n), n));
+  return { ms, hh, ppl };
+}
+function draftDiff(draftKey) {
+  const draft = S[draftKey] || [], cur = S[DRAFT_OF[draftKey]] || [];
+  const used = new Set(), match = new Map();
+  const curById = new Map(cur.map(c => [c.id, c]));
+  draft.forEach(d => { const c = d.fromId && curById.get(d.fromId); if (c && !used.has(c.id)) { match.set(d.id, c); used.add(c.id); } });
+  const key = c => minKey(ministersOf(c).map(m => m.name));
+  draft.forEach(d => { if (match.has(d.id)) return; const k = key(d); const c = cur.find(x => !used.has(x.id) && key(x) === k); if (c) { match.set(d.id, c); used.add(c.id); } });
+  draft.forEach(d => {
+    if (match.has(d.id)) return;
+    const dm = compParts(d).ms; let best = null, n = 0;
+    cur.forEach(x => { if (used.has(x.id)) return; const k = [...compParts(x).ms.keys()].filter(id => dm.has(id)).length; if (k > n) { n = k; best = x; } });
+    if (best) { match.set(d.id, best); used.add(best.id); }
+  });
+  const byId = new Map();
+  draft.forEach(d => {
+    const c = match.get(d.id);
+    if (!c) { byId.set(d.id, { status: 'new', changes: [] }); return; }
+    const a = compParts(c), b = compParts(d), changes = [];
+    [['ms', 'minister'], ['hh', 'household'], ['ppl', 'individual']].forEach(([k, what]) => {
+      b[k].forEach((name, id) => { if (!a[k].has(id)) changes.push({ add: true, what, name }); });
+      a[k].forEach((name, id) => { if (!b[k].has(id)) changes.push({ add: false, what, name }); });
+    });
+    byId.set(d.id, { status: changes.length ? 'changed' : 'same', changes, cur: c });
+  });
+  return { byId, missing: cur.filter(c => !used.has(c.id)) };
+}
+function diffBarHTML(info) {
+  if (!info) return '';
+  const label = { new: 'New — not in Current', changed: 'Changed from Current', same: 'Same as Current' }[info.status];
+  const icon = { minister: '👤', household: '🏠', individual: '🙋' };
+  return `<div class="diff-bar"><span class="diff-chip st-${info.status}">${label}</span>${info.changes.map(ch =>
+    `<span class="diff-chip ${ch.add ? 'add' : 'rem'}" title="${ch.add ? 'Added' : 'Removed'} ${ch.what}">${ch.add ? '+' : '−'} ${icon[ch.what]} ${esc(ch.name)}</span>`).join('')}</div>`;
+}
+function withDiff(html, info) {
+  if (!info) return html;
+  return html.replace(/^(\s*<div class="companionship-card)"/, `$1 diff-${info.status}"`).replace(/^(\s*<div class="companionship-card[^>]*>)/, `$1${diffBarHTML(info)}`);
+}
+function renderDiffSummary(key, diff) {
+  const el = document.getElementById('diff-summary-' + key); if (!el) return;
+  const cur = S[DRAFT_OF[key]] || [];
+  if (!cur.length) { el.innerHTML = '<span style="color:#888">Nothing in Current to compare with yet.</span>'; return; }
+  const n = { new: 0, changed: 0, same: 0 }; diff.byId.forEach(v => n[v.status]++);
+  el.innerHTML = `Compared with Current: <b>${n.changed}</b> changed, <b>${n.new}</b> new, ${n.same} the same` +
+    (diff.missing.length ? `; <b>${diff.missing.length}</b> in Current but not in this draft.
+      <details><summary>Show them</summary><ul style="margin:0.3rem 0 0 1.2rem">${diff.missing.map(c => `<li>${esc(compLabel(c) || 'Companionship')}</li>`).join('')}</ul></details>` : '.');
+}
+
 function compSearchRender(key, list, cardFn) {
+  if (DRAFT_OF[key]) {
+    const diff = draftDiff(key);
+    renderDiffSummary(key, diff);
+    const inner = cardFn; cardFn = (c, i) => withDiff(inner(c, i), diff.byId.get(c.id));
+    if (document.getElementById('cs-sort-' + key)?.value === 'changes') {
+      const rank = { changed: 0, new: 1, same: 2 };
+      const sorted = list.map((c, i) => ({ c, i })).sort((x, y) => (rank[diff.byId.get(x.c.id)?.status] ?? 3) - (rank[diff.byId.get(y.c.id)?.status] ?? 3) || x.i - y.i);
+      const fn2 = cardFn; cardFn = (c) => fn2(c, undefined);   // no ▲▼ while sorted
+      list = sorted.map(x => x.c);
+    }
+  }
+
   const q = document.getElementById('cs-q-' + key)?.value || '';
   const mode = document.getElementById('cs-mode-' + key)?.value || 'any';
   const cnt = document.getElementById('cs-count-' + key);

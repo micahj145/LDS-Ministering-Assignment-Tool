@@ -19,7 +19,8 @@ const poolLabel = v => v === true ? 'In Pool' : v === 'maybe' ? 'Maybe' : 'Out';
 const byId = list => new Map((list || []).map(x => [x.id, x]));
 const noteKey = n => n.id ? `id:${n.id}` : `dt:${n.date || ''}:${String(n.text || '').slice(0, 40)}`;
 const newNotes = (a, b) => { const seen = new Set((a || []).map(noteKey)); return (b || []).filter(n => !seen.has(noteKey(n))); };
-const pairName = c => `${c.m1Name || ''}${c.m2Name ? ' + ' + c.m2Name : ''}`.trim();
+// Everyone ministering, in order: m1, m2, m3, then moreMinisters (4th and beyond).
+const pairName = c => [c.m1Name, c.m2Name, c.m3Name, ...((c.moreMinisters || []).map(m => m && m.name))].filter(Boolean).join(' + ');
 const enc = s => encodeURIComponent(s);
 
 // Companionships list households by id, or (older records) by name.

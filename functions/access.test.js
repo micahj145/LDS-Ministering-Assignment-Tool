@@ -72,3 +72,9 @@ test('twoStepSummary reports the methods set up', () => {
   assert.deepStrictEqual(twoStepSummary({ metadata: {} }), { factors: [], lastSignIn: null });
   assert.deepStrictEqual(twoStepSummary(null), { factors: [], lastSignIn: null });
 });
+
+test('companionship names include every companion', () => {
+  const before = { households: [{ id: 'h1', name: 'H' }], current: [] };
+  const after = { households: [{ id: 'h1', name: 'H' }], current: [{ id: 'c', m1Name: 'A', m2Name: 'B', m3Name: 'C', moreMinisters: [{ name: 'D' }], households: ['h1'] }] };
+  assert.ok(householdChanges(before, after).some(c => /assigned to A \+ B \+ C \+ D/.test(c.text)));
+});
