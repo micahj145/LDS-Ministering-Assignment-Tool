@@ -555,6 +555,12 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   New ones that share anyone served with an unmatched Current one): `openMatchModal` lists `diffParts`;
   ticked ones are made to match Current, `fromId` links them; Disregard sets `matchDismissed` (no offer for
   that pairing again).
+- **Phones** (≤640px): the tab strip is replaced by a sticky "Go to" select (`#nav-select`, mirrored from the
+  visible nav buttons by `syncNavSelect`); every `.tab-content table` becomes cards (`phone-cards`, one
+  labelled line per column — `labelTablesForPhone` sets `data-label` from the header; both run from one
+  MutationObserver); inputs are 16px (no iPhone zoom), bigger tap targets, bottom-sheet modals, sticky
+  district headings. The district line inside companionship cards was dropped (lists are grouped).
+  The interviews parser ignores print-date and page-number lines.
 - **Pools follow LCR**: after a ministering import, `poolFromCurrent()` puts everyone in the new Current In
   Pool — brothers: male ministers (`m.inPool`) and households (`hh.inPool`); sisters: female ministers
   (`m.rsPool`) and assignees (`m.rsRecipient`). Nothing is taken out of a pool.

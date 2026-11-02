@@ -956,6 +956,21 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
       obs: { ...o, row, h1: h1?.name, h1geo: !!h1?.lat, h2: h2?.address, h2geo: !!h2?.lat, kofiMoved: kofi?.householdId === nh?.id, nina: nina?.householdId === nh?.id } };
   });
 
+  await check('round3', 'phone: tab menu instead of the strip, tables as cards, no sideways scrolling', async () => {
+    await E.page.setViewportSize({ width: 390, height: 844 });
+    const out = {};
+    for (const tab of ['members', 'households', 'current', 'propose', 'sisters']) {
+      await ev(E, t => showTab(t), tab); await sleep(400);
+      out[tab] = await ev(E, () => ({ wide: document.documentElement.scrollWidth > window.innerWidth + 2, select: getComputedStyle(document.getElementById('nav-select-wrap')).display !== 'none',
+        nav: getComputedStyle(document.querySelector('nav')).display, cards: document.querySelectorAll('.tab-content.active table.phone-cards').length,
+        opt: document.getElementById('nav-select').value }));
+      if (process.env.SHOTS) await E.page.screenshot({ path: path.join(process.env.SHOTS, 'phone-' + tab + '.png') });
+    }
+    await E.page.setViewportSize({ width: 1280, height: 900 });
+    const ok = Object.entries(out).every(([t, o]) => !o.wide && o.select && o.nav === 'none' && o.opt === t);
+    return { pass: ok && out.members.cards > 0 && out.households.cards > 0, obs: out };
+  });
+
   // Last, since it wipes the shared doc: can a council member delete it?
   await check('rules-today', 'council deletes the whole ward doc', async () => ({ pass: true, obs: await tryOp(C2, `await db.doc('wardData/shared').delete()`) }), 'security');
 

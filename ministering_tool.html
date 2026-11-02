@@ -145,6 +145,43 @@ tr:hover td{background:#fafbfc}
   #refresh-status{min-width:0 !important;margin-right:auto;text-align:left !important}
   nav{padding:0 0.5rem}
   .modal{width:94%;padding:1.25rem}}
+
+/* ── Phones (Nov 2026) ───────────────────────────────────────
+   Tabs: a "Go to" menu instead of a long sideways strip, kept at the top.
+   Tables: each row becomes a card, one labelled line per column (labels come
+   from the header, set by labelTablesForPhone()). Inputs at 16px so iPhone
+   doesn't zoom in on tap; bigger tap targets; tighter stat boxes. */
+#nav-select-wrap{display:none}
+@media(max-width:640px){
+  #nav-select-wrap{display:block;position:sticky;top:0;z-index:50;background:#fff;border-bottom:2px solid #e0e6ed;padding:0.45rem 0.75rem}
+  #nav-select{width:100%;font-size:16px;padding:0.55rem 0.6rem;border:1px solid #c9d3dd;border-radius:8px;background:#f7f9fc;color:#1a3a5c;font-weight:600}
+  nav{display:none}
+  .container{padding:0.75rem}
+  .card{padding:0.9rem}
+  .stats-row{grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:0.5rem;margin-bottom:1rem}
+  .stat-card{padding:0.55rem 0.4rem}
+  .stat-card .number{font-size:1.25rem}
+  .stat-card .label{font-size:0.68rem}
+  input,select,textarea{font-size:16px !important}
+  .btn-sm{padding:0.4rem 0.7rem;min-height:32px}
+  .ident-link{padding:0.3rem 0;font-size:0.92rem}
+  .iv-pill{padding:0.25rem 0.7rem;font-size:0.8rem}
+  .modal{width:100%;max-width:100%;max-height:92vh;border-radius:12px 12px 0 0;align-self:flex-end;padding:1rem}
+  .modal-footer{flex-wrap:wrap}
+  .modal-footer .btn{flex:1 1 auto}
+  .phone-cards thead{display:none}
+  .phone-cards,.phone-cards tbody,.phone-cards tr,.phone-cards td{display:block;width:100%}
+  .phone-cards tr{border:1px solid #e0e6ed;border-radius:10px;margin-bottom:0.6rem;padding:0.5rem 0.7rem;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.04)}
+  .phone-cards td{border:none;padding:0.22rem 0;display:flex;gap:0.6rem;align-items:baseline;white-space:normal !important;min-width:0 !important;max-width:none !important}
+  .phone-cards td::before{content:attr(data-label);flex:0 0 34%;font-size:0.7rem;color:#8a95a1;font-weight:600;text-transform:uppercase;letter-spacing:0.02em}
+  .phone-cards td:first-child{font-size:1rem;padding-bottom:0.35rem;border-bottom:1px solid #f0f0f0;margin-bottom:0.2rem}
+  .phone-cards td:first-child::before{display:none}
+  .phone-cards td[data-empty]{display:none}
+  .phone-cards tr:hover td{background:none}
+  div[style*="overflow-x:auto"]{overflow-x:visible !important}
+  .companionship-card{padding:0.75rem}
+  .district-head{position:sticky;top:3.2rem;background:#f5f7fa;z-index:5;padding:0.35rem 0.2rem}
+}
 @media print{nav,header p,button{display:none}.container{padding:0}.card{box-shadow:none;border:1px solid #ddd}}
 .chg-sub{font-size:0.78rem;color:#666;margin:0.25rem 0 0.15rem}
 .chg-list{margin:0 0 0.3rem 1.1rem;padding:0}
@@ -297,6 +334,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 
 <div id="app-shell" style="display:none">
 
+<div id="nav-select-wrap"><select id="nav-select" aria-label="Go to tab" onchange="showTab(this.value)"></select></div>
 <nav>
   <button class="active" onclick="showTab('import')">Import</button>
   <button id="nav-notif-btn" onclick="showTab('notifications')">Notifications <span id="notif-count"></span></button>
@@ -3733,8 +3771,8 @@ function renderHouseholds() {
       <td><strong>${esc(hh.name)}</strong>${identDotsHH(hh)}</td>
       <td style="font-size:0.82rem;min-width:200px;white-space:normal">${(() => { const linked = S.members.filter(m => m.householdId === hh.id).sort((a, b) => (b.age || 0) - (a.age || 0));
         // Each linked member on a line: name (→ Members row), then their own phone and email, tap to call / write.
-        return linked.length ? linked.map(m => `<div class="hh-person"><button class="ident-link" onclick="showMemberRow('${esc(m.id)}')" title="Show on Members">${esc(m.name)}</button>${
-            m.phone ? ` <span class="hh-contact">📞 ${telHTML(m.phone)}</span>` : ''}${m.email ? ` <span class="hh-contact">✉️ ${mailHTML(m.email)}</span>` : ''}</div>`).join('')
+        return linked.length ? '<div>' + linked.map(m => `<div class="hh-person"><button class="ident-link" onclick="showMemberRow('${esc(m.id)}')" title="Show on Members">${esc(m.name)}</button>${
+            m.phone ? ` <span class="hh-contact">📞 ${telHTML(m.phone)}</span>` : ''}${m.email ? ` <span class="hh-contact">✉️ ${mailHTML(m.email)}</span>` : ''}</div>`).join('') + '</div>'
           : esc(memberList) || '<span style="color:#aaa">—</span>'; })()}</td>
       <td style="font-size:0.82rem">${esc(hh.head||'')}</td>
       <td style="font-size:0.82rem">
@@ -3963,7 +4001,6 @@ function companionshipHTML(m1, m2, hhList, district, id, listKey = 'proposed', i
       ${moveBtns}
       <div class="ministers" style="flex:1">${ministers}</div>${editBtn}
     </div>
-    ${district?`<div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem">${/^district/i.test(district) ? esc(district) : 'District: ' + esc(district)}${rec?.districtLeader ? ' · ' + esc(rec.districtLeader) : ''}</div>`:''}
     <div>${tags}</div>
     ${interviewRowHTML(rec, listKey)}
     ${notesBlock}
@@ -8700,7 +8737,6 @@ function rsCompanionshipHTML(c, listKey, idx, total) {
         ${can ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openRSModal('${listKey}','${c.id}')">Edit</button>` : ''}
         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openNotesModal('${listKey}','${c.id}')">${notes.length ? `Notes (${notes.length})` : 'Notes'}</button></div>
     </div>
-    ${c.district ? `<div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem">${esc(c.district)}${c.districtLeader && c.districtLeader !== 'Unassigned' ? ' · ' + esc(c.districtLeader) : ''}</div>` : ''}
     <div>${hhTags}${sisTags}${extra || ''}${!hhTags && !sisTags && !extra ? '<span style="color:#aaa;font-size:0.82rem">No one assigned</span>' : ''}</div>
     ${interviewRowHTML(c, listKey)}
     ${notes.map(n => `<div style="margin-top:0.35rem;padding:0.28rem 0.55rem;border-left:3px solid #f2c1d6;font-size:0.8rem;color:#555">
@@ -8857,7 +8893,7 @@ function parseInterviewReport(pages) {
     if (!year) { const d = P.items.map(i => i.s.match(/^\d{1,2} [A-Z][a-z]{2} (\d{4})$/)).find(Boolean); if (d) year = d[1]; }
     const heads = P.items.filter(i => /^Companionships$/i.test(i.s)).sort((a, b) => b.y - a.y);
     const hh = P.items.find(i => /^Households$/i.test(i.s));
-    const body = P.items.filter(i => i.y > 22 && !MONTH.test(i.s) && !/For Church Use|Intellectual Reserve|©/.test(i.s));
+    const body = P.items.filter(i => i.y > 22 && !MONTH.test(i.s) && !/For Church Use|Intellectual Reserve|©/.test(i.s) && !/^\d{1,2} [A-Z][a-z]{2} \d{4}$/.test(i.s.trim()) && !/^\d+$/.test(i.s.trim()));
     const marks = body.filter(i => /^District\b/i.test(i.s) || /^Presidency Member/i.test(i.s));
     // markers above the first table on this page
     const take = m => { if (/^District/i.test(m.s)) { district = m.s.trim(); leader = ''; }
@@ -9403,6 +9439,37 @@ async function applyRecPlan() {
   const st = document.getElementById('rec-status'); st.style.color = '#155724';
   st.textContent = `✓ ${kind === 'members' ? 'Members' : 'Households'}: ` + [renamed && `${renamed} renamed`, changed && `${changed} change${changed === 1 ? '' : 's'}`, added && `${added} added`, removed && `${removed} removed`, linked && `${linked} people linked to their household`].filter(Boolean).join(', ') + (renamed || changed || added || removed || linked ? '.' : 'no changes.');
 }
+
+// ── Phones ───────────────────────────────────────────────────
+// The "Go to" menu mirrors the visible nav buttons (with their counts), and
+// every table gets data-label on its cells so the phone CSS can show each row
+// as a card. Both re-run whenever the page changes.
+function tabNameOf(btn) { const m = (btn.getAttribute('onclick') || '').match(/showTab\('([^']+)'\)/); return m ? m[1] : null; }
+function syncNavSelect() {
+  const sel = document.getElementById('nav-select'); if (!sel) return;
+  const btns = [...document.querySelectorAll('nav button')].filter(b => tabNameOf(b) && b.style.display !== 'none' && !b.hidden);
+  const opts = btns.map(b => [tabNameOf(b), b.innerText.replace(/\s+/g, ' ').trim(), b.classList.contains('active')]);
+  const sig = JSON.stringify(opts); if (sel.dataset.sig === sig) return; sel.dataset.sig = sig;
+  sel.innerHTML = opts.map(([v, t, on]) => `<option value="${esc(v)}" ${on ? 'selected' : ''}>${esc(t)}</option>`).join('');
+}
+function labelTablesForPhone(root) {
+  (root || document).querySelectorAll('.tab-content table').forEach(t => {
+    const ths = [...t.querySelectorAll('thead th')]; if (!ths.length) return;
+    const labels = ths.map(th => th.innerText.replace(/\s+/g, ' ').trim());
+    t.classList.add('phone-cards');
+    t.querySelectorAll('tbody tr:not([data-pl])').forEach(tr => { tr.setAttribute('data-pl', ''); [...tr.children].forEach((td, i) => {
+      if (td.dataset.label === undefined) td.dataset.label = labels[i] || '';
+      if (!td.textContent.trim() && !td.querySelector('button,select,input,a,span.badge')) td.setAttribute('data-empty', '');
+    }); });
+  });
+}
+(function watchForPhone() {
+  let queued = false;
+  const run = () => { queued = false; try { syncNavSelect(); labelTablesForPhone(); } catch (e) {} };
+  const obs = new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(run); } });
+  const start = () => { obs.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'style'] }); run(); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
 
 // ── Tap to call, email or get directions ────────────────────
 // tel: / mailto: open the phone's dialer and the default mail app; addresses
