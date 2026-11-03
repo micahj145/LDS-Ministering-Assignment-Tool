@@ -589,6 +589,12 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   drafts.js counts them as a draft change. Tests now force each rules phase whatever `finalRules()` says (step 2 is live).
 - **Brothers in more than one companionship**: `populateBrotherSelects` no longer hides brothers already assigned;
   they're listed after the unassigned ones as "— already in N".
+- **Same-address households** (Households tab, presidencies/bishopric): `householdDupGroups()` groups by
+  `dupAddrKey` (looseKey of the normalised address; unit numbers count). "Not the same household" stores
+  `notDuplicate` ids; "Merge into the ticked one" (`mergeHouseholdGroup`) moves members, notes/goals/next steps,
+  pools (best of), part-member, coordinates, contact details, names (as altNames) and Move Ins entries onto the
+  kept household, rewrites companionship lists the user may change, and keeps the old ids in `mergedIds` so
+  `hhById()` still resolves anything else (other side's lists, follows).
 - **Pools follow LCR**: after a ministering import, `poolFromCurrent()` puts everyone in the new Current In
   Pool — brothers: male ministers (`m.inPool`) and households (`hh.inPool`); sisters: female ministers
   (`m.rsPool`) and assignees (`m.rsRecipient`). Nothing is taken out of a pool.

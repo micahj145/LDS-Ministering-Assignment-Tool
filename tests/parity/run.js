@@ -974,6 +974,28 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
       closeModal('add-modal'); return { taken, listed: !!opt, text: opt?.text || '' }; });
     return { pass: !!o.taken && o.listed && /already in \d/.test(o.text), obs: o };
   });
+  await check('round3', 'households at the same address: suggested, "not the same" remembered, merge moves everything', async () => {
+    const o = await ev(E, async () => {
+      window.confirm = () => true; showTab('households');
+      const base = S.households.find(h => h.address && S.members.some(m => m.householdId === h.id));
+      const dup = { id: 'hdup1', name: base.name.split(' & ')[0] + ' (old)', address: base.address.toUpperCase().replace(/,/g, ''), members: [], notes: [{ id: 'ndup1', author: 'Sam Carter', authorId: 'uEq', text: 'Note on the old record', date: new Date().toISOString() }], inPool: true };
+      const roomie = { id: 'hdup2', name: 'Roommate, Ray', address: '1 Unique Way, Palm Bay FL 32909', members: [] };
+      const roomie2 = { id: 'hdup3', name: 'Other, Olive', address: '1 Unique Way, Palm Bay FL 32909', members: [] };
+      S.households.push(dup, roomie, roomie2);
+      const m = S.members.find(x => x.householdId === base.id); m.householdId = 'hdup1';
+      S.proposed.forEach(c => { if ((c.households || []).includes(base.id)) c.households = c.households.map(r => r === base.id ? 'hdup1' : r); });
+      renderHouseholds();
+      const groups = householdDupGroups().length;
+      markNotDuplicate(dupAddrKey(roomie.address)); const afterDismiss = householdDupGroups().length;
+      _dupKeep[dupAddrKey(base.address)] = base.id; mergeHouseholdGroup(dupAddrKey(base.address));
+      const kept = S.households.find(h => h.id === base.id);
+      return { base: base.id, groups, afterDismiss, stillThere: S.households.some(h => h.id === 'hdup1'), memberBack: m.householdId, note: (kept.notes || []).some(n => n.id === 'ndup1'),
+        resolves: hhById('hdup1')?.id, propRefs: S.proposed.some(c => (c.households || []).includes('hdup1')), alt: kept.altNames, pool: kept.inPool };
+    });
+    await flush(E);
+    const n = (await adb.collection('notes').doc('ndup1').get()).data();
+    return { pass: o.groups === 2 && o.afterDismiss === 1 && !o.stillThere && o.memberBack === o.base && o.note && o.resolves === o.base && !o.propRefs && n?.target?.id === o.base && o.pool === true, obs: { ...o, noteTarget: n?.target } };
+  });
   await check('round3', 'unmatched name: pick a household → linked and remembered for next import', async () => {
     const mk = async () => {
       const cell = 'padding:2px 0 2px 2px;vertical-align:middle;font:10px Arial';

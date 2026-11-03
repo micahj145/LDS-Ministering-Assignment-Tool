@@ -583,6 +583,7 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 <div id="tab-households" class="tab-content">
   <div class="ident-legend-slot"></div>
   <div id="households-stats" class="stats-row"></div>
+  <div id="hh-dupes" class="member-edit"></div>
   <div class="card" style="margin-bottom:1.25rem;padding:1rem 1.25rem">
     <div style="font-weight:600;color:#1a3a5c;margin-bottom:0.5rem">Map locations (for distances on companionships and Find members nearby)</div>
     <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
@@ -1633,7 +1634,7 @@ let _quietSyncFail = false;
 // ordering, map coordinates, and notes/goals/next steps save without asking.
 // Draft lists and Covenant Path / Move In lists save without asking too.
 const CONFIRM_KEYS = { members: 'Members', households: 'Households', current: 'Current Ministering Brother Assignments', currentRS: 'Current Ministering Sister Assignments' };
-const CONFIRM_IGNORE = new Set(['inPool', 'rsPool', 'rsRecipient', 'position', 'lat', 'lng', 'notes', 'goals', 'nextSteps', 'interviews', 'birthDate', 'altNames', 'geoManual']);
+const CONFIRM_IGNORE = new Set(['inPool', 'rsPool', 'rsRecipient', 'position', 'lat', 'lng', 'notes', 'goals', 'nextSteps', 'interviews', 'birthDate', 'altNames', 'geoManual', 'notDuplicate', 'mergedIds']);
 let _confirmBypass = false;
 let _skipConfirmOnce = false;   // the change was just reviewed in an import's own review
 
@@ -3484,7 +3485,9 @@ function householdList() {
   return out.sort((a,b) => a.name.localeCompare(b.name));
 }
 
-function hhById(id) { return S.households.find(h => h.id === id) || null; }
+// A household merged into another keeps answering to its old id (mergedIds), so
+// references nobody could rewrite (another side's lists, follows) still resolve.
+function hhById(id) { return S.households.find(h => h.id === id) || S.households.find(h => (h.mergedIds || []).includes(id)) || null; }
 
 function resolveMinisterHH(member) {
   if (!member) return null;
@@ -3746,6 +3749,79 @@ function deleteMember(id) {
   refreshBadge(); renderMembers(); renderBrothers(); renderHouseholds();
 }
 
+// ── Possible duplicate households (same address) ───────────────
+// Households whose addresses match (ignoring case, punctuation, ZIP+4; the
+// unit number counts) are offered for merging. Roommates are real separate
+// households, so nothing merges without a click, and "Not the same" remembers
+// the answer (hh.notDuplicate: ids).
+function dupAddrKey(a) { return looseKey(normalizeAddress(String(a || ''))); }
+function householdDupGroups() {
+  const by = new Map();
+  S.households.forEach(h => { const k = dupAddrKey(h.address); if (!k) return; (by.get(k) || by.set(k, []).get(k)).push(h); });
+  return [...by.values()].filter(g => g.length > 1).filter(g => {
+    // drop the group if every pair has been marked "not the same"
+    return g.some((a, i) => g.some((b, j) => j > i && !(a.notDuplicate || []).includes(b.id) && !(b.notDuplicate || []).includes(a.id)));
+  });
+}
+const _dupKeep = {};
+function renderHouseholdDupes() {
+  const el = document.getElementById('hh-dupes'); if (!el) return;
+  if (!canManageMembers()) { el.innerHTML = ''; return; }
+  const groups = householdDupGroups();
+  if (!groups.length) { el.innerHTML = ''; return; }
+  const people = h => S.members.filter(m => m.householdId === h.id).length || (h.members || []).length;
+  el.innerHTML = `<details class="card" style="margin-bottom:1.25rem;padding:0.9rem 1.25rem">
+    <summary style="cursor:pointer;font-weight:600;color:#1a3a5c">Same address, more than one household (${groups.length})</summary>
+    <p style="font-size:0.8rem;color:#888;margin:0.5rem 0">These may be the same family recorded twice, or roommates (separate households, which is fine).
+      Merging moves people, notes, goals, next steps, pools and assignments onto the household you keep.</p>
+    ${groups.map((g, gi) => { const key = dupAddrKey(g[0].address); const keep = _dupKeep[key] || g.slice().sort((a, b) => people(b) - people(a))[0].id;
+      return `<div style="border:1px solid #e0e6ed;border-radius:8px;padding:0.6rem 0.75rem;margin-bottom:0.6rem">
+        <div style="font-size:0.82rem;color:#555;margin-bottom:0.35rem">📍 ${esc(g[0].address)}</div>
+        ${g.map(h => `<label style="display:flex;gap:0.45rem;align-items:center;font-weight:400;font-size:0.86rem;margin:0.15rem 0">
+          <input type="radio" name="dupkeep-${gi}" style="width:auto" ${h.id === keep ? 'checked' : ''} onchange="_dupKeep['${esc(key)}']='${esc(h.id)}'">
+          <span><b>${esc(h.name)}</b> <span style="color:#888">· ${people(h)} ${people(h) === 1 ? 'person' : 'people'}${h.lat ? '' : ' · not geocoded'}</span></span></label>`).join('')}
+        <div style="display:flex;gap:0.4rem;margin-top:0.45rem;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="mergeHouseholdGroup('${esc(key)}')">Merge into the ticked one</button>
+          <button class="btn btn-secondary btn-sm" onclick="markNotDuplicate('${esc(key)}')">Not the same household</button></div></div>`; }).join('')}
+  </details>`;
+}
+function dupGroupByKey(key) { return householdDupGroups().find(g => dupAddrKey(g[0].address) === key) || null; }
+function markNotDuplicate(key) {
+  if (!memberEditGuard()) return;
+  const g = dupGroupByKey(key); if (!g) return;
+  g.forEach(h => { h.notDuplicate = [...new Set([...(h.notDuplicate || []), ...g.filter(x => x !== h).map(x => x.id)])]; });
+  dbUpsertHouseholds(S.households); renderHouseholds();
+}
+function mergeHouseholdGroup(key) {
+  if (!memberEditGuard()) return;
+  const g = dupGroupByKey(key); if (!g) return;
+  const keepId = _dupKeep[key] || g.slice().sort((a, b) => (S.members.filter(m => m.householdId === b.id).length) - (S.members.filter(m => m.householdId === a.id).length))[0].id;
+  const keep = g.find(h => h.id === keepId), gone = g.filter(h => h !== keep);
+  if (!confirm(`Merge ${gone.map(h => h.name).join(', ')} into ${keep.name}?\n\nTheir people, notes, goals, next steps, pools and assignments move to ${keep.name}, and ${gone.length === 1 ? 'that household is' : 'those households are'} removed.`)) return;
+  const goneIds = new Set(gone.map(h => h.id));
+  const better = (a, b) => (a === true || b === true) ? true : (a === 'maybe' || b === 'maybe') ? 'maybe' : (a ?? b);
+  gone.forEach(h => {
+    NOTE_FIELDS.forEach(f => { if ((h[f] || []).length) keep[f] = [...(keep[f] || []), ...h[f]].sort((x, y) => (Date.parse(x.date) || 0) - (Date.parse(y.date) || 0)); });
+    keep.members = [...new Set([...(keep.members || []), ...(h.members || [])])];
+    ['inPool', 'rsPool'].forEach(k => { const v = better(keep[k], h[k]); if (v !== undefined) keep[k] = v; });
+    if (h.partMember) keep.partMember = true;
+    if (!keep.lat && h.lat) { keep.lat = h.lat; keep.lng = h.lng; if (h.geoManual) keep.geoManual = true; }
+    ['phone', 'email', 'head'].forEach(k => { if (!keep[k] && h[k]) keep[k] = h[k]; });
+    addAltName(keep, h.name); (h.altNames || []).forEach(a => addAltName(keep, a));
+    keep.mergedIds = [...new Set([...(keep.mergedIds || []), h.id, ...(h.mergedIds || [])])];
+  });
+  S.members.forEach(m => { if (goneIds.has(m.householdId)) m.householdId = keep.id; });
+  // Lists this person may change point at the kept household; others still resolve via mergedIds.
+  const fix = list => (list || []).forEach(c => { if ((c.households || []).some(r => goneIds.has(r))) c.households = [...new Set(c.households.map(r => goneIds.has(r) ? keep.id : r))]; });
+  ['current', 'proposed', 'currentRS', 'proposedRS'].forEach(k => { if (canWriteKey(k)) fix(S[k]); });
+  (S.groups?.movein || []).forEach(e => { if (goneIds.has(e.householdId)) e.householdId = keep.id; });
+  S.households = S.households.filter(h => !goneIds.has(h.id));
+  delete _dupKeep[key];
+  dbUpsertHouseholds(S.households); dbUpsertMembers(S.members); dbUpsertGroups();
+  ['current', 'proposed', 'currentRS', 'proposedRS'].forEach(k => { if (canWriteKey(k)) dbUpsertCompanionships(k, S[k]); });
+  renderHouseholds(); renderMembers();
+}
+
 // ── Households Tab ─────────────────────────────────────────────
 // Sort orders for the Households list; ties fall back to the name.
 function householdSorter(by) {
@@ -3767,6 +3843,7 @@ function householdSorter(by) {
   return by1 || name;
 }
 function renderHouseholds() {
+  try { renderHouseholdDupes(); } catch (e) { console.warn('dupes', e); }
   const list = S.households;
   const q  = norm(document.getElementById('hh-search').value);
   const af = document.getElementById('hh-addr-filter').value;
