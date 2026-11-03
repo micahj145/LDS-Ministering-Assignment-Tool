@@ -577,6 +577,10 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
 - **Draft notifications** (`functions/drafts.js`, `notifyDrafts` + `notifyNoteChange`): a change to the brothers'
   draft (or a note on one of its companionships) → feed entry + push (throttled, `lastDraftPushAt`) to the other
   EQ presidency members (allowed-list role eq); sisters' draft → RS presidency. Text names only who acted.
+- **Households list**: Sort by (`householdSorter`: name A–Z / Z–A, address, city/ZIP, EQ pool, not geocoded first,
+  most people, latest note) and a "Not geocoded (has an address)" filter. **Hand-entered map location**: the
+  household editor takes coordinates or a Google Maps link (`parseLatLng`: "lat, lng", `@lat,lng`, `!3d…!4d…`,
+  `?q=`), sets `lat`/`lng` + `geoManual` (kept by Clear Cache; cleared when the address changes).
 - **Pools follow LCR**: after a ministering import, `poolFromCurrent()` puts everyone in the new Current In
   Pool — brothers: male ministers (`m.inPool`) and households (`hh.inPool`); sisters: female ministers
   (`m.rsPool`) and assignees (`m.rsRecipient`). Nothing is taken out of a pool.

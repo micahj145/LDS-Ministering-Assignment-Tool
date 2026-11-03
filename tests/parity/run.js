@@ -919,6 +919,34 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
     await flush(E);
     return { pass: o.cur && o.ghost === 1 && /Removed — in Current/.test(o.ghostText), obs: o };
   });
+  await check('round3', 'households: Not geocoded filter and Sort by', async () => {
+    const o = await ev(E, () => { showTab('households');
+      const rows = () => [...document.querySelectorAll('#households-table tbody tr')].map(r => r.id.replace('hrow-', ''));
+      const f = document.getElementById('hh-addr-filter'), so = document.getElementById('hh-sort');
+      f.value = 'not-geocoded'; renderHouseholds(); const notGeo = rows();
+      f.value = ''; so.value = 'name-desc'; renderHouseholds(); const desc = rows();
+      so.value = 'geo'; renderHouseholds(); const geo = rows();
+      so.value = 'name'; renderHouseholds(); const asc = rows();
+      const expectNot = S.households.filter(h => h.address && !h.lat).map(h => h.id).sort();
+      return { notGeo: [...notGeo].sort(), expectNot, descFirst: desc[0], ascLast: asc[asc.length - 1], geoFirst: geo[0], geoFirstOk: expectNot.includes(geo[0]) || !expectNot.length };
+    });
+    return { pass: o.notGeo.join() === o.expectNot.join() && o.descFirst === o.ascLast && o.geoFirstOk, obs: o };
+  });
+  await check('round3', 'households: map location pasted by hand (coordinates or a Google Maps link)', async () => {
+    const o = await ev(E, async () => {
+      const parsed = [parseLatLng('28.03456, -80.60123'), parseLatLng('https://www.google.com/maps/place/X/@28.0101,-80.6202,17z/data=!3d28.0105!4d-80.6207'), parseLatLng('hello')];
+      const h = S.households.find(x => !x.lat && x.address) || S.households[0];
+      openHHEditModal(h.id); document.getElementById('hh-edit-latlng').value = '27.9901, -80.6501'; await saveHHAddress(true);
+      const saved = { lat: h.lat, lng: h.lng, manual: h.geoManual };
+      const snap = S.households.map(x => [x, x.lat, x.lng]);
+      clearGeoCache(); const kept = h.lat === 27.9901;
+      snap.forEach(([x, la, ln]) => { if (la != null) { x.lat = la; x.lng = ln; } }); dbUpsertHouseholds(S.households);   // put the others back
+      return { parsed, saved, kept, id: h.id };
+    });
+    await flush(E);
+    const h = (await ward()).households.find(x => x.id === o.id);
+    return { pass: o.parsed[0]?.lat === 28.03456 && o.parsed[1]?.lat === 28.0105 && o.parsed[1]?.lng === -80.6207 && o.parsed[2] === null && h.lat === 27.9901 && h.lng === -80.6501 && h.geoManual === true && o.kept, obs: o };
+  });
   await check('round3', 'unmatched name: pick a household → linked and remembered for next import', async () => {
     const mk = async () => {
       const cell = 'padding:2px 0 2px 2px;vertical-align:middle;font:10px Arial';
