@@ -8,6 +8,7 @@ test('draftSides: only the drafts that changed', () => {
   assert.deepStrictEqual(draftSides(a, { ...a, proposed: [{ id: 'p1', households: ['h1'] }] }), ['eq']);
   assert.deepStrictEqual(draftSides(a, { ...a, proposedRS: [{ id: 'r' }] }), ['rs']);
   assert.deepStrictEqual(draftSides({ proposed: [{ id: 'p1', notes: [{ id: 'n' }] }] }, { proposed: [{ id: 'p1' }] }), [], 'notes moving out of the document');
+  assert.deepStrictEqual(draftSides({}, { draftDistrictsRS: [{ name: 'D4' }] }), ['rs'], 'draft districts');
 });
 
 test('draftNoteSide: new or edited draft notes only', () => {

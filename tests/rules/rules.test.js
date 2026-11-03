@@ -9,8 +9,10 @@ const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@fir
 const { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } = require('firebase/firestore');
 
 const RULES = fs.readFileSync(path.join(__dirname, '..', '..', 'firestore.rules'), 'utf8');
-const FINAL = RULES.replace('function finalRules() { return false; }', 'function finalRules() { return true; }');
-assert.notStrictEqual(RULES, FINAL, 'finalRules() switch not found');
+// Whichever way the file is set now (step 2 is live since Nov 2026), test both.
+const RULES_STEP1 = RULES.replace('function finalRules() { return true; }', 'function finalRules() { return false; }');
+const FINAL = RULES_STEP1.replace('function finalRules() { return false; }', 'function finalRules() { return true; }');
+assert.notStrictEqual(RULES_STEP1, FINAL, 'finalRules() switch not found');
 const [host, port] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').split(':');
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -53,7 +55,7 @@ const note = (who, target) => ({ text: 'hello', author: who, authorId: people[wh
 let finalEnv, step1Env;
 test.before(async () => {
   finalEnv = await initializeTestEnvironment({ projectId: 'demo-rules-final', firestore: { rules: FINAL, host, port: +port } });
-  step1Env = await initializeTestEnvironment({ projectId: 'demo-rules-step1', firestore: { rules: RULES, host, port: +port } });
+  step1Env = await initializeTestEnvironment({ projectId: 'demo-rules-step1', firestore: { rules: RULES_STEP1, host, port: +port } });
 });
 test.after(async () => { await finalEnv?.cleanup(); await step1Env?.cleanup(); });
 
@@ -123,6 +125,11 @@ test('final: ward data by role', async t => {
     // Temporary sisters' setup: the admin may change the sisters' lists; another EQ member may not.
     await assertSucceeds(wardUpd(as(env, 'admin'), 'admin', { currentRS: [{ id: 'a' }], 'importMeta.ministering-rs': { at: 'x', by: 'A' } }));
     await assertFails(wardUpd(E, 'eq', { proposedRS: [{ id: 'x' }] }));
+    // Draft districts: brothers' by EQ, sisters' by RS; council neither.
+    await assertSucceeds(wardUpd(E, 'eq', { draftDistricts: [{ name: 'D9', leaderId: null, leader: '' }] }));
+    await assertFails(wardUpd(E, 'eq', { draftDistrictsRS: [{ name: 'D9' }] }));
+    await assertSucceeds(wardUpd(R, 'rs', { draftDistrictsRS: [{ name: 'D9' }] }));
+    await assertFails(wardUpd(C, 'council', { draftDistricts: [{ name: 'D8' }] }));
   });
   await t.test('council: not members, households, identifiers, assignments, move-ins', async () => {
     for (const f of ['members', 'households', 'current', 'proposed', 'currentRS', 'proposedRS'])

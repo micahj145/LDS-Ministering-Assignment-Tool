@@ -947,6 +947,27 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
     const h = (await ward()).households.find(x => x.id === o.id);
     return { pass: o.parsed[0]?.lat === 28.03456 && o.parsed[1]?.lat === 28.0105 && o.parsed[1]?.lng === -80.6207 && o.parsed[2] === null && h.lat === 27.9901 && h.lng === -80.6501 && h.geoManual === true && o.kept, obs: o };
   });
+  await check('round3', 'draft districts: add one with a leader, rename one, delete one', async () => {
+    const o = await ev(E, async () => {
+      window.confirm = () => true; S.proposed = []; await copyCurrentToProposed();
+      showTab('propose'); openDistrictsModal('proposed');
+      const before = _ddCtx.rows.map(r => r.name);
+      _ddCtx.rows[0].name = 'District One';                      // rename District 1
+      _ddCtx.rows.splice(1, 1);                                  // delete District 2
+      _ddCtx.rows.push({ name: 'District 4', orig: '', leaderId: 'm7', origLeaderId: '' });
+      saveDistricts();
+      const heads = [...document.querySelectorAll('#proposed-list .district-head')].map(h => h.innerText);
+      const summary = document.getElementById('diff-summary-proposed').innerText;
+      const d1 = S.proposed.filter(c => c.district === 'District One').length, none = S.proposed.filter(c => !c.district).length;
+      openEditModal(S.proposed[0].id, 'proposed'); const opts = [...document.querySelectorAll('#edit-district option')].map(x => x.value); closeModal('edit-modal');
+      return { before, heads, summary, d1, none, opts, dd: S.draftDistricts };
+    });
+    await flush(E);
+    const w = await ward();
+    return { pass: o.before.join() === 'District 1,District 2' && o.d1 === 1 && o.none === 2 && o.opts.join() === ',District One,District 4'
+        && /\+ 🗺️ District 4 · Moreau, Jules/.test(o.summary) && /− 🗺️ District 2/.test(o.summary) && (w.draftDistricts || []).map(d => d.name).join() === 'District One,District 4'
+        && o.heads.some(h => /No district/.test(h)), obs: o };
+  });
   await check('round3', 'unmatched name: pick a household → linked and remembered for next import', async () => {
     const mk = async () => {
       const cell = 'padding:2px 0 2px 2px;vertical-align:middle;font:10px Arial';

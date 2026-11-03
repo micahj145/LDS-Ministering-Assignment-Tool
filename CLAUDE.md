@@ -541,7 +541,7 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   its adult sisters. Find nearby (RS) = households of receives-pool sisters.
 - **Temporary**: `ADMIN_RS_SETUP` (app) + `adminRsSetup()` (rules) let the admin import/edit the sisters'
   lists during the initial setup. Micah will turn both off afterwards.
-- **Districts**: come only from LCR (Current lists); the tool never makes or removes one. `compSearchRender`
+- **Districts**: Current's come only from LCR; a draft's can be changed (see Draft districts below). `compSearchRender`
   groups every list by district (`districtGroups`: Current's LCR order, then draft-only names, then "No
   district") with a `.district-head`; ▲▼ get the position within the district and `moveCompanionship`
   swaps only with the next one in the same district. Drafts: a District picker in the brother add/edit and
@@ -581,6 +581,12 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   most people, latest note) and a "Not geocoded (has an address)" filter. **Hand-entered map location**: the
   household editor takes coordinates or a Google Maps link (`parseLatLng`: "lat, lng", `@lat,lng`, `!3d…!4d…`,
   `?q=`), sets `lat`/`lng` + `geoManual` (kept by Clear Cache; cleared when the address changes).
+- **Draft districts** (Nov 3): `S.draftDistricts` / `S.draftDistrictsRS` = `[{ name, leaderId, leader }]` (null = use
+  Current's). "Districts…" on the Draft tabs (`openDistrictsModal` / `saveDistricts`): add, rename (companionships
+  follow), delete (they become No district), leader from members 18+ of that side. `districtsFor()` returns the
+  draft's list; `currentDistricts()` LCR's. `districtDiffHTML()` adds district differences to the summary. Copy to
+  Draft resets them. Rules: eq writes `draftDistricts`, rs `draftDistrictsRS` (+ admin during the RS setup);
+  drafts.js counts them as a draft change. Tests now force each rules phase whatever `finalRules()` says (step 2 is live).
 - **Pools follow LCR**: after a ministering import, `poolFromCurrent()` puts everyone in the new Current In
   Pool — brothers: male ministers (`m.inPool`) and households (`hh.inPool`); sisters: female ministers
   (`m.rsPool`) and assignees (`m.rsRecipient`). Nothing is taken out of a pool.

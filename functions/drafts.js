@@ -11,7 +11,11 @@ function draftSides(before, after) {
   const B = before || {}, A = after || {};
   // Notes inside records (only ever there before notes had their own collection) don't count.
   const plain = list => JSON.stringify((list || []).map(c => { const { notes, goals, nextSteps, ...rest } = c || {}; return rest; }));
-  return Object.keys(SIDE_OF).filter(k => plain(B[k]) !== plain(A[k])).map(k => SIDE_OF[k]);
+  const sides = Object.keys(SIDE_OF).filter(k => plain(B[k]) !== plain(A[k])).map(k => SIDE_OF[k]);
+  // A draft's own districts (added, renamed, removed, new leader) count too.
+  [['draftDistricts', 'eq'], ['draftDistrictsRS', 'rs']].forEach(([k, side]) => {
+    if (JSON.stringify(B[k] ?? null) !== JSON.stringify(A[k] ?? null) && !sides.includes(side)) sides.push(side); });
+  return sides;
 }
 
 // A note written or changed on a draft companionship → its side, else null.

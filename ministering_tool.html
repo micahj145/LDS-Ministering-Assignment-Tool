@@ -223,6 +223,9 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 .hh-contact { white-space:nowrap; font-size:0.78rem; margin-left:0.25rem; }
 .person-link { cursor:pointer; border-bottom:1px dotted #9bb0c7; }
 .person-link:hover { color:#1a5c9c; border-bottom-style:solid; }
+.dd-row { display:grid; grid-template-columns:1fr 1fr auto; gap:0.4rem; align-items:center; margin-bottom:0.5rem; }
+.dd-row input, .dd-row select { padding:0.4rem 0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.86rem; min-width:0; }
+.dd-note { grid-column:1 / -1; font-size:0.74rem; color:#888; margin-top:-0.25rem; }
 </style>
 </head>
 <body>
@@ -906,6 +909,20 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
   </div>
 </div>
 
+<!-- A draft's districts -->
+<div class="modal-overlay" id="dd-modal">
+  <div class="modal" style="max-width:560px">
+    <h3>Districts in this draft</h3>
+    <p style="font-size:0.8rem;color:#888;margin:-0.5rem 0 0.8rem">Name each district and choose who leads it. Current keeps LCR's districts;
+      differences show above the draft so they can be made in LCR.</p>
+    <div id="dd-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('dd-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveDistricts()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Match a draft companionship to Current -->
 <div class="modal-overlay" id="match-modal">
   <div class="modal">
@@ -1319,7 +1336,7 @@ function dbFail(error) {
 
 // ── Notes, split out of the ward document ─────────────────────
 const NOTE_FIELDS = ['notes', 'goals', 'nextSteps'];
-const WARD_KEYS = ['members', 'households', 'current', 'proposed', 'currentRS', 'proposedRS', 'users', 'identMeta'];   // importMeta is saved per entry: 'importMeta.<key>'
+const WARD_KEYS = ['members', 'households', 'current', 'proposed', 'currentRS', 'proposedRS', 'users', 'identMeta', 'draftDistricts', 'draftDistrictsRS'];   // importMeta is saved per entry: 'importMeta.<key>'
 // Bumped when the stored format changes. firestore.rules refuses saves from an
 // older copy of the app (one left open in a tab), which would otherwise put
 // notes back into the ward document.
@@ -1387,6 +1404,7 @@ function cloudShape() {
     members: S.members, households: S.households, current: S.current, proposed: S.proposed,
     currentRS: S.currentRS || [], proposedRS: S.proposedRS || [],
     groups: normalizeGroups(S.groups), users: S.users || [], identMeta: S.identMeta || {}, importMeta: S.importMeta || {},
+    draftDistricts: S.draftDistricts ?? null, draftDistrictsRS: S.draftDistrictsRS ?? null,
   }));
   const notes = splitNotes(d);
   const ward = {};
@@ -1508,7 +1526,7 @@ function revertWardKeys(keys) {
     const v = JSON.parse(raw);
     if (k.startsWith('groups.')) { S.groups = S.groups || {}; S.groups[k.slice(7)] = v || []; }
     else if (k.startsWith('importMeta.')) { S.importMeta = { ...(S.importMeta || {}) }; if (v) S.importMeta[k.slice(11)] = v; else delete S.importMeta[k.slice(11)]; }
-    else S[k] = v ?? (k === 'identMeta' ? {} : []);
+    else S[k] = v ?? (k === 'identMeta' ? {} : k.startsWith('draftDistricts') ? null : []);
   });
   S.groups = normalizeGroups(S.groups);
   const sub = { groups: {} };
@@ -1555,6 +1573,8 @@ async function loadAllData() {
   S.groups      = normalizeGroups(data.groups);
   S.users       = Array.isArray(data.users) ? data.users : [];
   S.identMeta   = data.identMeta && typeof data.identMeta === 'object' ? data.identMeta : {};
+  S.draftDistricts   = Array.isArray(data.draftDistricts) ? data.draftDistricts : null;
+  S.draftDistrictsRS = Array.isArray(data.draftDistrictsRS) ? data.draftDistrictsRS : null;
   S.importMeta  = data.importMeta && typeof data.importMeta === 'object' ? data.importMeta : {};
   try { renderImportLast(); } catch (e) {}
 
@@ -2643,8 +2663,8 @@ function canWriteKey(k) {
   if (k === 'users') return true;
   if (k.startsWith('importMeta.')) return canRecordImport(k.slice(11));
   if (k.startsWith('groups.')) return COUNCIL_GROUPS.includes(k.slice(7)) || canManageMembers();
-  if (k === 'current' || k === 'proposed') return canEditEQ();
-  if (k === 'currentRS' || k === 'proposedRS') return canEditRS();
+  if (k === 'current' || k === 'proposed' || k === 'draftDistricts') return canEditEQ();
+  if (k === 'currentRS' || k === 'proposedRS' || k === 'draftDistrictsRS') return canEditRS();
   if (k === 'members' || k === 'households') return canManageMembers();
   return canEditWard();     // identMeta
 }
@@ -4059,6 +4079,7 @@ async function copyCurrentToProposed() {
   const bList = brothers();
   const hhLookup = new Map(S.households.map(h => [norm(h.name), h.id]));
 
+  S.draftDistricts = null;   // the copy starts again from Current's (LCR's) districts
   S.proposed = S.current.map(c => {
     const m1 = bList.find(b => norm(b.name)===norm(c.m1Name));
     const m2 = c.m2Name ? bList.find(b => norm(b.name)===norm(c.m2Name)) : null;
@@ -8961,6 +8982,7 @@ async function copyRSToDraft() {
   if (!canEditRS()) return;
   if (!S.currentRS.length) { alert('No current sister assignments to copy.'); return; }
   if (S.proposedRS.length && !confirm(`Replace the draft (${S.proposedRS.length} companionships) with a copy of Current?`)) return;
+  S.draftDistrictsRS = null;
   S.proposedRS = S.currentRS.map(rsCopy);
   await dbReplaceCompanionshipList('proposedRS', S.proposedRS); showTab('proposeRS');
 }
@@ -9824,6 +9846,11 @@ function withDiff(html, info) {
 }
 function renderDiffSummary(key, diff) {
   const el = document.getElementById('diff-summary-' + key); if (!el) return;
+  const manage = canEditList(key) ? ` <button type="button" class="btn btn-secondary btn-sm" style="padding:0.1rem 0.55rem;font-size:0.76rem" onclick="openDistrictsModal('${key}')">Districts…</button>` : '';
+  const after = () => { el.innerHTML += manage + districtDiffHTML(key); };
+  try { return renderDiffSummaryInner(key, diff, el); } finally { after(); }
+}
+function renderDiffSummaryInner(key, diff, el) {
   const cur = S[DRAFT_OF[key]] || [];
   if (!cur.length) { el.innerHTML = '<span style="color:#888">Nothing in Current to compare with yet.</span>'; return; }
   const n = { new: 0, changed: 0, same: 0 }; diff.byId.forEach(v => n[v.status]++);
@@ -9833,14 +9860,23 @@ function renderDiffSummary(key, diff) {
 }
 
 // ── Districts ────────────────────────────────────────────────
-// Districts come only from LCR (the Current lists); the tool never creates or
-// removes one. Lists are shown grouped by district — Current in LCR's order,
+// Current's districts come only from LCR. A draft's can be added, renamed,
+// removed and given a leader (Districts… on the Draft tabs; see DD_KEY). Lists are shown grouped by district — Current in LCR's order,
 // drafts in their saved order — and ▲▼ only move a companionship within its
 // district. A draft's district can be changed to any district Current has.
 const CURRENT_OF = { current: 'current', proposed: 'current', currentRS: 'currentRS', proposedRS: 'currentRS' };
-function districtsFor(listKey) {   // [{ name, leader }] in LCR's order
+// Current's districts come from LCR. A draft starts with the same ones and the
+// presidency can add, rename or remove districts and choose who leads each
+// (S.draftDistricts / S.draftDistrictsRS = [{ name, leaderId, leader }]; null =
+// not changed yet, so the draft simply uses Current's).
+const DD_KEY = { proposed: 'draftDistricts', proposedRS: 'draftDistrictsRS' };
+function currentDistricts(listKey) {   // [{ name, leader }] in LCR's order
   const out = []; (S[CURRENT_OF[listKey]] || []).forEach(c => { if (c.district && !out.some(d => d.name === c.district)) out.push({ name: c.district, leader: c.districtLeader || '' }); });
   return out;
+}
+function districtsFor(listKey) {
+  const dd = DD_KEY[listKey] && S[DD_KEY[listKey]];
+  return Array.isArray(dd) ? dd.map(d => ({ ...d, leader: d.leaderId ? (S.members.find(m => m.id === d.leaderId)?.name || d.leader || '') : (d.leader || '') })) : currentDistricts(listKey);
 }
 function districtGroups(listKey, list) {
   const order = districtsFor(listKey).map(d => d.name);
@@ -9862,12 +9898,74 @@ function setDraftDistrict(rec, listKey, name) {
 function districtOptionsHTML(listKey, sel) {
   const ds = districtsFor(listKey);
   return `<option value="">No district</option>` + ds.map(d => `<option value="${esc(d.name)}" ${d.name === sel ? 'selected' : ''}>${esc(d.name)}${d.leader && d.leader !== 'Unassigned' ? ' · ' + esc(d.leader) : ''}</option>`).join('')
-    + (sel && !ds.some(d => d.name === sel) ? `<option value="${esc(sel)}" selected>${esc(sel)} (no longer in LCR)</option>` : '');
+    + (sel && !ds.some(d => d.name === sel) ? `<option value="${esc(sel)}" selected>${esc(sel)} (removed)</option>` : '');
 }
 function fillDistrictSelect(id, listKey, sel) {
   const el = document.getElementById(id); if (!el) return;
   el.innerHTML = districtOptionsHTML(listKey, sel);
   el.closest('.form-group').style.display = districtsFor(listKey).length || sel ? '' : 'none';
+}
+
+// ── Manage a draft's districts ──────────────────────────────
+let _ddCtx = null;
+function openDistrictsModal(listKey) {
+  if (!canEditList(listKey)) return;
+  _ddCtx = { listKey, rows: districtsFor(listKey).map(d => { const id = d.leaderId || memByLcrName(d.leader || '')?.id || ''; return { name: d.name, orig: d.name, leaderId: id, origLeaderId: id, leader: d.leader || '' }; }) };
+  renderDistrictsModal();
+  document.getElementById('dd-modal').classList.add('open');
+}
+function ddLeaderOptions(sel, side) {
+  const pool = S.members.filter(m => side === 'rs' ? isFemale(m.gender) : !isFemale(m.gender)).filter(m => !m.age || m.age >= 18).sort((a, b) => a.name.localeCompare(b.name));
+  const extra = sel && !pool.some(m => m.id === sel) ? S.members.filter(m => m.id === sel) : [];
+  return `<option value="">— No one yet —</option>` + [...extra, ...pool].map(m => `<option value="${esc(m.id)}" ${m.id === sel ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
+}
+function renderDistrictsModal() {
+  const c = _ddCtx; if (!c) return;
+  const side = c.listKey === 'proposedRS' ? 'rs' : 'eq';
+  const used = n => (S[c.listKey] || []).filter(x => (x.district || '') === n).length;
+  document.getElementById('dd-body').innerHTML = (c.rows.length ? c.rows.map((r, i) => `
+    <div class="dd-row">
+      <input type="text" value="${esc(r.name)}" placeholder="District name" oninput="_ddCtx.rows[${i}].name=this.value">
+      <select onchange="_ddCtx.rows[${i}].leaderId=this.value">${ddLeaderOptions(r.leaderId, side)}</select>
+      <button type="button" class="btn btn-secondary btn-sm" title="Delete this district" onclick="ddDelete(${i})">✕</button>
+      <div class="dd-note">${r.orig ? `${used(r.orig)} companionship${used(r.orig) === 1 ? '' : 's'}` : 'new'}${r.leader && !r.leaderId ? ` · LCR: ${esc(r.leader)}` : ''}</div>
+    </div>`).join('') : '<p style="color:#888;font-size:0.85rem">No districts yet.</p>')
+    + `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:0.5rem" onclick="_ddCtx.rows.push({ name: '', orig: '', leaderId: '' });renderDistrictsModal()">+ New district</button>`;
+}
+function ddDelete(i) {
+  const r = _ddCtx.rows[i], n = (S[_ddCtx.listKey] || []).filter(x => r.orig && x.district === r.orig).length;
+  if (n && !confirm(`Delete ${r.orig || 'this district'}? Its ${n} companionship${n === 1 ? '' : 's'} will have no district until you give ${n === 1 ? 'it' : 'them'} one.`)) return;
+  _ddCtx.rows.splice(i, 1); renderDistrictsModal();
+}
+function saveDistricts() {
+  const c = _ddCtx; if (!c || !canEditList(c.listKey)) return;
+  const rows = c.rows.map(r => ({ ...r, name: r.name.trim() }));
+  if (rows.some(r => !r.name)) { alert('Give every district a name (or delete it).'); return; }
+  const names = rows.map(r => r.name.toLowerCase());
+  if (new Set(names).size !== names.length) { alert('Two districts have the same name.'); return; }
+  // A leader LCR named who isn't in Members (or "Unassigned") stays as text unless someone was picked.
+  const list = rows.map(r => { const m = S.members.find(x => x.id === r.leaderId);
+    return { name: r.name, leaderId: m ? m.id : null, leader: m ? m.name : (!r.leaderId && !r.origLeaderId ? r.leader || '' : '') }; });
+  // Companionships follow renames, lose deleted districts, and show the new leaders.
+  const byOrig = new Map(rows.filter(r => r.orig).map((r, i) => [r.orig, list[rows.indexOf(r)]]));
+  (S[c.listKey] || []).forEach(x => {
+    if (!x.district) return;
+    const d = byOrig.get(x.district);
+    if (!d) { delete x.district; delete x.districtLeader; return; }
+    x.district = d.name; if (d.leader) x.districtLeader = d.leader; else delete x.districtLeader;
+  });
+  S[DD_KEY[c.listKey]] = list;
+  dbUpsertCompanionships(c.listKey, S[c.listKey]);
+  _ddCtx = null; closeModal('dd-modal');
+  if (c.listKey === 'proposed') renderProposed(); else renderProposedRS();
+}
+// One line comparing a draft's districts with Current's (for the summary).
+function districtDiffHTML(listKey) {
+  const cur = currentDistricts(listKey), dr = districtsFor(listKey), out = [];
+  dr.forEach(d => { const c = cur.find(x => x.name === d.name); if (!c) out.push(`<span class="diff-chip add">+ 🗺️ ${esc(d.name)}${d.leader ? ' · ' + esc(d.leader) : ''}</span>`);
+    else if ((c.leader || '') !== (d.leader || '') && !(normNameKey(c.leader || '') === normNameKey(d.leader || ''))) out.push(`<span class="diff-chip">🗺️ ${esc(d.name)} leader: ${esc(c.leader || 'none')} → ${esc(d.leader || 'none')}</span>`); });
+  cur.forEach(c => { if (!dr.some(d => d.name === c.name)) out.push(`<span class="diff-chip rem">− 🗺️ ${esc(c.name)}</span>`); });
+  return out.length ? `<div class="diff-bar" style="margin-top:0.35rem">Districts: ${out.join('')}</div>` : '';
 }
 
 // cardFn(c, idx, total): idx/total are the position within the district

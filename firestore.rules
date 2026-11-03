@@ -12,7 +12,7 @@
 //   4. Their email is verified.
 // What they can change depends on their role on the allowed list:
 //   eq / rs (EQ or RS presidency): member, household, move-in/out, identifier
-//     and unit data; eq the brother assignment lists, rs the sister lists.
+//     and unit data; eq the brother assignment lists (and the brothers' draft districts), rs the sister lists.
 //   bishopric: as council, plus member, household and move-in/out data.
 //   council (everyone else): notes, goals, next steps, Covenant Path Progress
 //     (groups new / returning / mission), the tag directory, their own
@@ -133,8 +133,8 @@ service cloud.firestore {
       return ['users', 'activityLog', 'updatedAt', 'updatedBy', 'updatedByUid', 'clientVersion', 'groups', 'importMeta']
         .concat(r in ['eq', 'rs', 'bishopric'] ? ['members', 'households'] : [])
         .concat(r in ['eq', 'rs'] ? ['identMeta'] : [])
-        .concat(r == 'eq' ? ['current', 'proposed'] : [])
-        .concat(r == 'rs' ? ['currentRS', 'proposedRS'] : []);
+        .concat(r == 'eq' ? ['current', 'proposed', 'draftDistricts'] : [])
+        .concat(r == 'rs' ? ['currentRS', 'proposedRS', 'draftDistrictsRS'] : []);
     }
     function groupKeysFor(r) {
       return r in ['eq', 'rs', 'bishopric'] ? ['new', 'returning', 'mission', 'movein', 'moveout'] : ['new', 'returning', 'mission'];
@@ -143,7 +143,7 @@ service cloud.firestore {
     // sisters' lists. Set to false — with ADMIN_RS_SETUP in ministering_tool.html —
     // once Current and the draft are in.
     function adminRsSetup() { return true; }
-    function adminRsKeys() { return adminRsSetup() && access().get('admin', false) == true ? ['currentRS', 'proposedRS'] : []; }
+    function adminRsKeys() { return adminRsSetup() && access().get('admin', false) == true ? ['currentRS', 'proposedRS', 'draftDistrictsRS'] : []; }
 
     // importMeta.<key> = { at, by, count }: who last ran each import. Each line
     // belongs to whoever may run that import.
