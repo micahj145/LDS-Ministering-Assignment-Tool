@@ -968,6 +968,12 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
         && /\+ 🗺️ District 4 · Moreau, Jules/.test(o.summary) && /− 🗺️ District 2/.test(o.summary) && (w.draftDistricts || []).map(d => d.name).join() === 'District One,District 4'
         && o.heads.some(h => /No district/.test(h)), obs: o };
   });
+  await check('round3', 'a brother already in a companionship can be picked for another', async () => {
+    const o = await ev(E, () => { showTab('propose'); const taken = ministersOf(S.proposed.find(c => c.m1Id) || {})[0]?.id;
+      openAddModal('proposed'); const opt = [...document.getElementById('add-m1').options].find(x => x.value === taken);
+      closeModal('add-modal'); return { taken, listed: !!opt, text: opt?.text || '' }; });
+    return { pass: !!o.taken && o.listed && /already in \d/.test(o.text), obs: o };
+  });
   await check('round3', 'unmatched name: pick a household → linked and remembered for next import', async () => {
     const mk = async () => {
       const cell = 'padding:2px 0 2px 2px;vertical-align:middle;font:10px Arial';

@@ -587,6 +587,8 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   draft's list; `currentDistricts()` LCR's. `districtDiffHTML()` adds district differences to the summary. Copy to
   Draft resets them. Rules: eq writes `draftDistricts`, rs `draftDistrictsRS` (+ admin during the RS setup);
   drafts.js counts them as a draft change. Tests now force each rules phase whatever `finalRules()` says (step 2 is live).
+- **Brothers in more than one companionship**: `populateBrotherSelects` no longer hides brothers already assigned;
+  they're listed after the unassigned ones as "— already in N".
 - **Pools follow LCR**: after a ministering import, `poolFromCurrent()` puts everyone in the new Current In
   Pool — brothers: male ministers (`m.inPool`) and households (`hh.inPool`); sisters: female ministers
   (`m.rsPool`) and assignees (`m.rsRecipient`). Nothing is taken out of a pool.

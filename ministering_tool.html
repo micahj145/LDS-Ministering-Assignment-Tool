@@ -4271,13 +4271,16 @@ function populateBrotherSelects(m1SelId, m2SelId, selM1, selM2, selM2Name, exclu
       sel.appendChild(sep);
     }
 
-    bList.forEach(b => {
+    // A brother can be in more than one companionship: those already assigned
+    // stay pickable, listed after the unassigned ones with how many they're in.
+    const inCount = id => (S[_modalListKey] || []).filter(c => c.id !== excludeId && ministersOf(c).some(m => m.id === id)).length;
+    [...bList].sort((a, b) => (pm.has(a.id) - pm.has(b.id)) || a.name.localeCompare(b.name)).forEach(b => {
       if (i===1 && b.id===curM1) return;
-      if (pm.has(b.id) && b.id!==selM1 && b.id!==selM2) return;
       const hh = memberHousehold(b);
       const o = document.createElement('option');
       o.value = b.id;
-      o.textContent = b.name + (hh?` (${hh.name})`:'');
+      const n = pm.has(b.id) ? inCount(b.id) : 0;
+      o.textContent = b.name + (hh?` (${hh.name})`:'') + (n ? ` — already in ${n}` : '');
       if ((i===0 && b.id===selM1)||(i===1 && b.id===selM2)) o.selected=true;
       sel.appendChild(o);
     });
