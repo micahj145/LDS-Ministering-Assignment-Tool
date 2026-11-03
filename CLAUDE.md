@@ -22,13 +22,9 @@ within a minute or so — that's how the ward team gets updates.
   inside the record it belongs to. Saved to Firestore (see below) by `runSync()`, which writes
   only what changed: the changed top-level keys of `wardData/shared` and the changed notes in
   `notes/{id}`.
-- **Import**: CSV upload for Households, then Members (that order — households first means the
-  member import can link people to a household immediately), with column-mapping UI. Re-imports
-  are a non-destructive merge/sync (adds new, updates existing, confirms before removing anyone
-  missing from the file) — not a wipe-and-replace. There was a third Assignments CSV import; it
-  was never used and was removed, since assignments are built in the app (Proposed → Promote, or
-  "+ Add") and that import replaced Current Assignments wholesale. It was the only writer of the
-  optional `district` field, which older companionships may still carry and still display.
+- **Import**: LCR's Member List printed to PDF (Members view, then Households view), reviewed before
+  saving — see "Member List PDFs" below. The CSV import and the session-file export/load were removed
+  (Nov 2026); data lives in Firestore (with its own backups), so nothing is exported as a whole file.
 - **Geocoding** (card on the Households tab since Nov 2026; it was on the brothers' Draft tab): household addresses are geocoded via Nominatim (OpenStreetMap), rate-limited to
   ~1 req/sec, cached in `S.households[].lat/lng`. Used to compute minister-to-minister and
   minister-to-household distances shown on companionship cards.
@@ -52,9 +48,6 @@ within a minute or so — that's how the ward team gets updates.
   the app, `importKeysFor()` in the rules: cp-* everyone; members/households/moves eq/rs/bishopric;
   ministering-eq eq; ministering-rs rs). Identifiers (`identMeta`), Unit Statistics and the callings
   check already recorded their own.
-- **Session export/import**: a "Share / Collaborate" panel can still export the whole `S` object
-  as a dated JSON file and load it back in — kept as a standing manual backup/portability option
-  even though it's no longer the primary sync mechanism (see below).
 
 ## Backend: Firebase (Auth + Firestore)
 
@@ -516,7 +509,7 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   assignees → their households; RS: assignees stay individuals (RS households kept from before).
 
 ### Nov 2026: LCR PDFs for members/households, sisters model, interviews, contacts
-- **Member List PDFs** (Import tab, top card; CSV import kept under a fold): LCR's `…/mlt/records/member-list`
+- **Member List PDFs** (Import tab; the only member/household import since the CSV one was removed): LCR's `…/mlt/records/member-list`
   printed in the Members view (`parseMemberListPdf`: rows anchored on the Gender cell, wrapped names join the
   nearest row) and the Households view — a setting on the same page (`parseHouseholdListPdf`: household
   name = the bold font of the first Name-column entry, phone/address lines plain; people anchored on

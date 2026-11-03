@@ -418,6 +418,8 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
 
 <!-- IMPORT TAB -->
 <div id="tab-import" class="tab-content active">
+  <div class="alert alert-info member-viewonly" style="display:none">Members and households are imported from LCR by the EQ and RS presidencies
+    and the bishopric. Use the <b>Go to</b> menu (or the tabs) to find Members, Households, Covenant Path Progress and the rest.</div>
   <div class="card member-edit">
     <h2 style="margin:0 0 0.5rem">Members and Households from LCR</h2>
     <p style="font-size:0.82rem;color:#888;margin:0 0 0.7rem">Tap <strong>Fetch/Print/Download</strong> to open LCR's Member List, choose the Members (or Households) view,
@@ -441,105 +443,10 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
       </div>
     </div>
     <div id="rec-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
+    <div id="member-link-status" class="link-bar" style="display:none"></div>
     <div id="rec-review"></div>
   </div>
 
-  <details class="card">
-  <summary style="cursor:pointer;font-weight:600;color:#1a3a5c">Or import CSV files (the older way)</summary>
-  <div class="alert alert-info" style="margin-top:0.7rem">
-    Export your ward data from <strong>lcr.churchofjesuschrist.org</strong> as separate CSV files and upload them here.
-  </div>
-
-  <!-- Households first, then Members: importing households first means the
-       member import can link people to their household straight away. -->
-  <div class="two-col">
-
-    <!-- Households -->
-    <div class="card">
-      <h2>1. Households CSV</h2>
-      <div class="drop-zone member-edit" id="hh-drop" onclick="document.getElementById('hh-file').click()">
-        <input type="file" id="hh-file" accept=".csv" onchange="handleHouseholdsFile(this.files[0])">
-        <div class="icon">🏠</div>
-        <strong>Click or drag to upload</strong>
-        <div style="font-size:0.82rem;margin-top:0.3rem">Household directory from LCR</div>
-      </div>
-      <div id="hh-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
-
-      <div id="hh-mapping" style="display:none;margin-top:1rem">
-        <div style="font-size:0.88rem;font-weight:600;color:#333;margin-bottom:0.6rem">Map Columns</div>
-        <div class="mapping-grid">
-          <label>Household Name *</label><select id="map-hh-name"></select>
-          <label>Members</label><select id="map-hh-members"></select>
-          <label>Head of Household</label><select id="map-hh-head"></select>
-          <label>Address</label><select id="map-hh-addr"></select>
-          <label>Phone</label><select id="map-hh-phone"></select>
-          <label>Email</label><select id="map-hh-email"></select>
-        </div>
-        <div style="font-size:0.78rem;color:#888;margin-top:0.5rem">
-          The Members column may contain multiple names separated by line breaks — the app handles this automatically.
-        </div>
-        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importHouseholds()">Import / Sync Households</button>
-        <div class="import-last" data-imp="households-csv"></div>
-        <div style="font-size:0.76rem;color:#888;margin-top:0.5rem">Merges with your current list: adds new households, refreshes existing ones (notes &amp; geocoding kept), warns before a changed address drops coordinates, and asks before removing any missing from the file.</div>
-      </div>
-      <div id="hh-link-status" class="link-bar" style="display:none"></div>
-    </div>
-
-    <!-- Members -->
-    <div class="card">
-      <h2>2. Members CSV</h2>
-      <div class="drop-zone member-edit" id="member-drop" onclick="document.getElementById('member-file').click()">
-        <input type="file" id="member-file" accept=".csv" onchange="handleMemberFile(this.files[0])">
-        <div class="icon">👤</div>
-        <strong>Click or drag to upload</strong>
-        <div style="font-size:0.82rem;margin-top:0.3rem">Individual member list from LCR</div>
-      </div>
-      <div id="member-status" style="margin-top:0.6rem;font-size:0.85rem;color:#555"></div>
-
-      <div id="member-mapping" style="display:none;margin-top:1rem">
-        <div style="font-size:0.88rem;font-weight:600;color:#333;margin-bottom:0.6rem">Map Columns</div>
-        <div class="mapping-grid">
-          <label>Full Name *</label><select id="map-name"></select>
-          <label>Gender</label><select id="map-gender"></select>
-          <label>Age</label><select id="map-age"></select>
-          <label>Phone</label><select id="map-phone"></select>
-        </div>
-        <label style="font-size:0.82rem;color:#666;display:flex;align-items:center;gap:0.4rem;margin-top:0.75rem">
-          <input type="checkbox" id="male-only" checked>
-          Only include males as "Brothers"
-        </label>
-        <button class="btn btn-primary btn-sm" style="margin-top:0.9rem" onclick="importMembers()">Import / Sync Members</button>
-        <div class="import-last" data-imp="members-csv"></div>
-        <div style="font-size:0.76rem;color:#888;margin-top:0.5rem">Merges with your current list: adds new people, refreshes existing ones (notes &amp; links kept), and asks before removing anyone missing from the file.</div>
-      </div>
-      <div id="member-link-status" class="link-bar" style="display:none"></div>
-    </div>
-
-  </div><!-- /two-col -->
-
-  <div id="csv-preview" style="display:none">
-    <div class="card">
-      <h2>CSV Preview (first 5 rows)</h2>
-      <div id="preview-body" style="overflow-x:auto"></div>
-    </div>
-  </div>
-  </details>
-
-  <div class="card">
-    <h2>Share / Collaborate</h2>
-    <p style="font-size:0.85rem;color:#666;margin-bottom:0.9rem">Export your entire session — members, households, geocoding, current assignments, and proposed companionships — as a single file to share with collaborators. They can load it on any computer to pick up exactly where you left off.</p>
-    <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-primary btn-sm" onclick="exportSession()">Export Session File</button>
-      <!-- Loading a session file REPLACES the whole shared dataset, so it's
-           admin-only (exporting is read-only, and stays open to everyone).
-           Hidden by default; resolveAuthState() reveals it for admins. -->
-      <span id="session-load-wrap" style="display:none">
-        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('session-import-file').click()">Load Session File</button>
-        <input type="file" id="session-import-file" accept=".json" style="display:none" onchange="importSession(this.files[0])">
-      </span>
-    </div>
-    <div id="session-status" style="margin-top:0.6rem;font-size:0.82rem;color:#555"></div>
-  </div>
 
   <!-- Admin-only: shown by resolveAuthState() when the signed-in user is an
        admin. Hidden by default so a non-admin never sees it, even briefly. -->
@@ -1272,8 +1179,6 @@ const S = {
   activityLog: [],  // { ts, user } — one entry per saved batch of changes
   groups: {},       // ward council groups — see GROUPS / normalizeGroups()
   users: [],        // { uid, name } of people with access — who can be tagged on a Next Step
-  rawMembers: null,
-  rawHouseholds: null,
 };
 
 // ── Ward Council groups ───────────────────────────────────────
@@ -2764,7 +2669,6 @@ function applyAccessVisibility() {
   const admin = _currentUserIsAdmin ? '' : 'none';
   document.getElementById('nav-admin-btn').style.display        = admin;
   document.getElementById('data-management-card').style.display = admin;
-  document.getElementById('session-load-wrap').style.display    = admin;
 
   // Edit controls on the ministering tabs follow the role.
   document.querySelectorAll('.eq-edit').forEach(el => { el.style.display = canEditEQ() ? '' : 'none'; });
@@ -2775,6 +2679,7 @@ function applyAccessVisibility() {
   document.querySelectorAll('.ward-edit').forEach(el => { el.style.display = canEditWard() ? '' : 'none'; });
   // Members, households, move-ins/outs: EQ, RS or bishopric.
   document.querySelectorAll('.member-edit').forEach(el => { el.style.display = canManageMembers() ? '' : 'none'; });
+  document.querySelectorAll('.member-viewonly').forEach(el => { el.style.display = canManageMembers() ? 'none' : ''; });
   document.querySelectorAll('.ward-viewonly').forEach(el => { el.style.display = canEditWard() ? 'none' : ''; });
 }
 
@@ -2901,8 +2806,6 @@ async function resolveAuthState() {
 }
 
 (function init() {
-  setupDrop('member-drop', 'member-file', handleMemberFile);
-  setupDrop('hh-drop',     'hh-file',     handleHouseholdsFile);
 
   document.querySelectorAll('.modal-overlay').forEach(o =>
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
@@ -2952,335 +2855,12 @@ function showTab(name) {
   if (name === 'admin')      renderAdminPanel();
 }
 
-// ── CSV Parsing ───────────────────────────────────────────────
-// Character-level parser — handles quoted fields containing embedded newlines
-// (LCR household exports put multiple member names in one cell separated by \n)
-function parseCSV(text) {
-  // Strip UTF-8 BOM if present
-  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-
-  let pos = 0;
-  const len = text.length;
-
-  function parseField() {
-    if (pos < len && text[pos] === '"') {
-      pos++; // skip opening quote
-      let val = '';
-      while (pos < len) {
-        if (text[pos] === '"') {
-          if (pos + 1 < len && text[pos + 1] === '"') { val += '"'; pos += 2; } // escaped ""
-          else { pos++; break; } // closing quote
-        } else {
-          val += text[pos++];
-        }
-      }
-      return val; // preserve internal newlines — don't trim
-    }
-    let val = '';
-    while (pos < len && text[pos] !== ',' && text[pos] !== '\r' && text[pos] !== '\n') {
-      val += text[pos++];
-    }
-    return val.trim();
-  }
-
-  function parseRow() {
-    const cells = [];
-    while (pos < len) {
-      cells.push(parseField());
-      if (pos >= len) break;
-      if (text[pos] === ',') { pos++; }
-      else if (text[pos] === '\r') { pos++; if (pos < len && text[pos] === '\n') pos++; break; }
-      else if (text[pos] === '\n') { pos++; break; }
-      else break;
-    }
-    return cells;
-  }
-
-  const headers = parseRow().map(h => h.trim());
-  const rows = [];
-  while (pos < len) {
-    const cells = parseRow();
-    if (!cells.length || (cells.length === 1 && !cells[0].trim())) continue;
-    const row = {};
-    headers.forEach((h, i) => row[h] = cells[i] !== undefined ? cells[i] : '');
-    rows.push(row);
-  }
-  return { headers, rows };
-}
-
-// ── Drag/Drop ─────────────────────────────────────────────────
-function setupDrop(zoneId, inputId, handler) {
-  const zone = document.getElementById(zoneId);
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault(); zone.classList.remove('dragover');
-    const f = e.dataTransfer.files[0]; if (f) handler(f);
-  });
-}
-
-function readFile(file, cb) {
-  const r = new FileReader();
-  r.onload = e => cb(e.target.result);
-  r.readAsText(file);
-}
-
-// ── Member Import ─────────────────────────────────────────────
-function handleMemberFile(file) {
-  if (!memberEditGuard()) return;
-  readFile(file, text => {
-    const parsed = parseCSV(text);
-    S.rawMembers = parsed;
-    document.getElementById('member-status').textContent =
-      `Loaded: ${file.name} (${parsed.rows.length} rows, ${parsed.headers.length} cols)`;
-    fillDropdowns(['map-name','map-gender','map-age','map-phone'], parsed.headers, autoMemberCols(parsed.headers));
-    document.getElementById('member-mapping').style.display = 'block';
-    showPreview(parsed.rows.slice(0,5), parsed.headers);
-  });
-}
-
-function autoMemberCols(headers) {
-  const h = headers.map(x => x.toLowerCase());
-  const find = (...kws) => headers[h.findIndex(x => kws.some(k => x.includes(k)))] || '';
-  return {
-    'map-name':   find('preferred name','full name','name'),
-    'map-gender': find('gender','sex'),
-    'map-age':    find('age','birth'),
-    'map-phone':  find('phone','mobile','cell'),
-  };
-}
-
-function importMembers() {
-  if (!memberEditGuard()) return;
-  if (!S.rawMembers) return;
-  const nameCol = document.getElementById('map-name').value;
-  if (!nameCol) { alert('Map the Name column first.'); return; }
-  const gCol = document.getElementById('map-gender').value;
-  const aCol = document.getElementById('map-age').value;
-  const pCol = document.getElementById('map-phone').value;
-  const maleOnly = document.getElementById('male-only').checked;
-
-  // Build the incoming list from the CSV, deduped by name key (keep first).
-  const incomingByKey = new Map();
-  S.rawMembers.rows
-    .filter(r => (r[nameCol]||'').trim())
-    .forEach(r => {
-      const name = r[nameCol].trim();
-      const k = normNameKey(name);
-      if (!k || incomingByKey.has(k)) return;
-      incomingByKey.set(k, {
-        name,
-        gender:    gCol ? (r[gCol]||'').trim() : '',
-        age:       aCol ? (parseInt(r[aCol])||0) : 0,
-        phone:     pCol ? (r[pCol]||'').trim() : '',
-        isBrother: maleOnly ? isMale(r[gCol]||'') : true,
-      });
-    });
-
-  // Match against existing members by name key. Existing records keep their
-  // manual data (notes, household link, pool state); only CSV fields refresh.
-  const existingByKey = new Map();
-  S.members.forEach(m => { const k = normNameKey(m.name); if (k) existingByKey.set(k, m); });
-
-  const updates = []; // { target, fields }
-  const adds    = [];
-  incomingByKey.forEach((c, k) => {
-    const ex = existingByKey.get(k);
-    if (ex) {
-      updates.push({ target: ex, fields: { name: c.name, gender: c.gender, age: c.age, phone: c.phone, isBrother: c.isBrother } });
-    } else {
-      adds.push({ id: uid(), name: c.name, gender: c.gender, age: c.age, phone: c.phone, isBrother: c.isBrother, householdId: null, notes: [] });
-    }
-  });
-
-  // Existing members absent from the new file are candidates for removal.
-  const removed = S.members.filter(m => !incomingByKey.has(normNameKey(m.name)));
-  const decisions = removed.map(m => ({
-    kind: 'remove', id: m.id, name: m.name,
-    detail: 'Not found in the imported file. Keep this member or remove them from your list?',
-    options: [
-      { value: 'keep',   label: 'Keep' },
-      { value: 'remove', label: 'Remove' },
-    ],
-    choice: 'keep',
-  }));
-
-  const finish = async (decs) => {
-    decs = decs || [];
-    updates.forEach(u => Object.assign(u.target, u.fields));
-    adds.forEach(a => S.members.push(a));
-    const toRemove = new Set(decs.filter(d => d.choice === 'remove').map(d => d.id));
-    if (toRemove.size) S.members = S.members.filter(m => !toRemove.has(m.id));
-    linkMembersToHouseholds(true);
-    noteImport('members-csv', S.members.length);
-    await dbUpsertMembers(S.members);
-    await dbDeleteMembers([...toRemove]);
-    refreshBadge(); renderMembers(); renderBrothers();
-    const bc = brothers().length;
-    const parts = [`${adds.length} added`, `${updates.length} updated`];
-    if (toRemove.size) parts.push(`${toRemove.size} removed`);
-    document.getElementById('member-status').innerHTML =
-      `<span style="color:#155724">✓ Sync complete — ${parts.join(', ')} · ${S.members.length} total (${bc} brothers)</span>`;
-  };
-
-  showSyncReview('Members no longer in the imported file', decisions, finish, 'member-status');
-}
-
+// (The CSV import and session-file export/load were removed in Nov 2026: members and
+// households come from LCR's Member List PDFs, and the data lives in Firestore.)
 function isMale(g) {
   const v = norm(g);
   if (!v) return true;
   return v === 'm' || v === 'male' || v === 'brother' || v === 'elder' || v === 'high priest';
-}
-
-// ── Households Import ─────────────────────────────────────────
-function handleHouseholdsFile(file) {
-  if (!memberEditGuard()) return;
-  readFile(file, text => {
-    const parsed = parseCSV(text);
-    S.rawHouseholds = parsed;
-    document.getElementById('hh-status').textContent =
-      `Loaded: ${file.name} (${parsed.rows.length} rows, ${parsed.headers.length} cols)`;
-    fillDropdowns(
-      ['map-hh-name','map-hh-members','map-hh-head','map-hh-addr','map-hh-phone','map-hh-email'],
-      parsed.headers, autoHouseholdCols(parsed.headers)
-    );
-    document.getElementById('hh-mapping').style.display = 'block';
-    showPreview(parsed.rows.slice(0,5), parsed.headers);
-  });
-}
-
-function autoHouseholdCols(headers) {
-  const h = headers.map(x => x.toLowerCase());
-  const find = (...kws) => headers[h.findIndex(x => kws.some(k => x.includes(k)))] || '';
-  return {
-    'map-hh-name':    find('household name','household','family name','name'),
-    'map-hh-members': find('members','household members','family members','individuals'),
-    'map-hh-head':    find('head','principal','primary'),
-    'map-hh-addr':    find('address','street','addr'),
-    'map-hh-phone':   find('phone','mobile','cell'),
-    'map-hh-email':   find('email','e-mail'),
-  };
-}
-
-function importHouseholds() {
-  if (!memberEditGuard()) return;
-  if (!S.rawHouseholds) return;
-  const nameCol    = document.getElementById('map-hh-name').value;
-  if (!nameCol) { alert('Map the Household Name column first.'); return; }
-  const membersCol = document.getElementById('map-hh-members').value;
-  const headCol    = document.getElementById('map-hh-head').value;
-  const addrCol    = document.getElementById('map-hh-addr').value;
-  const phoneCol   = document.getElementById('map-hh-phone').value;
-  const emailCol   = document.getElementById('map-hh-email').value;
-
-  // Preserve any geocoded coords so re-importing CSVs doesn't wipe out hours of
-  // geocoding work. Keyed by normalized address string.
-  const geoCache = {};
-  S.households.forEach(hh => {
-    if (hh.lat && hh.address) geoCache[hh.address] = { lat: hh.lat, lng: hh.lng };
-  });
-
-  // Match incoming rows against existing households by normalized name.
-  const existingByKey = new Map();
-  S.households.forEach(hh => existingByKey.set(norm(hh.name), hh));
-
-  const seen     = new Set();
-  const adds     = [];
-  const updates  = []; // { target, fields }
-  const decisions = [];
-
-  S.rawHouseholds.rows.forEach(r => {
-    const name = (r[nameCol]||'').trim(); if (!name) return;
-    const key = norm(name);
-    if (seen.has(key)) return;
-    seen.add(key);
-
-    // Members cell contains multiple names separated by \n or \r\n (embedded in quoted CSV field)
-    const rawMembers = membersCol ? (r[membersCol]||'') : '';
-    const members = rawMembers
-      .split(/[\r\n]+/)
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    const address = addrCol ? normalizeAddress((r[addrCol]||'').trim()) : '';
-    const head    = headCol  ? (r[headCol]||'').trim()  : '';
-    const phone   = phoneCol ? (r[phoneCol]||'').trim() : '';
-    const email   = emailCol ? (r[emailCol]||'').trim() : '';
-
-    const ex = existingByKey.get(key);
-    if (ex) {
-      // Refresh CSV-sourced fields; keep notes, pool state, and geocoding.
-      const fields = { name, members, head, phone, email };
-      if (address !== ex.address) {
-        if (ex.lat) {
-          // Address changed AND this household is geocoded — let the user decide
-          // rather than silently dropping the coordinates.
-          decisions.push({
-            kind: 'address', id: ex.id, name,
-            detail: `Address changed in the new file.<br>`
-                  + `<span style="color:#666">Current (geocoded):</span> ${esc(ex.address || '—')}<br>`
-                  + `<span style="color:#666">New:</span> ${esc(address || '—')}`,
-            options: [
-              { value: 'keep',    label: 'Keep existing address', desc: 'preserve current geocoding' },
-              { value: 'replace', label: 'Use new address',       desc: 'clears coordinates — re-geocode later' },
-            ],
-            choice: 'keep',
-            _newAddress: address,
-          });
-          // Address itself resolved in finish(); don't change it here.
-        } else {
-          fields.address = address; // no coordinates to lose
-        }
-      }
-      updates.push({ target: ex, fields });
-    } else {
-      const cached = geoCache[address] || {};
-      adds.push({ id: uid(), name, members, head, address, phone, email, notes: [], ...cached });
-    }
-  });
-
-  // Existing households absent from the new file are candidates for removal.
-  S.households
-    .filter(hh => !seen.has(norm(hh.name)))
-    .forEach(hh => decisions.push({
-      kind: 'remove-hh', id: hh.id, name: hh.name,
-      detail: 'Not found in the imported file. Keep this household or remove it from your list?',
-      options: [
-        { value: 'keep',   label: 'Keep' },
-        { value: 'remove', label: 'Remove' },
-      ],
-      choice: 'keep',
-    }));
-
-  const finish = async (decs) => {
-    decs = decs || [];
-    updates.forEach(u => Object.assign(u.target, u.fields));
-    // Apply address-change decisions.
-    decs.filter(d => d.kind === 'address').forEach(d => {
-      if (d.choice !== 'replace') return;
-      const hh = S.households.find(x => x.id === d.id);
-      if (hh) { hh.address = d._newAddress; delete hh.lat; delete hh.lng; delete hh.geoManual; }
-    });
-    adds.forEach(a => S.households.push(a));
-    // Apply household removals and unlink any members pointing at them.
-    const toRemove = new Set(decs.filter(d => d.kind === 'remove-hh' && d.choice === 'remove').map(d => d.id));
-    if (toRemove.size) {
-      S.households = S.households.filter(hh => !toRemove.has(hh.id));
-      S.members.forEach(m => { if (m.householdId && toRemove.has(m.householdId)) m.householdId = null; });
-    }
-    linkMembersToHouseholds(true);
-    noteImport('households-csv', S.households.length);
-    await dbUpsertHouseholds(S.households);
-    await dbDeleteHouseholds([...toRemove]);
-    await dbUpsertMembers(S.members);
-    refreshBadge(); renderHouseholds(); renderMembers();
-    const parts = [`${adds.length} added`, `${updates.length} updated`];
-    if (toRemove.size) parts.push(`${toRemove.size} removed`);
-    document.getElementById('hh-status').innerHTML =
-      `<span style="color:#155724">✓ Sync complete — ${parts.join(', ')} · ${S.households.length} total</span>`;
-  };
-
-  showSyncReview('Review household changes', decisions, finish, 'hh-status');
 }
 
 // ── Auto-Link Members ↔ Households ───────────────────────────
@@ -3378,7 +2958,7 @@ function showLinkStatus(linked) {
   const msg = `${linked}/${total} members linked to a household (${pct}%)`;
 
   ['member-link-status','hh-link-status'].forEach(id => {
-    const el = document.getElementById(id);
+    const el = document.getElementById(id); if (!el) return;
     el.className = `link-bar ${cls}`;
     el.style.display = 'block';
     el.textContent = msg;
@@ -3556,29 +3136,7 @@ function setBadge(id, n) {
 }
 
 // ── Column Dropdown Helper ────────────────────────────────────
-function fillDropdowns(ids, headers, detected) {
-  ids.forEach(id => {
-    const sel = document.getElementById(id);
-    sel.innerHTML = '<option value="">(none)</option>';
-    headers.forEach(h => {
-      const o = document.createElement('option');
-      o.value = h; o.textContent = h;
-      if (detected[id] === h) o.selected = true;
-      sel.appendChild(o);
-    });
-  });
-}
-
 // ── Preview ───────────────────────────────────────────────────
-function showPreview(rows, headers) {
-  if (!rows.length) return;
-  const cols = headers.slice(0,8);
-  let t = '<table><thead><tr>' + cols.map(h=>`<th>${esc(h)}</th>`).join('') + '</tr></thead><tbody>';
-  rows.forEach(r => { t += '<tr>' + cols.map(h=>`<td>${esc(r[h]||'')}</td>`).join('') + '</tr>'; });
-  document.getElementById('preview-body').innerHTML = t + '</tbody></table>';
-  document.getElementById('csv-preview').style.display = 'block';
-}
-
 // ── Members Tab ───────────────────────────────────────────────
 function renderMembers() {
   const list = S.members;
@@ -4878,70 +4436,6 @@ function exportCurrent() {
 }
 
 // ── Session Export / Import ───────────────────────────────────
-function exportSession() {
-  const payload = {
-    _version: 1,
-    _exported: new Date().toISOString(),
-    members:    S.members,
-    households: S.households,
-    current:    S.current,
-    proposed:   S.proposed,
-    groups:     normalizeGroups(S.groups)
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  document.getElementById('session-status').textContent = 'Session exported successfully.';
-}
-
-function importSession(file) {
-  if (!file) return;
-  // Same reasoning as clearData(): the hidden button is cosmetic, this is the
-  // check that actually refuses. Still client-side — see firestore.rules.
-  if (!_currentUserIsAdmin) {
-    document.getElementById('session-import-file').value = '';
-    alert('Only an admin can load a session file — it replaces the shared ward data for everyone.');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = async e => {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (!data.members || !data.households) {
-        document.getElementById('session-status').textContent = 'Invalid session file — missing required data.';
-        return;
-      }
-      const counts = `${data.members.length} members, ${data.households.length} households, ${(data.proposed||[]).length} proposed companionships`;
-      if (!confirm(`Load session file?\n\nThis will replace all current data with:\n  ${counts}\n\nThis cannot be undone.`)) {
-        document.getElementById('session-import-file').value = '';
-        return;
-      }
-      S.members    = data.members    || [];
-      S.households = data.households || [];
-      S.current    = data.current    || [];
-      S.proposed   = data.proposed   || [];
-      // Session files exported before ward council groups existed simply have
-      // no `groups` key; normalizeGroups turns that into three empty lists
-      // rather than leaving the council tab broken.
-      S.groups     = normalizeGroups(data.groups);
-      document.getElementById('session-status').textContent = 'Saving to server…';
-      await dbReplaceAll({ members: S.members, households: S.households, current: S.current, proposed: S.proposed });
-      refreshBadge();
-      renderGroupViews();
-      if (S.members.length && S.households.length) showLinkStatus();
-      document.getElementById('session-status').textContent = `Session loaded: ${counts}.`;
-      document.getElementById('session-import-file').value = '';
-    } catch(err) {
-      document.getElementById('session-status').textContent = 'Error reading session file — make sure it is a valid session export.';
-    }
-  };
-  reader.readAsText(file);
-}
-
 async function clearData(type) {
   // Hiding the card is only cosmetic — this stops a non-admin who still has
   // the buttons on screen (a page left open from before their admin rights
@@ -4958,16 +4452,12 @@ async function clearData(type) {
   const tasks = [];
   if (type==='all'||type==='members') {
     S.members=[];
-    document.getElementById('member-status').textContent='';
-    document.getElementById('member-mapping').style.display='none';
-    document.getElementById('member-link-status').style.display='none';
+    const ls = document.getElementById('member-link-status'); if (ls) ls.style.display = 'none';
     tasks.push(dbReplaceTable('members', []));
   }
   if (type==='all'||type==='households') {
     S.households=[];
-    document.getElementById('hh-status').textContent='';
-    document.getElementById('hh-mapping').style.display='none';
-    document.getElementById('hh-link-status').style.display='none';
+
     // clear householdIds from members
     S.members.forEach(m => m.householdId = null);
     tasks.push(dbReplaceTable('households', []));
@@ -4986,7 +4476,6 @@ async function clearData(type) {
   if (type==='all') { S.groups = normalizeGroups(null); tasks.push(dbUpsertGroups()); }
   await Promise.all(tasks);
   refreshBadge();
-  document.getElementById('csv-preview').style.display='none';
   if (type==='all'||type==='assignments') renderCurrent();
   if (type==='all') { renderProposed(); renderGroupViews(); }
 }
