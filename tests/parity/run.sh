@@ -15,6 +15,8 @@ if [ "$PHASE" = "final" ]; then
 else
   sed 's/function finalRules() { return true; }/function finalRules() { return false; }/' repo/firestore.rules > firestore.phase.rules
 fi
+# The suite tests the open tool: switch the pause off in the rules (the app copy is unpaused in run.js).
+sed -i 's/function toolPaused() { return true; }/function toolPaused() { return false; }/' firestore.phase.rules
 sed 's#"repo/firestore.rules"#"firestore.phase.rules"#' firebase.json > firebase.phase.json
 CFG=firebase.phase.json
 "${FIREBASE_BIN:-$P/../emu/node_modules/.bin/firebase}" emulators:exec --config "$CFG" --project demo-parity --only auth,firestore,functions \

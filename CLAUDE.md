@@ -532,6 +532,12 @@ alphabetically below. Origin lives only in memory (`_nearbyOrigin`), never saved
   Receives pool `rsRecipient` is now In / Maybe / Out (`cyclePool`), also on Move Ins per sister. RS
   ministers may include a husband (couples). RS interview import: right column → members; a household name →
   its adult sisters. Find nearby (RS) = households of receives-pool sisters.
+- **Paused (Nov 14, 2026)**: `TOOL_PAUSED` (app) + `toolPaused()` (rules) close the tool to everyone while the
+  bishopric reviews Church guidance on member data (Handbook 38.8.32 etc.). Paused: `init()` shows only
+  `#paused-screen` (no sign-in, no reads); every rule requires `isSignedIn()`, which is false. Nothing is
+  deleted; the owner still sees the data in the console; functions are unaffected. Reopen: set both to false,
+  deploy rules, push. Tests unpause their copies (`tests/rules` PAUSED env, `tests/parity` route rewrite) and
+  check the paused state separately.
 - **Temporary**: `ADMIN_RS_SETUP` (app) + `adminRsSetup()` (rules) let the admin import/edit the sisters'
   lists during the initial setup. Micah will turn both off afterwards.
 - **Districts**: Current's come only from LCR; a draft's can be changed (see Draft districts below). `compSearchRender`

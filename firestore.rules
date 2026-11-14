@@ -36,7 +36,14 @@ service cloud.firestore {
     // ── Switch: false = step 1 (transition), true = step 2 (final) ──
     function finalRules() { return true; }
 
-    function isSignedIn() { return request.auth != null; }
+    // ── Pause switch (Nov 2026): true refuses every read and write from the
+    // app, for everyone, while the bishopric reviews Church guidance on member
+    // data. Nothing is deleted; the project owner still sees the data in the
+    // Firebase console, and Cloud Functions (Admin SDK) are unaffected.
+    // Set to false (with TOOL_PAUSED in ministering_tool.html) to reopen.
+    function toolPaused() { return true; }
+
+    function isSignedIn() { return !toolPaused() && request.auth != null; }
     function emailVerified() { return request.auth.token.email_verified == true; }
     function myEmail() { return request.auth.token.email.lower(); }
     function myProfile() { return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data; }

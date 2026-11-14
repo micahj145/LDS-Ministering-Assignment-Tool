@@ -243,6 +243,15 @@ tr.row-flash td{background:#fff3c4 !important;transition:background 0.4s}
   </div>
 </header>
 
+<!-- Shown instead of everything else while TOOL_PAUSED is true (see init()). -->
+<div id="paused-screen" class="container" style="display:none;max-width:520px">
+  <div class="card">
+    <h2>The tool is paused</h2>
+    <p style="font-size:0.95rem;line-height:1.5">The bishopric is reviewing Church guidance on keeping member information in tools outside the Church's own systems. Until that review is finished, the tool is closed to everyone.</p>
+    <p style="font-size:0.95rem;line-height:1.5">Nothing has been deleted. Please use LCR and Member Tools in the meantime.</p>
+  </div>
+</div>
+
 <div id="auth-loading" class="container" style="max-width:420px;text-align:center;padding-top:3rem;color:#888">Loading…</div>
 
 <div id="auth-screen" class="container" style="display:none;max-width:420px">
@@ -1169,6 +1178,10 @@ const WARD_DOC = db.collection('wardData').doc('shared');
 
 // Must match the admin bootstrap email in firestore.rules exactly.
 const ADMIN_EMAIL = 'micahj145@gmail.com';
+// Pause switch (Nov 2026): true closes the tool to everyone while the bishopric
+// reviews Church guidance on member data. Keep in step with toolPaused() in
+// firestore.rules. Nothing is deleted; set both to false to reopen.
+const TOOL_PAUSED = true;
 
 // ── State ────────────────────────────────────────────────────
 const S = {
@@ -2815,6 +2828,13 @@ async function resolveAuthState() {
   // again on every future sign-in/sign-out — replaces the old one-shot
   // getSession() call, since the Firebase SDK restores auth state
   // asynchronously from local storage.
+  // Paused: show the notice and never sign in or read anything. The rules
+  // (toolPaused() in firestore.rules) refuse every read and write as well.
+  if (TOOL_PAUSED) {
+    document.getElementById('auth-loading').style.display = 'none';
+    document.getElementById('paused-screen').style.display = 'block';
+    return;
+  }
   fbAuth.onAuthStateChanged(() => { resolveAuthState(); });
 })();
 

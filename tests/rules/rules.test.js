@@ -8,7 +8,12 @@ const path = require('path');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
 const { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } = require('firebase/firestore');
 
-const RULES = fs.readFileSync(path.join(__dirname, '..', '..', 'firestore.rules'), 'utf8');
+const RULES_FILE = fs.readFileSync(path.join(__dirname, '..', '..', 'firestore.rules'), 'utf8');
+// The pause switch: the cases below test the open tool; PAUSED is checked on its own.
+const RULES = RULES_FILE.replace('function toolPaused() { return true; }', 'function toolPaused() { return false; }');
+const PAUSED = RULES.replace('function toolPaused() { return false; }', 'function toolPaused() { return true; }')
+  .replace('function finalRules() { return false; }', 'function finalRules() { return true; }');
+assert.notStrictEqual(RULES, PAUSED, 'toolPaused() switch not found');
 // Whichever way the file is set now (step 2 is live since Nov 2026), test both.
 const RULES_STEP1 = RULES.replace('function finalRules() { return true; }', 'function finalRules() { return false; }');
 const FINAL = RULES_STEP1.replace('function finalRules() { return false; }', 'function finalRules() { return true; }');
@@ -52,12 +57,37 @@ const as = (env, who, opts) => env.authenticatedContext(people[who].uid, tok(peo
 const wardUpd = (db, who, fields) => updateDoc(doc(db, 'wardData', 'shared'), { ...fields, updatedByUid: people[who].uid, clientVersion: 2 });
 const note = (who, target) => ({ text: 'hello', author: who, authorId: people[who].uid, date: new Date().toISOString(), target });
 
-let finalEnv, step1Env;
+let finalEnv, step1Env, pausedEnv;
 test.before(async () => {
   finalEnv = await initializeTestEnvironment({ projectId: 'demo-rules-final', firestore: { rules: FINAL, host, port: +port } });
   step1Env = await initializeTestEnvironment({ projectId: 'demo-rules-step1', firestore: { rules: RULES_STEP1, host, port: +port } });
+  pausedEnv = await initializeTestEnvironment({ projectId: 'demo-rules-paused', firestore: { rules: PAUSED, host, port: +port } });
 });
-test.after(async () => { await finalEnv?.cleanup(); await step1Env?.cleanup(); });
+test.after(async () => { await finalEnv?.cleanup(); await step1Env?.cleanup(); await pausedEnv?.cleanup(); });
+
+test('paused: nobody can read or write anything, and nothing is deleted', async () => {
+  await setup(pausedEnv);
+  for (const who of ['admin', 'eq', 'rs', 'bishopric', 'council', 'legacy', 'outsider']) {
+    const db = as(pausedEnv, who);
+    const me = people[who];
+    await assertFails(getDoc(doc(db, 'wardData', 'shared')));
+    await assertFails(getDoc(doc(db, 'wardData', 'stats')));
+    await assertFails(getDoc(doc(db, 'notes', 'byEq')));
+    await assertFails(getDocs(collection(db, 'notes')));
+    await assertFails(getDoc(doc(db, 'profiles', me.uid)));
+    await assertFails(getDoc(doc(db, 'allowedUsers', me.email)));
+    await assertFails(getDoc(doc(db, 'adminData', 'callings')));
+    await assertFails(wardUpd(db, who, { activityLog: [] }));
+    await assertFails(setDoc(doc(db, 'notes', 'n-' + who), note(who, { type: 'household', id: 'h1', field: 'notes' })));
+    await assertFails(updateDoc(doc(db, 'profiles', me.uid), { firstName: 'X' }));
+    await assertFails(setDoc(doc(db, 'threads', 't-' + who), { participants: [me.uid, 'uE'], createdBy: me.uid }));
+  }
+  await assertFails(getDoc(doc(pausedEnv.unauthenticatedContext().firestore(), 'wardData', 'shared')));
+  await pausedEnv.withSecurityRulesDisabled(async ctx => {
+    assert.ok((await getDoc(doc(ctx.firestore(), 'wardData', 'shared'))).exists());
+    assert.ok((await getDoc(doc(ctx.firestore(), 'notes', 'byEq'))).exists());
+  });
+});
 
 test('final: who gets in', async t => {
   const env = finalEnv; await setup(env);

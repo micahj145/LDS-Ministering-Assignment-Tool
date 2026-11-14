@@ -66,6 +66,12 @@ async function open(email, opts = {}) {
       return r.fulfill({ contentType: 'text/javascript', body });
     }
     if (/cdnjs.*pdf\.(worker\.)?min\.js/.test(u)) return r.fulfill({ contentType: 'text/javascript', body: fs.readFileSync(PDFJS + (u.includes('worker') ? 'pdf.worker.min.js' : 'pdf.min.js'), 'utf8') });
+    // The suite tests the open tool: serve the app with the pause switched off, unless opts.paused.
+    if (!opts.paused && u.startsWith(BASE) && new URL(u).pathname.endsWith('.html')) {
+      const res = await r.fetch();
+      const body = (await res.text()).replace('const TOOL_PAUSED = true;', 'const TOOL_PAUSED = false;');
+      return r.fulfill({ response: res, body });
+    }
     if (u.startsWith('http://127.0.0.1') || u.startsWith('http://localhost')) return r.continue();
     blocked.add(new URL(u).host); return r.abort();
   });
@@ -92,7 +98,7 @@ async function open(email, opts = {}) {
   return s;
 }
 // Screens the app can be on; the two-step ones exist only in the version with two-step sign-in.
-const SCREENS = ['auth-screen', 'app-shell', 'pending-screen', 'mfa-signin-screen', 'mfa-enroll-screen'];
+const SCREENS = ['auth-screen', 'app-shell', 'pending-screen', 'mfa-signin-screen', 'mfa-enroll-screen', 'paused-screen'];
 const waitScreen = (page, ids = SCREENS) => page.waitForFunction(ids => ids.some(id => document.getElementById(id)?.style.display === 'block')
   || (document.getElementById('auth-error')?.textContent || '').length > 0, ids, { timeout: 20000 });
 // The newest code the Auth emulator "texted" to a phone number.
@@ -135,8 +141,10 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
 }
 
 (async () => {
-  let exe; try { exe = require('child_process').execSync('ls -d /opt/pw-browsers/chromium-*/chrome-linux/chrome 2>/dev/null').toString().trim().split('\n')[0]; } catch {}
-  browser = await chromium.launch(exe ? { executablePath: exe } : {});
+  let exe; try { exe = require('child_process').execSync('ls -d /opt/pw-browsers/chromium-*/chrome-linux*/chrome 2>/dev/null').toString().trim().split('\n')[0]; } catch {}
+  // Newer Chromium refuses a page's requests to other loopback ports (the emulators) unless allowed.
+  const args = ['--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessRespectPreflightResults,BlockInsecurePrivateNetworkRequests'];
+  browser = await chromium.launch(exe ? { executablePath: exe, args } : { args });
 
   // ── Auth ───────────────────────────────────────────────────
   const out = await open(null);
@@ -1110,6 +1118,19 @@ async function tryOp(s, code) {   // run a raw SDK call as this user; report all
       await waitScreen(R.page, ['auth-screen']).catch(() => {}); await sleep(1000);
       const sc = await screen(R), notice = await ev(R, () => document.getElementById('auth-notice').innerText);
       return { pass: sc === 'auth-screen' && notice === 'For security, please sign in again.', obs: { screen: sc, notice } };
+    });
+  }
+
+  // Paused (TOOL_PAUSED true, as committed): only the notice, no sign-in, no reads.
+  if (await ev(E, () => typeof TOOL_PAUSED !== 'undefined')) {
+    await check('pause', 'paused app shows only the notice and reads nothing', async () => {
+      const P = await open(null, { paused: true });
+      const reads = [];
+      P.page.on('request', q => { if (/:8080\//.test(q.url())) reads.push(q.url()); });
+      await sleep(1500);
+      const sc = await screen(P), signInShown = await ev(P, () => document.getElementById('auth-screen').style.display);
+      await P.ctx.close();
+      return { pass: sc === 'paused-screen' && signInShown !== 'block' && reads.length === 0, obs: { screen: sc, reads: reads.length } };
     });
   }
 
