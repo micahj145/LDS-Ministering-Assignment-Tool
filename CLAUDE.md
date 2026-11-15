@@ -761,6 +761,14 @@ Notes for anyone changing this:
   (and note the current self-update rule doesn't pin `role`, so a non-admin could set their own
   from the console). Deliberate tradeoff for a small, trusted group.
 
+### Demo (`demo.html`, branch `demo-mode`, Nov 2026)
+For showing the Church Data Privacy Office the tool without member data. `node demo/build.js` writes
+`demo.html` from `ministering_tool.html`: the Firebase bundle is swapped for `demo/fake-firebase.js` (in-browser
+store saved to sessionStorage; auth = the "View as" person, already past two-step; no messaging/functions),
+the invented ward comes from `demo/demo-data.js`, `TOOL_PAUSED` is forced off, no service worker or manifest,
+and a purple DEMO bar (View as, Reset demo) is added. `demo.html` is generated: rebuild, don't edit.
+`node demo/check.js` (14 checks, incl. no requests leave the machine). Details: `demo/README.md`.
+
 ### Files
 - `ministering_tool.html` — the app. `firebaseConfig` near the top of the `<script>` block holds
   the live project's real values (see "Live project" above) — client-safe values, not secrets;
@@ -798,7 +806,7 @@ Notes for anyone changing this:
   matters more than it would for a private repo. When picking "the latest" export among several
   loose files in the project root, sort by actual file mtime, not filename — export filenames are
   date-stamped by day, not by exact time, so same-day exports need mtime to disambiguate.
-- Only `ministering_tool.html`, `index.html`, `firestore.rules`, `FIREBASE_SETUP.md`, this
+- Only `ministering_tool.html`, `index.html`, `demo.html` and `demo/`, `firestore.rules`, `FIREBASE_SETUP.md`, this
   file, the PWA files (`manifest.json`, `sw.js`, `icons/`), `NOTIFICATIONS_SETUP.md`, the
   push files (`firebase.json`, `.firebaserc`, `functions/` minus `node_modules`), `vendor/`,
   `tests/` (minus `node_modules`), `SECURITY_ROLLOUT.md` and `PHONE_TEST.md` should ever be
